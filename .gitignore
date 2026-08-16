@@ -1,2 +1,41 @@
+# environment / secrets
 .env
+.env.*
 .env.local
+.env.*.local
+
+# local test artifacts
+cookies.txt
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go build artifacts
+/bin/
+/pkg/
+*.exe
+*.dll
+*.so
+*.dylib
+coverage.out
+
+# Node / Next.js generated files
+**/node_modules/
+**/.next/
+**/out/
+**/build/
+**/.vercel/
+**/.vite/
+**/.npm/
+
+# Clerk / Next local tooling
+**/.clerk/
+**/.husky/
+
+# editor / tooling
+.vscode/
+.idea/
+*.swp
+*.swo
