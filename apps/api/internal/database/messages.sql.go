@@ -7,20 +7,21 @@ package database
 
 import (
 	"context"
+	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (channel_id, user_id, content)
 VALUES ($1, $2, $3)
-RETURNING id, channel_id, user_id, content, created_at, updated_at, deleted_at
+RETURNING id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count
 `
 
 type CreateMessageParams struct {
-	ChannelID pgtype.UUID `json:"channel_id"`
-	UserID    pgtype.UUID `json:"user_id"`
-	Content   string      `json:"content"`
+	ChannelID uuid.UUID     `json:"channel_id"`
+	UserID    uuid.NullUUID `json:"user_id"`
+	Content   string        `json:"content"`
 }
 
 func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error) {
@@ -34,12 +35,14 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ParentID,
+		&i.ReplyCount,
 	)
 	return i, err
 }
 
 const listChannelMessages = `-- name: ListChannelMessages :many
-SELECT id, channel_id, user_id, content, created_at, updated_at, deleted_at FROM messages
+SELECT id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count FROM messages
 WHERE channel_id = $1
   AND created_at < $2
   AND deleted_at IS NULL
@@ -48,9 +51,9 @@ LIMIT $3
 `
 
 type ListChannelMessagesParams struct {
-	ChannelID pgtype.UUID        `json:"channel_id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	Limit     int32              `json:"limit"`
+	ChannelID uuid.UUID `json:"channel_id"`
+	CreatedAt time.Time `json:"created_at"`
+	Limit     int32     `json:"limit"`
 }
 
 // Cursor pagination: pass the created_at of the oldest message you already have
@@ -72,6 +75,8 @@ func (q *Queries) ListChannelMessages(ctx context.Context, arg ListChannelMessag
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.ParentID,
+			&i.ReplyCount,
 		); err != nil {
 			return nil, err
 		}

@@ -13,6 +13,15 @@ JOIN channel_members cm ON cm.channel_id = c.id
 WHERE cm.user_id = $1 AND c.workspace_id = $2
 ORDER BY c.name;
 
+-- name: ListWorkspaceChannelsForUser :many
+-- Used on WebSocket connect to subscribe the user to every channel they're
+-- in, across all workspaces - not filtered to one workspace like
+-- ListChannelsForUser above.
+SELECT c.id, c.workspace_id
+FROM channels c
+JOIN channel_members cm ON cm.channel_id = c.id
+WHERE cm.user_id = $1;
+
 -- name: IsChannelMember :one
 SELECT EXISTS (
     SELECT 1 FROM channel_members

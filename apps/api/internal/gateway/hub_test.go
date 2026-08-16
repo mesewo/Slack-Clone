@@ -8,8 +8,8 @@ func TestHubSupportsMultipleClientsPerUser(t *testing.T) {
 	clientOne := &Client{UserID: "user-1", Send: make(chan []byte, 1)}
 	clientTwo := &Client{UserID: "user-1", Send: make(chan []byte, 1)}
 
-	hub.RegisterClient(clientOne)
-	hub.RegisterClient(clientTwo)
+	hub.Register(clientOne)
+	hub.Register(clientTwo)
 
 	clients, ok := hub.clients["user-1"]
 	if !ok {
@@ -19,7 +19,7 @@ func TestHubSupportsMultipleClientsPerUser(t *testing.T) {
 		t.Fatalf("expected 2 clients for user, got %d", len(clients))
 	}
 
-	hub.UnregisterClient(clientOne)
+	hub.Unregister(clientOne)
 	clients, ok = hub.clients["user-1"]
 	if !ok {
 		t.Fatalf("expected user mapping to remain after unregistering one client")
@@ -31,7 +31,7 @@ func TestHubSupportsMultipleClientsPerUser(t *testing.T) {
 		t.Fatalf("expected the other client to remain registered")
 	}
 
-	hub.UnregisterClient(clientTwo)
+	hub.Unregister(clientTwo)
 	if _, exists := hub.clients["user-1"]; exists {
 		t.Fatalf("expected user mapping to be removed when the last client unregisters")
 	}

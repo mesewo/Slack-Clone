@@ -3,10 +3,7 @@ package user
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -71,9 +68,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debug: log login attempt (email only, do not log password)
-	fmt.Printf("Login attempt for email=%s\n", req.Email)
-
 	u, err := h.Queries.GetUserByEmail(r.Context(), req.Email)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -95,9 +89,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debug: log token length but not token contents
-	fmt.Printf("Login success for email=%s tokenLen=%d\n", u.Email, len(token))
-
 	h.Cookies.Set(w, token, h.Tokens.TTL())
 	json.NewEncoder(w).Encode(map[string]string{"id": u.ID.String(), "email": u.Email})
 }
@@ -109,60 +100,20 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// Verify answers "given this cookie, who is logged in right now?" - this is
+// what a dashboard checks on load/refresh to decide whether to render or
+// redirect to sign-in. Mount this behind auth.Middleware, never standalone.
+func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"id": claims.UserID, "email": claims.Email})
+}
+
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
-}
-
-// Verify checks a bearer token and returns the session info when valid.
-func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
-	authHeader := r.Header.Get("Authorization")
-	// Lightweight debug: log presence and length of incoming token header
-	if authHeader == "" {
-		// no auth header present
-		// Avoid logging token content
-		// Use standard log package (server main prints to console)
-		// (developer debug) - non-sensitive
-		//fmt.Println("Verify: no Authorization header")
-	} else {
-		//fmt.Printf("Verify: Authorization header length=%d\n", len(authHeader))
-	}
-	if authHeader == "" {
-		writeJSONError(w, http.StatusUnauthorized, "missing authorization header")
-		return
-	}
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		writeJSONError(w, http.StatusUnauthorized, "invalid authorization header")
-		return
-	}
-	tokenStr := parts[1]
-
-	claims, err := h.Tokens.Validate(tokenStr)
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
-		return
-	}
-
-	// Look up user by email from the claims
-	u, err := h.Queries.GetUserByEmail(r.Context(), claims.Email)
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "user not found")
-		return
-	}
-
-	// Build session response
-	resp := map[string]interface{}{
-		"user": map[string]string{
-			"id":    u.ID.String(),
-			"email": u.Email,
-			"name":  u.DisplayName,
-		},
-		"token":     tokenStr,
-		"expiresAt": claims.RegisteredClaims.ExpiresAt.Time.Format(time.RFC3339),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
 }

@@ -8,7 +8,7 @@ package database
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const addWorkspaceMember = `-- name: AddWorkspaceMember :exec
@@ -17,9 +17,9 @@ VALUES ($1, $2, $3)
 `
 
 type AddWorkspaceMemberParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	UserID      pgtype.UUID `json:"user_id"`
-	Role        string      `json:"role"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Role        string    `json:"role"`
 }
 
 func (q *Queries) AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMemberParams) error {
@@ -73,8 +73,8 @@ WHERE workspace_id = $1 AND user_id = $2
 `
 
 type GetWorkspaceMemberParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	UserID      pgtype.UUID `json:"user_id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) GetWorkspaceMember(ctx context.Context, arg GetWorkspaceMemberParams) (WorkspaceMember, error) {
@@ -96,7 +96,7 @@ WHERE wm.user_id = $1
 ORDER BY w.created_at
 `
 
-func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID pgtype.UUID) ([]Workspace, error) {
+func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) ([]Workspace, error) {
 	rows, err := q.db.Query(ctx, listWorkspacesForUser, userID)
 	if err != nil {
 		return nil, err

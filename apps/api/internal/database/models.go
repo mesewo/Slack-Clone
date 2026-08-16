@@ -5,54 +5,65 @@
 package database
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Channel struct {
-	ID          pgtype.UUID        `json:"id"`
-	WorkspaceID pgtype.UUID        `json:"workspace_id"`
-	Name        string             `json:"name"`
-	Type        string             `json:"type"`
-	CreatedBy   pgtype.UUID        `json:"created_by"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ID          uuid.UUID     `json:"id"`
+	WorkspaceID uuid.UUID     `json:"workspace_id"`
+	Name        string        `json:"name"`
+	Type        string        `json:"type"`
+	CreatedBy   uuid.NullUUID `json:"created_by"`
+	CreatedAt   time.Time     `json:"created_at"`
 }
 
 type ChannelMember struct {
-	ChannelID  pgtype.UUID        `json:"channel_id"`
-	UserID     pgtype.UUID        `json:"user_id"`
-	JoinedAt   pgtype.Timestamptz `json:"joined_at"`
-	LastReadAt pgtype.Timestamptz `json:"last_read_at"`
+	ChannelID  uuid.UUID `json:"channel_id"`
+	UserID     uuid.UUID `json:"user_id"`
+	JoinedAt   time.Time `json:"joined_at"`
+	LastReadAt time.Time `json:"last_read_at"`
 }
 
 type Message struct {
-	ID        pgtype.UUID        `json:"id"`
-	ChannelID pgtype.UUID        `json:"channel_id"`
-	UserID    pgtype.UUID        `json:"user_id"`
-	Content   string             `json:"content"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	ID         uuid.UUID     `json:"id"`
+	ChannelID  uuid.UUID     `json:"channel_id"`
+	UserID     uuid.NullUUID `json:"user_id"`
+	Content    string        `json:"content"`
+	CreatedAt  time.Time     `json:"created_at"`
+	UpdatedAt  **time.Time   `json:"updated_at"`
+	DeletedAt  **time.Time   `json:"deleted_at"`
+	ParentID   uuid.NullUUID `json:"parent_id"`
+	ReplyCount int32         `json:"reply_count"`
+}
+
+type MessageReaction struct {
+	MessageID uuid.UUID `json:"message_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Emoji     string    `json:"emoji"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type User struct {
-	ID           pgtype.UUID        `json:"id"`
-	Email        string             `json:"email"`
-	PasswordHash string             `json:"password_hash"`
-	DisplayName  string             `json:"display_name"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID           uuid.UUID `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"password_hash"`
+	DisplayName  string    `json:"display_name"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type Workspace struct {
-	ID        pgtype.UUID        `json:"id"`
-	Name      string             `json:"name"`
-	Slug      string             `json:"slug"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Slug      string    `json:"slug"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type WorkspaceMember struct {
-	WorkspaceID pgtype.UUID        `json:"workspace_id"`
-	UserID      pgtype.UUID        `json:"user_id"`
-	Role        string             `json:"role"`
-	JoinedAt    pgtype.Timestamptz `json:"joined_at"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Role        string    `json:"role"`
+	JoinedAt    time.Time `json:"joined_at"`
 }

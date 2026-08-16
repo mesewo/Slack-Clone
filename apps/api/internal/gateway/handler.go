@@ -1,21 +1,24 @@
 package gateway
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
-	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+
+	"github.com/mesewo/slack-clone/apps/api/internal/auth"
+	"github.com/mesewo/slack-clone/apps/api/internal/database"
 )
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Configure origin validation for production
+		return true // TODO before Phase 7: restrict to your frontend's origin
 	},
 }
 
@@ -26,14 +29,23 @@ const (
 	maxMessageSize = 512 * 1024
 )
 
-func ServeWS(hub *Hub, tm *auth.TokenManager, w http.ResponseWriter, r *http.Request) {
+// ServeWS upgrades the connection, then subscribes the user to every channel
+// they're a member of - without this step, BroadcastToChannel has nobody to
+// send to, because nothing else populates the hub's channel subscriptions.
+func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, queries *database.Queries, w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(auth.CookieName)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	claims, err := tm.Validate(cookie.Value)
+	claims, err := tokens.Validate(cookie.Value)
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -41,7 +53,7 @@ func ServeWS(hub *Hub, tm *auth.TokenManager, w http.ResponseWriter, r *http.Req
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("Failed to upgrade connection: %v", err)
+		log.Printf("failed to upgrade connection: %v", err)
 		return
 	}
 
@@ -51,31 +63,27 @@ func ServeWS(hub *Hub, tm *auth.TokenManager, w http.ResponseWriter, r *http.Req
 		Send:   make(chan []byte, 256),
 	}
 
-	hub.RegisterClient(client)
+	hub.Register(client)
 
-	// Optionally subscribe the connecting client to a channel passed via query
-	// param `channel_id` or encoded in the request path (e.g. /ws/chat/{id}).
-	if channelID := r.URL.Query().Get("channel_id"); channelID != "" {
-		hub.SubscribeToChannel(claims.UserID, channelID)
+	// Subscribe to every channel this user belongs to, across all their
+	// workspaces, so broadcasts reach them without a separate "join" step.
+	memberships, err := queries.ListWorkspaceChannelsForUser(context.Background(), userID)
+	if err != nil {
+		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
 	} else {
-		// Support path formats like /ws/chat/{id} or /ws/{id}
-		path := r.URL.Path
-		parts := strings.Split(path, "/")
-		// parts[0] == "" since path starts with '/'
-		if len(parts) >= 4 && parts[2] == "chat" && parts[3] != "" {
-			hub.SubscribeToChannel(claims.UserID, parts[3])
-		} else if len(parts) >= 3 && parts[2] != "" {
-			hub.SubscribeToChannel(claims.UserID, parts[2])
+		for _, ch := range memberships {
+			hub.SubscribeToChannel(claims.UserID, ch.ID.String())
 		}
 	}
 
-	go client.writePump(hub)
-	go client.readPump(hub)
+	go client.writePump()
+	go client.readPump(hub, pm)
 }
 
-func (c *Client) readPump(hub *Hub) {
+func (c *Client) readPump(hub *Hub, pm *PresenceManager) {
 	defer func() {
-		hub.UnregisterClient(c)
+		pm.SetStatus(c.UserID, StatusAway)
+		hub.Unregister(c)
 		c.Conn.Close()
 	}()
 
@@ -86,20 +94,54 @@ func (c *Client) readPump(hub *Hub) {
 		return nil
 	})
 
+	pm.SetStatus(c.UserID, StatusActive)
+
 	for {
-		_, _, err := c.Conn.ReadMessage()
+		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("websocket error: %v", err)
 			}
 			break
 		}
-		// Note: incoming messages are currently ignored. In future we can
-		// parse subscribe/unsubscribe actions from clients here.
+
+		var event WSEvent
+		if err := json.Unmarshal(message, &event); err != nil {
+			continue // malformed frame, ignore rather than drop the connection
+		}
+
+		switch event.Type {
+		case EventTyping:
+			var payload TypingPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil || payload.ChannelID == "" {
+				continue
+			}
+			payload.UserID = c.UserID
+
+			outbound, err := json.Marshal(payload)
+			if err != nil {
+				continue
+			}
+			broadcastData, err := json.Marshal(WSEvent{
+				Type:      EventTyping,
+				ChannelID: payload.ChannelID,
+				Payload:   outbound,
+			})
+			if err != nil {
+				continue
+			}
+			hub.BroadcastToChannel(payload.ChannelID, broadcastData)
+
+			// EventMessageCreated is not handled here on purpose: messages are
+			// created via the REST endpoint (internal/message), which broadcasts
+			// after a successful DB write. Accepting message creation over the
+			// WS connection directly would let a message "send" even when the
+			// DB write fails, since there'd be nothing to roll back against.
+		}
 	}
 }
 
-func (c *Client) writePump(_ *Hub) {
+func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -120,7 +162,6 @@ func (c *Client) writePump(_ *Hub) {
 				return
 			}
 			w.Write(message)
-
 			if err := w.Close(); err != nil {
 				return
 			}

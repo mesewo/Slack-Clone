@@ -8,7 +8,7 @@ package database
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const addChannelMember = `-- name: AddChannelMember :exec
@@ -17,8 +17,8 @@ VALUES ($1, $2)
 `
 
 type AddChannelMemberParams struct {
-	ChannelID pgtype.UUID `json:"channel_id"`
-	UserID    pgtype.UUID `json:"user_id"`
+	ChannelID uuid.UUID `json:"channel_id"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) AddChannelMember(ctx context.Context, arg AddChannelMemberParams) error {
@@ -33,10 +33,10 @@ RETURNING id, workspace_id, name, type, created_by, created_at
 `
 
 type CreateChannelParams struct {
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-	Name        string      `json:"name"`
-	Type        string      `json:"type"`
-	CreatedBy   pgtype.UUID `json:"created_by"`
+	WorkspaceID uuid.UUID     `json:"workspace_id"`
+	Name        string        `json:"name"`
+	Type        string        `json:"type"`
+	CreatedBy   uuid.NullUUID `json:"created_by"`
 }
 
 func (q *Queries) CreateChannel(ctx context.Context, arg CreateChannelParams) (Channel, error) {
@@ -66,8 +66,8 @@ SELECT EXISTS (
 `
 
 type IsChannelMemberParams struct {
-	ChannelID pgtype.UUID `json:"channel_id"`
-	UserID    pgtype.UUID `json:"user_id"`
+	ChannelID uuid.UUID `json:"channel_id"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) IsChannelMember(ctx context.Context, arg IsChannelMemberParams) (bool, error) {
@@ -85,8 +85,8 @@ ORDER BY c.name
 `
 
 type ListChannelsForUserParams struct {
-	UserID      pgtype.UUID `json:"user_id"`
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
 }
 
 func (q *Queries) ListChannelsForUser(ctx context.Context, arg ListChannelsForUserParams) ([]Channel, error) {
@@ -116,6 +116,41 @@ func (q *Queries) ListChannelsForUser(ctx context.Context, arg ListChannelsForUs
 	return items, nil
 }
 
+const listWorkspaceChannelsForUser = `-- name: ListWorkspaceChannelsForUser :many
+SELECT c.id, c.workspace_id
+FROM channels c
+JOIN channel_members cm ON cm.channel_id = c.id
+WHERE cm.user_id = $1
+`
+
+type ListWorkspaceChannelsForUserRow struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+}
+
+// Used on WebSocket connect to subscribe the user to every channel they're
+// in, across all workspaces - not filtered to one workspace like
+// ListChannelsForUser above.
+func (q *Queries) ListWorkspaceChannelsForUser(ctx context.Context, userID uuid.UUID) ([]ListWorkspaceChannelsForUserRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceChannelsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkspaceChannelsForUserRow
+	for rows.Next() {
+		var i ListWorkspaceChannelsForUserRow
+		if err := rows.Scan(&i.ID, &i.WorkspaceID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateLastRead = `-- name: UpdateLastRead :exec
 UPDATE channel_members
 SET last_read_at = now()
@@ -123,8 +158,8 @@ WHERE channel_id = $1 AND user_id = $2
 `
 
 type UpdateLastReadParams struct {
-	ChannelID pgtype.UUID `json:"channel_id"`
-	UserID    pgtype.UUID `json:"user_id"`
+	ChannelID uuid.UUID `json:"channel_id"`
+	UserID    uuid.UUID `json:"user_id"`
 }
 
 func (q *Queries) UpdateLastRead(ctx context.Context, arg UpdateLastReadParams) error {
