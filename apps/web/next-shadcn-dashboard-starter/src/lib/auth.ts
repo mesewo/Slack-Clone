@@ -28,10 +28,6 @@ export async function login(email: string, password: string): Promise<Session> {
   }
 
   const session = await response.json();
-  // Server sets an HttpOnly cookie (`token`) on successful login. Do not set
-  // client-side cookies here to avoid mismatched cookie names and HttpOnly
-  // semantics. The client will rely on the browser sending the server-set
-  // cookie for subsequent requests (axios `withCredentials: true`).
   return session;
 }
 
@@ -71,10 +67,19 @@ export function useAuth() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const response = await fetch("/api/me", { credentials: "include" });
+        // Was fetch("/api/me", ...) - wrong host (hit :3000, not the Go API
+        // at :8080), wrong path (Go exposes /api/auth/verify, not /api/me),
+        // and wrong response shape (Go returns {id, email} flat, not
+        // wrapped in {user: ...}). This is almost certainly why login
+        // appeared to succeed but the dashboard bounced back to sign-in -
+        // this check always resolved to "not logged in" regardless of the
+        // actual cookie.
+        const response = await fetch(`${GO_API_URL}/api/auth/verify`, {
+          credentials: "include",
+        });
         if (response.ok) {
           const data = await response.json();
-          setUser(data.user);
+          setUser({ id: data.id, email: data.email });
         } else {
           setUser(null);
         }

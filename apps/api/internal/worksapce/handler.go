@@ -23,6 +23,10 @@ type CreateWorkspaceRequest struct {
 	Slug string `json:"slug,omitempty"` // optional - derived from name if omitted
 }
 
+type JoinWorkspaceRequest struct {
+	Slug string `json:"slug,omitempty"`
+}
+
 var slugSanitizer = regexp.MustCompile(`[^a-z0-9]+`)
 
 func slugify(name string) string {
@@ -106,8 +110,66 @@ func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to list workspaces")
 		return
 	}
+	if workspaces == nil {
+		workspaces = []database.Workspace{}
+	}
 
 	json.NewEncoder(w).Encode(workspaces)
+}
+
+func (h *Handler) JoinWorkspace(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+
+	var req JoinWorkspaceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Slug == "" {
+		writeJSONError(w, http.StatusBadRequest, "workspace slug is required")
+		return
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
+		return
+	}
+
+	ws, err := h.Queries.GetWorkspaceBySlug(r.Context(), req.Slug)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			writeJSONError(w, http.StatusNotFound, "workspace not found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to load workspace")
+		return
+	}
+
+	if _, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{
+		WorkspaceID: ws.ID,
+		UserID:      userID,
+	}); err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			writeJSONError(w, http.StatusInternalServerError, "failed to verify workspace membership")
+			return
+		}
+		if err := h.Queries.AddWorkspaceMember(r.Context(), database.AddWorkspaceMemberParams{
+			WorkspaceID: ws.ID,
+			UserID:      userID,
+			Role:        "MEMBER",
+		}); err != nil {
+			writeJSONError(w, http.StatusConflict, "workspace membership already exists")
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(ws)
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

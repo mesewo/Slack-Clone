@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createMessage = `-- name: CreateMessage :one
@@ -77,6 +78,70 @@ func (q *Queries) ListChannelMessages(ctx context.Context, arg ListChannelMessag
 			&i.DeletedAt,
 			&i.ParentID,
 			&i.ReplyCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChannelMessagesWithAuthor = `-- name: ListChannelMessagesWithAuthor :many
+SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, m.updated_at, m.deleted_at, m.parent_id, m.reply_count, u.display_name AS author_name
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+WHERE m.channel_id = $1
+  AND m.created_at < $2
+  AND m.deleted_at IS NULL
+ORDER BY m.created_at DESC
+LIMIT $3
+`
+
+type ListChannelMessagesWithAuthorParams struct {
+	ChannelID uuid.UUID `json:"channel_id"`
+	CreatedAt time.Time `json:"created_at"`
+	Limit     int32     `json:"limit"`
+}
+
+type ListChannelMessagesWithAuthorRow struct {
+	ID         uuid.UUID     `json:"id"`
+	ChannelID  uuid.UUID     `json:"channel_id"`
+	UserID     uuid.NullUUID `json:"user_id"`
+	Content    string        `json:"content"`
+	CreatedAt  time.Time     `json:"created_at"`
+	UpdatedAt  **time.Time   `json:"updated_at"`
+	DeletedAt  **time.Time   `json:"deleted_at"`
+	ParentID   uuid.NullUUID `json:"parent_id"`
+	ReplyCount int32         `json:"reply_count"`
+	AuthorName pgtype.Text   `json:"author_name"`
+}
+
+// Same pagination as above, but joins the sender's display_name in one
+// query instead of looking it up per-message. LEFT JOIN so a message from
+// a deleted user (user_id set NULL) still returns instead of disappearing.
+func (q *Queries) ListChannelMessagesWithAuthor(ctx context.Context, arg ListChannelMessagesWithAuthorParams) ([]ListChannelMessagesWithAuthorRow, error) {
+	rows, err := q.db.Query(ctx, listChannelMessagesWithAuthor, arg.ChannelID, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChannelMessagesWithAuthorRow
+	for rows.Next() {
+		var i ListChannelMessagesWithAuthorRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChannelID,
+			&i.UserID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ParentID,
+			&i.ReplyCount,
+			&i.AuthorName,
 		); err != nil {
 			return nil, err
 		}

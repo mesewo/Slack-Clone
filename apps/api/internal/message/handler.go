@@ -25,6 +25,13 @@ type SendMessageRequest struct {
 	Content string `json:"content"`
 }
 
+// MessageResponse adds the sender's display name to the raw DB row - the
+// frontend needs a name to render, and messages only store user_id.
+type MessageResponse struct {
+	database.Message
+	AuthorName string `json:"author_name"`
+}
+
 // SendMessage checks channel membership before writing - Gemini's thread
 // reply handler skipped this, which lets anyone post to any channel they
 // can guess the ID of.
@@ -79,9 +86,17 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Best-effort name lookup - if it fails, send the message anyway with an
+	// empty author name rather than fail the whole send over a cosmetic field.
+	authorName, err := h.Queries.GetUserDisplayName(r.Context(), userID)
+	if err != nil {
+		authorName = ""
+	}
+	resp := MessageResponse{Message: msg, AuthorName: authorName}
+
 	// Broadcast only after the DB write succeeds - never the other way
 	// around, or a message could appear live but fail to persist.
-	payload, err := json.Marshal(msg)
+	payload, err := json.Marshal(resp)
 	if err == nil {
 		event, err := json.Marshal(gateway.WSEvent{
 			Type:      gateway.EventMessageCreated,
@@ -94,7 +109,7 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(msg)
+	json.NewEncoder(w).Encode(resp)
 }
 
 // ListMessages supports cursor pagination via ?before=<RFC3339 timestamp>&limit=50.
@@ -150,7 +165,7 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		limit = int32(parsed)
 	}
 
-	messages, err := h.Queries.ListChannelMessages(r.Context(), database.ListChannelMessagesParams{
+	messages, err := h.Queries.ListChannelMessagesWithAuthor(r.Context(), database.ListChannelMessagesWithAuthorParams{
 		ChannelID: channelID,
 		CreatedAt: before,
 		Limit:     limit,

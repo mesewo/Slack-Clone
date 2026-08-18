@@ -137,6 +137,9 @@ func (h *Handler) ListChannels(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to list channels")
 		return
 	}
+	if channels == nil {
+		channels = []database.Channel{}
+	}
 
 	json.NewEncoder(w).Encode(channels)
 }

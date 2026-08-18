@@ -12,3 +12,16 @@ WHERE channel_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $3;
+
+-- name: ListChannelMessagesWithAuthor :many
+-- Same pagination as above, but joins the sender's display_name in one
+-- query instead of looking it up per-message. LEFT JOIN so a message from
+-- a deleted user (user_id set NULL) still returns instead of disappearing.
+SELECT m.*, u.display_name AS author_name
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+WHERE m.channel_id = $1
+  AND m.created_at < $2
+  AND m.deleted_at IS NULL
+ORDER BY m.created_at DESC
+LIMIT $3;

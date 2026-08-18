@@ -74,3 +74,17 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	)
 	return i, err
 }
+
+const getUserDisplayName = `-- name: GetUserDisplayName :one
+SELECT display_name FROM users
+WHERE id = $1
+`
+
+// Lighter than GetUserByID when you only need the name (e.g. enriching a
+// just-sent message with its author's name for the WS broadcast).
+func (q *Queries) GetUserDisplayName(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getUserDisplayName, id)
+	var display_name string
+	err := row.Scan(&display_name)
+	return display_name, err
+}

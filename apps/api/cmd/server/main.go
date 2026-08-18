@@ -76,6 +76,7 @@ func main() {
 		r.Get("/api/auth/verify", userHandler.Verify)
 
 		r.Post("/api/workspaces", workspaceHandler.CreateWorkspace)
+		r.Post("/api/workspaces/join", workspaceHandler.JoinWorkspace)
 		r.Get("/api/workspaces", workspaceHandler.ListWorkspaces)
 
 		r.Post("/api/channels", channelHandler.CreateChannel)
