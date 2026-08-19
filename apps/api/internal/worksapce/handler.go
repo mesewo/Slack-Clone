@@ -114,6 +114,16 @@ func (h *Handler) ListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		workspaces = []database.Workspace{}
 	}
 
+	for _, ws := range workspaces {
+		if err := h.Queries.AddUserToPublicWorkspaceChannels(r.Context(), database.AddUserToPublicWorkspaceChannelsParams{
+			WorkspaceID: ws.ID,
+			UserID:      userID,
+		}); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to join public workspace channels")
+			return
+		}
+	}
+
 	json.NewEncoder(w).Encode(workspaces)
 }
 
@@ -166,6 +176,14 @@ func (h *Handler) JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusConflict, "workspace membership already exists")
 			return
 		}
+	}
+
+	if err := h.Queries.AddUserToPublicWorkspaceChannels(r.Context(), database.AddUserToPublicWorkspaceChannelsParams{
+		WorkspaceID: ws.ID,
+		UserID:      userID,
+	}); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "workspace joined but failed to join public channels")
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)

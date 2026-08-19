@@ -20,3 +20,18 @@ SELECT w.* FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
 WHERE wm.user_id = $1
 ORDER BY w.created_at;
+
+-- name: AddUserToPublicWorkspaceChannels :exec
+INSERT INTO channel_members (channel_id, user_id)
+SELECT c.id, $2
+FROM channels c
+WHERE c.workspace_id = $1 AND c.type = 'PUBLIC'
+ON CONFLICT (channel_id, user_id) DO NOTHING;
+
+-- name: AddUserToPublicChannelsInWorkspace :exec
+INSERT INTO channel_members (channel_id, user_id)
+SELECT c.id, $2
+FROM channels c
+JOIN workspace_members wm ON wm.workspace_id = c.workspace_id
+WHERE wm.user_id = $2 AND c.workspace_id = $1 AND c.type = 'PUBLIC'
+ON CONFLICT (channel_id, user_id) DO NOTHING;

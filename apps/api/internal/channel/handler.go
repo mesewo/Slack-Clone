@@ -129,6 +129,14 @@ func (h *Handler) ListChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := h.Queries.AddUserToPublicChannelsInWorkspace(r.Context(), database.AddUserToPublicChannelsInWorkspaceParams{
+		WorkspaceID: workspaceID,
+		UserID:      userID,
+	}); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to ensure public channel membership")
+		return
+	}
+
 	channels, err := h.Queries.ListChannelsForUser(r.Context(), database.ListChannelsForUserParams{
 		UserID:      userID,
 		WorkspaceID: workspaceID,

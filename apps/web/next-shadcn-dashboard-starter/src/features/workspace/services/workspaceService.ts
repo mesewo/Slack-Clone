@@ -28,7 +28,7 @@ export const workspaceService = {
       const payload = {
         ...data,
         name: baseName,
-        slug: data.slug ?? makeUniqueSlug(baseName, attempt),
+        slug: makeUniqueSlug(data.slug || baseName, attempt),
       };
 
       try {

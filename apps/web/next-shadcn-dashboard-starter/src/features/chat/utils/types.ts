@@ -11,6 +11,7 @@ export type Message = {
   author: string;
   text: string;
   timestamp: string;
+  replyCount?: number;
   attachments?: Attachment[];
 };
 

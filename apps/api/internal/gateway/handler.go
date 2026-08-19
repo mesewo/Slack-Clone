@@ -99,7 +99,7 @@ func (c *Client) readPump(hub *Hub, pm *PresenceManager) {
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived) {
 				log.Printf("websocket error: %v", err)
 			}
 			break

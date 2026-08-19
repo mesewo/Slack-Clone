@@ -11,6 +11,43 @@ import (
 	"github.com/google/uuid"
 )
 
+const addUserToPublicChannelsInWorkspace = `-- name: AddUserToPublicChannelsInWorkspace :exec
+INSERT INTO channel_members (channel_id, user_id)
+SELECT c.id, $2
+FROM channels c
+JOIN workspace_members wm ON wm.workspace_id = c.workspace_id
+WHERE wm.user_id = $2 AND c.workspace_id = $1 AND c.type = 'PUBLIC'
+ON CONFLICT (channel_id, user_id) DO NOTHING
+`
+
+type AddUserToPublicChannelsInWorkspaceParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) AddUserToPublicChannelsInWorkspace(ctx context.Context, arg AddUserToPublicChannelsInWorkspaceParams) error {
+	_, err := q.db.Exec(ctx, addUserToPublicChannelsInWorkspace, arg.WorkspaceID, arg.UserID)
+	return err
+}
+
+const addUserToPublicWorkspaceChannels = `-- name: AddUserToPublicWorkspaceChannels :exec
+INSERT INTO channel_members (channel_id, user_id)
+SELECT c.id, $2
+FROM channels c
+WHERE c.workspace_id = $1 AND c.type = 'PUBLIC'
+ON CONFLICT (channel_id, user_id) DO NOTHING
+`
+
+type AddUserToPublicWorkspaceChannelsParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) AddUserToPublicWorkspaceChannels(ctx context.Context, arg AddUserToPublicWorkspaceChannelsParams) error {
+	_, err := q.db.Exec(ctx, addUserToPublicWorkspaceChannels, arg.WorkspaceID, arg.UserID)
+	return err
+}
+
 const addWorkspaceMember = `-- name: AddWorkspaceMember :exec
 INSERT INTO workspace_members (workspace_id, user_id, role)
 VALUES ($1, $2, $3)

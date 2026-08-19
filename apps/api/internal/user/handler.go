@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
@@ -109,7 +110,21 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]string{"id": claims.UserID, "email": claims.Email})
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
+		return
+	}
+	u, err := h.Queries.GetUserByID(r.Context(), userID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to load user")
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{
+		"id":    claims.UserID,
+		"email": claims.Email,
+		"name":  u.DisplayName,
+	})
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

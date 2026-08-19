@@ -85,6 +85,11 @@ func main() {
 
 		r.Post("/api/channels/{channelID}/messages", messageHandler.SendMessage)
 		r.Get("/api/channels/{channelID}/messages", messageHandler.ListMessages)
+		r.Get("/api/channels/{channelID}/messages/{messageID}/replies", messageHandler.ListThreadReplies)
+		r.Post("/api/channels/{channelID}/messages/{messageID}/replies", messageHandler.CreateThreadReply)
+		r.Get("/api/channels/{channelID}/messages/{messageID}/reactions", messageHandler.ListReactions)
+		r.Post("/api/channels/{channelID}/messages/{messageID}/reactions", messageHandler.AddReaction)
+		r.Delete("/api/channels/{channelID}/messages/{messageID}/reactions", messageHandler.RemoveReaction)
 
 		r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 			gateway.ServeWS(hub, presence, tokens, queries, w, r)

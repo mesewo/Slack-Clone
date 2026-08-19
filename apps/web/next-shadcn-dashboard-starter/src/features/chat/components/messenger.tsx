@@ -8,6 +8,7 @@ import { useRealtimeConnection } from "../hooks/use-realtime-connection";
 import { ConversationList } from "./conversation-list";
 import { ConversationSelect } from "./conversation-select";
 import { ChatArea } from "./chat-area";
+import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 
 export function Messenger() {
   const { user } = useAuth();
@@ -20,6 +21,14 @@ export function Messenger() {
     setDraft,
     sendMessage,
     getActiveConversation,
+    openThreadPanel,
+    selectedThreadParentId,
+    currentUserId,
+    messageReactions,
+    addReaction,
+    removeReaction,
+    typingUsers,
+    userPresence,
   } = useChatStore();
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -29,7 +38,7 @@ export function Messenger() {
   }, [user, init]);
 
   // One shared connection for the session - see use-realtime-connection.ts
-  useRealtimeConnection(!!user);
+  const { sendTyping } = useRealtimeConnection(!!user, selectedConversationId);
 
   useEffect(() => {
     setAttachments([]);
@@ -64,6 +73,11 @@ export function Messenger() {
 
   const activeConversation = getActiveConversation();
   if (!activeConversation) return null;
+  const parentMessage = selectedThreadParentId
+    ? activeConversation.messages.find(
+        (message) => message.id === selectedThreadParentId,
+      )
+    : undefined;
 
   return (
     <div className="border-border/50 bg-background/70 relative grid h-[calc(100dvh-5.5rem)] w-full grid-rows-[auto,1fr] gap-3 overflow-hidden rounded-2xl border p-3 backdrop-blur-xl sm:gap-4 sm:p-4 lg:[grid-template-columns:30%_1fr] lg:grid-rows-[1fr] lg:gap-4 lg:rounded-3xl lg:p-5">
@@ -81,11 +95,35 @@ export function Messenger() {
         conversation={activeConversation}
         draft={draft}
         onDraftChange={setDraft}
+        onTyping={() => sendTyping(selectedConversationId)}
         onSubmit={handleSubmit}
         attachments={attachments}
         onAddAttachments={handleAddAttachments}
         onRemoveAttachment={handleRemoveAttachment}
+        onOpenThread={(message) => openThreadPanel(message.id)}
+        reactions={messageReactions}
+        currentUserId={currentUserId ?? ""}
+        onToggleReaction={(messageId, emoji) => {
+          const existing = (messageReactions[messageId] || []).find(
+            (reaction) => reaction.userId === currentUserId,
+          );
+          if (existing?.emoji === emoji) {
+            void removeReaction(messageId, currentUserId ?? "");
+          } else {
+            void addReaction(messageId, currentUserId ?? "", emoji);
+          }
+        }}
+        typingUserCount={
+          (typingUsers[selectedConversationId] || []).filter(
+            (userId) => userId !== currentUserId,
+          ).length
+        }
+        activeUserCount={
+          Object.values(userPresence).filter((status) => status === "active")
+            .length
+        }
       />
+      {parentMessage && <ThreadPanel parentMessage={parentMessage} />}
     </div>
   );
 }

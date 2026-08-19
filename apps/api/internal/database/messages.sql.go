@@ -42,6 +42,97 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 	return i, err
 }
 
+const createThreadReply = `-- name: CreateThreadReply :one
+INSERT INTO messages (channel_id, user_id, content, parent_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count
+`
+
+type CreateThreadReplyParams struct {
+	ChannelID uuid.UUID     `json:"channel_id"`
+	UserID    uuid.NullUUID `json:"user_id"`
+	Content   string        `json:"content"`
+	ParentID  uuid.NullUUID `json:"parent_id"`
+}
+
+func (q *Queries) CreateThreadReply(ctx context.Context, arg CreateThreadReplyParams) (Message, error) {
+	row := q.db.QueryRow(ctx, createThreadReply,
+		arg.ChannelID,
+		arg.UserID,
+		arg.Content,
+		arg.ParentID,
+	)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ChannelID,
+		&i.UserID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ParentID,
+		&i.ReplyCount,
+	)
+	return i, err
+}
+
+const getMessageByID = `-- name: GetMessageByID :one
+SELECT id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count FROM messages
+WHERE id = $1
+`
+
+func (q *Queries) GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessageByID, id)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ChannelID,
+		&i.UserID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ParentID,
+		&i.ReplyCount,
+	)
+	return i, err
+}
+
+const getMessageReaction = `-- name: GetMessageReaction :one
+SELECT message_id, user_id, emoji, created_at
+FROM message_reactions
+WHERE message_id = $1 AND user_id = $2
+`
+
+type GetMessageReactionParams struct {
+	MessageID uuid.UUID `json:"message_id"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) GetMessageReaction(ctx context.Context, arg GetMessageReactionParams) (MessageReaction, error) {
+	row := q.db.QueryRow(ctx, getMessageReaction, arg.MessageID, arg.UserID)
+	var i MessageReaction
+	err := row.Scan(
+		&i.MessageID,
+		&i.UserID,
+		&i.Emoji,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const incrementReplyCount = `-- name: IncrementReplyCount :exec
+UPDATE messages
+SET reply_count = reply_count + 1
+WHERE id = $1
+`
+
+func (q *Queries) IncrementReplyCount(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, incrementReplyCount, id)
+	return err
+}
+
 const listChannelMessages = `-- name: ListChannelMessages :many
 SELECT id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count FROM messages
 WHERE channel_id = $1
@@ -151,4 +242,122 @@ func (q *Queries) ListChannelMessagesWithAuthor(ctx context.Context, arg ListCha
 		return nil, err
 	}
 	return items, nil
+}
+
+const listMessageReactions = `-- name: ListMessageReactions :many
+SELECT message_id, user_id, emoji, created_at
+FROM message_reactions
+WHERE message_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) ListMessageReactions(ctx context.Context, messageID uuid.UUID) ([]MessageReaction, error) {
+	rows, err := q.db.Query(ctx, listMessageReactions, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MessageReaction
+	for rows.Next() {
+		var i MessageReaction
+		if err := rows.Scan(
+			&i.MessageID,
+			&i.UserID,
+			&i.Emoji,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listThreadReplies = `-- name: ListThreadReplies :many
+SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, m.updated_at, m.deleted_at, m.parent_id, m.reply_count, u.display_name AS author_name
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+WHERE m.parent_id = $1
+  AND m.deleted_at IS NULL
+ORDER BY m.created_at ASC
+`
+
+type ListThreadRepliesRow struct {
+	ID         uuid.UUID     `json:"id"`
+	ChannelID  uuid.UUID     `json:"channel_id"`
+	UserID     uuid.NullUUID `json:"user_id"`
+	Content    string        `json:"content"`
+	CreatedAt  time.Time     `json:"created_at"`
+	UpdatedAt  **time.Time   `json:"updated_at"`
+	DeletedAt  **time.Time   `json:"deleted_at"`
+	ParentID   uuid.NullUUID `json:"parent_id"`
+	ReplyCount int32         `json:"reply_count"`
+	AuthorName pgtype.Text   `json:"author_name"`
+}
+
+func (q *Queries) ListThreadReplies(ctx context.Context, parentID uuid.NullUUID) ([]ListThreadRepliesRow, error) {
+	rows, err := q.db.Query(ctx, listThreadReplies, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListThreadRepliesRow
+	for rows.Next() {
+		var i ListThreadRepliesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChannelID,
+			&i.UserID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ParentID,
+			&i.ReplyCount,
+			&i.AuthorName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const removeMessageReaction = `-- name: RemoveMessageReaction :exec
+DELETE FROM message_reactions
+WHERE message_id = $1 AND user_id = $2
+`
+
+type RemoveMessageReactionParams struct {
+	MessageID uuid.UUID `json:"message_id"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RemoveMessageReaction(ctx context.Context, arg RemoveMessageReactionParams) error {
+	_, err := q.db.Exec(ctx, removeMessageReaction, arg.MessageID, arg.UserID)
+	return err
+}
+
+const upsertMessageReaction = `-- name: UpsertMessageReaction :exec
+INSERT INTO message_reactions (message_id, user_id, emoji)
+VALUES ($1, $2, $3)
+ON CONFLICT (message_id, user_id)
+DO UPDATE SET emoji = EXCLUDED.emoji, created_at = now()
+`
+
+type UpsertMessageReactionParams struct {
+	MessageID uuid.UUID `json:"message_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Emoji     string    `json:"emoji"`
+}
+
+func (q *Queries) UpsertMessageReaction(ctx context.Context, arg UpsertMessageReactionParams) error {
+	_, err := q.db.Exec(ctx, upsertMessageReaction, arg.MessageID, arg.UserID, arg.Emoji)
+	return err
 }

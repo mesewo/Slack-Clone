@@ -3,6 +3,28 @@ INSERT INTO messages (channel_id, user_id, content)
 VALUES ($1, $2, $3)
 RETURNING *;
 
+-- name: CreateThreadReply :one
+INSERT INTO messages (channel_id, user_id, content, parent_id)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: IncrementReplyCount :exec
+UPDATE messages
+SET reply_count = reply_count + 1
+WHERE id = $1;
+
+-- name: GetMessageByID :one
+SELECT * FROM messages
+WHERE id = $1;
+
+-- name: ListThreadReplies :many
+SELECT m.*, u.display_name AS author_name
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+WHERE m.parent_id = $1
+  AND m.deleted_at IS NULL
+ORDER BY m.created_at ASC;
+
 -- name: ListChannelMessages :many
 -- Cursor pagination: pass the created_at of the oldest message you already have
 -- to get the next (older) page. For the first page, pass now() as the cursor.
@@ -25,3 +47,24 @@ WHERE m.channel_id = $1
   AND m.deleted_at IS NULL
 ORDER BY m.created_at DESC
 LIMIT $3;
+
+-- name: UpsertMessageReaction :exec
+INSERT INTO message_reactions (message_id, user_id, emoji)
+VALUES ($1, $2, $3)
+ON CONFLICT (message_id, user_id)
+DO UPDATE SET emoji = EXCLUDED.emoji, created_at = now();
+
+-- name: RemoveMessageReaction :exec
+DELETE FROM message_reactions
+WHERE message_id = $1 AND user_id = $2;
+
+-- name: GetMessageReaction :one
+SELECT message_id, user_id, emoji, created_at
+FROM message_reactions
+WHERE message_id = $1 AND user_id = $2;
+
+-- name: ListMessageReactions :many
+SELECT message_id, user_id, emoji, created_at
+FROM message_reactions
+WHERE message_id = $1
+ORDER BY created_at;

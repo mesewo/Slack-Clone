@@ -79,7 +79,7 @@ export function useAuth() {
         });
         if (response.ok) {
           const data = await response.json();
-          setUser({ id: data.id, email: data.email });
+          setUser({ id: data.id, email: data.email, name: data.name });
         } else {
           setUser(null);
         }
