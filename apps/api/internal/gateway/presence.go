@@ -54,3 +54,18 @@ func (pm *PresenceManager) GetStatus(userID string) UserStatus {
 	}
 	return StatusAway
 }
+
+// Snapshot returns a copy of every known user's current status. A brand-new
+// connection has no way to learn about users who were already online -
+// SetStatus only broadcasts on change, so anyone whose status hasn't changed
+// since before this client connected never gets (re-)announced. ServeWS
+// sends this snapshot directly to a new connection right after it registers.
+func (pm *PresenceManager) Snapshot() map[string]UserStatus {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	snap := make(map[string]UserStatus, len(pm.statuses))
+	for k, v := range pm.statuses {
+		snap[k] = v
+	}
+	return snap
+}

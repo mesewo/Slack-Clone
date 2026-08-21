@@ -388,8 +388,13 @@ func (h *Handler) AddReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.Queries.GetMessageByID(r.Context(), messageID); err != nil {
+	msg, err := h.Queries.GetMessageByID(r.Context(), messageID)
+	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "message not found")
+		return
+	}
+	if msg.ChannelID != channelID {
+		writeJSONError(w, http.StatusBadRequest, "message does not belong to this channel")
 		return
 	}
 
@@ -514,8 +519,13 @@ func (h *Handler) RemoveReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.Queries.GetMessageByID(r.Context(), messageID); err != nil {
+	msg, err := h.Queries.GetMessageByID(r.Context(), messageID)
+	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "message not found")
+		return
+	}
+	if msg.ChannelID != channelID {
+		writeJSONError(w, http.StatusBadRequest, "message does not belong to this channel")
 		return
 	}
 

@@ -76,6 +76,26 @@ func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, queries *
 		}
 	}
 
+	// Tell this new connection about everyone who's already online - without
+	// this, it only learns about *future* status changes (see Snapshot's
+	// comment for why that made the active-user count connection-order
+	// dependent). Sent directly to this client's own Send channel, not
+	// broadcast - the rest of the hub doesn't need to hear this again.
+	for uid, status := range pm.Snapshot() {
+		payload, err := json.Marshal(PresencePayload{UserID: uid, Status: string(status)})
+		if err != nil {
+			continue
+		}
+		event, err := json.Marshal(WSEvent{Type: EventPresence, Payload: payload})
+		if err != nil {
+			continue
+		}
+		select {
+		case client.Send <- event:
+		default: // buffer full - skip rather than block the upgrade
+		}
+	}
+
 	go client.writePump()
 	go client.readPump(hub, pm)
 }
@@ -99,7 +119,7 @@ func (c *Client) readPump(hub *Hub, pm *PresenceManager) {
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure, websocket.CloseNoStatusReceived) {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("websocket error: %v", err)
 			}
 			break
