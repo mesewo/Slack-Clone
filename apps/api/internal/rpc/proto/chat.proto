@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package chat;
+
+option go_package = "github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb";
+
+// GatewayService is implemented by the Gateway process. Core calls this to
+// push an event out to connected WebSocket clients.
+service GatewayService {
+  rpc Broadcast(BroadcastRequest) returns (BroadcastResponse);
+}
+
+message BroadcastRequest {
+  string channel_id = 1;
+  // Pre-marshaled WSEvent JSON. Gateway doesn't need to understand the
+  // payload's shape - it just relays bytes to subscribed connections.
+  bytes payload = 2;
+}
+
+message BroadcastResponse {}
+
+// CoreService is implemented by the Core process. Gateway calls this on
+// every new WebSocket connection to learn which channels to subscribe the
+// user to - Gateway has no direct database access (Option B).
+service CoreService {
+  rpc GetUserChannels(GetUserChannelsRequest) returns (GetUserChannelsResponse);
+}
+
+message GetUserChannelsRequest {
+  string user_id = 1;
+}
+
+message GetUserChannelsResponse {
+  repeated string channel_ids = 1;
+}

@@ -1,44 +1,26 @@
 package gateway
 
-import "encoding/json"
+import "github.com/mesewo/slack-clone/apps/api/internal/events"
 
-type EventType string
+// Re-exported as type aliases from internal/events, so every existing
+// reference in this package (hub.go, handler.go, presence.go) keeps
+// compiling unchanged. Core imports internal/events directly instead of
+// this package, so it never pulls in the Hub/WebSocket code that lives
+// alongside these aliases here.
+type EventType = events.EventType
 
 const (
-	EventMessageCreated     EventType = "message_created"
-	EventMessageDeleted     EventType = "message_deleted"
-	EventThreadReplyCreated EventType = "thread_reply_created"
-	EventReactionAdded      EventType = "reaction_added"
-	EventReactionRemoved    EventType = "reaction_removed"
-	EventTyping             EventType = "typing"
-	EventPresence           EventType = "presence"
+	EventMessageCreated     = events.EventMessageCreated
+	EventMessageDeleted     = events.EventMessageDeleted
+	EventThreadReplyCreated = events.EventThreadReplyCreated
+	EventReactionAdded      = events.EventReactionAdded
+	EventReactionRemoved    = events.EventReactionRemoved
+	EventTyping             = events.EventTyping
+	EventPresence           = events.EventPresence
 )
 
-// WSEvent is the envelope every message sent over a WebSocket connection
-// uses, in both directions. One consistent shape means the frontend has one
-// parsing path instead of a special case per event type.
-type WSEvent struct {
-	Type      EventType       `json:"type"`
-	ChannelID string          `json:"channel_id,omitempty"`
-	Payload   json.RawMessage `json:"payload"`
-}
-
-type TypingPayload struct {
-	ChannelID string `json:"channel_id"`
-	UserID    string `json:"user_id,omitempty"` // server fills this in, client doesn't send it
-}
-
-type PresencePayload struct {
-	UserID string `json:"user_id"`
-	Status string `json:"status"`
-}
-
-type MessageDeletedPayload struct {
-	MessageID string `json:"message_id"`
-}
-
-type ReactionPayload struct {
-	MessageID string `json:"message_id"`
-	UserID    string `json:"user_id"`
-	Emoji     string `json:"emoji"`
-}
+type WSEvent = events.WSEvent
+type TypingPayload = events.TypingPayload
+type PresencePayload = events.PresencePayload
+type MessageDeletedPayload = events.MessageDeletedPayload
+type ReactionPayload = events.ReactionPayload

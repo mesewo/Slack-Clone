@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,7 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 )
 
 var upgrader = websocket.Upgrader{
@@ -32,7 +31,7 @@ const (
 // ServeWS upgrades the connection, then subscribes the user to every channel
 // they're a member of - without this step, BroadcastToChannel has nobody to
 // send to, because nothing else populates the hub's channel subscriptions.
-func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, queries *database.Queries, w http.ResponseWriter, r *http.Request) {
+func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, coreClient chatpb.CoreServiceClient, w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(auth.CookieName)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -45,8 +44,7 @@ func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, queries *
 		return
 	}
 
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
+	if _, err := uuid.Parse(claims.UserID); err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -67,12 +65,14 @@ func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, queries *
 
 	// Subscribe to every channel this user belongs to, across all their
 	// workspaces, so broadcasts reach them without a separate "join" step.
-	memberships, err := queries.ListWorkspaceChannelsForUser(context.Background(), userID)
+	// This is now a gRPC call to Core instead of a direct DB query - Gateway
+	// has no database access under Option B.
+	resp, err := coreClient.GetUserChannels(r.Context(), &chatpb.GetUserChannelsRequest{UserId: claims.UserID})
 	if err != nil {
 		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
 	} else {
-		for _, ch := range memberships {
-			hub.SubscribeToChannel(claims.UserID, ch.ID.String())
+		for _, channelID := range resp.GetChannelIds() {
+			hub.SubscribeToChannel(claims.UserID, channelID)
 		}
 	}
 

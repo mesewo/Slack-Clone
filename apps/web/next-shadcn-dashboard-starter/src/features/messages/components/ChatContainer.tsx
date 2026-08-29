@@ -20,7 +20,7 @@ export function ChatContainer({ channelId }: { channelId?: string }) {
   const baseWsUrl =
     process.env.NEXT_PUBLIC_WS_URL ||
     process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, "ws") ||
-    "ws://localhost:8080/ws";
+    "ws://localhost:8081/ws";
   const wsUrl = `${baseWsUrl.replace(/\/$/, "")}/chat/${resolvedChannelId}`;
   const { lastMessage } = useWebSocket(wsUrl);
   const { messages, setMessages, addMessage } = useMessageStore();

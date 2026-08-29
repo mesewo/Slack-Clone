@@ -17,7 +17,7 @@ export function useChat(roomId: string) {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket(`ws://localhost:8080/ws/chat/${roomId}`);
+    const ws = new WebSocket(`ws://localhost:8081/ws/chat/${roomId}`);
     wsRef.current = ws;
 
     ws.onopen = () => {

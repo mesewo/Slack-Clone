@@ -3,19 +3,21 @@ package user
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 )
 
 type Handler struct {
 	Queries *database.Queries
 	Tokens  *auth.TokenManager
 	Cookies auth.CookieConfig
+	Kafka   *kafka.Producer
 }
 
 type AuthRequest struct {
@@ -58,6 +60,17 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Cookies.Set(w, token, h.Tokens.TTL())
+
+	// Durable event log entry, best-effort - registration already succeeded.
+	if err := h.Kafka.Publish(r.Context(), kafka.TopicUserRegistered, u.ID.String(), kafka.UserRegisteredEvent{
+		UserID:       u.ID.String(),
+		Email:        u.Email,
+		DisplayName:  u.DisplayName,
+		RegisteredAt: u.CreatedAt,
+	}); err != nil {
+		log.Printf("failed to publish user.registered event: %v", err)
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"id": u.ID.String(), "email": u.Email})
 }
@@ -110,21 +123,7 @@ func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
-	userID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
-		return
-	}
-	u, err := h.Queries.GetUserByID(r.Context(), userID)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to load user")
-		return
-	}
-	json.NewEncoder(w).Encode(map[string]string{
-		"id":    claims.UserID,
-		"email": claims.Email,
-		"name":  u.DisplayName,
-	})
+	json.NewEncoder(w).Encode(map[string]string{"id": claims.UserID, "email": claims.Email})
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

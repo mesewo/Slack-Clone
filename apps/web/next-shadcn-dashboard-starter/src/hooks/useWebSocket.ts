@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 function normalizeWebSocketUrl(url: string) {
-  if (!url) return "ws://localhost:8080/ws";
+  if (!url) return "ws://localhost:8081/ws";
   return url.replace(/^http/, "ws");
 }
 

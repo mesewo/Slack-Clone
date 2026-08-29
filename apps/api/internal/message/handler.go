@@ -1,8 +1,10 @@
 package message
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,12 +15,21 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
-	"github.com/mesewo/slack-clone/apps/api/internal/gateway"
+	"github.com/mesewo/slack-clone/apps/api/internal/events"
+	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
+	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 )
 
 type Handler struct {
 	Queries *database.Queries
-	Hub     *gateway.Hub
+	// GatewayClient replaces the old *gateway.Hub field - Core no longer
+	// calls the Hub as a plain Go function, since Gateway is now a separate
+	// process. This is the whole point of Phase 3's split.
+	GatewayClient chatpb.GatewayServiceClient
+	// Kafka publishes a durable event log entry alongside the live
+	// broadcast - two independent side effects, both best-effort relative
+	// to the DB write, which is the actual source of truth.
+	Kafka *kafka.Producer
 }
 
 type SendMessageRequest struct {
@@ -39,6 +50,34 @@ type ReactionRequest struct {
 type MessageResponse struct {
 	database.Message
 	AuthorName string `json:"author_name"`
+}
+
+// broadcast marshals a WSEvent and sends it to Gateway over gRPC. This is
+// best-effort: the DB write has already succeeded by the time this is
+// called, so a broadcast failure means live clients miss the real-time
+// update (they'll still see it on their next REST fetch) - not worth
+// failing the whole request over. The timeout keeps a slow or down Gateway
+// from hanging the response indefinitely.
+func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType events.EventType, payload []byte) {
+	event, err := json.Marshal(events.WSEvent{
+		Type:      eventType,
+		ChannelID: channelID.String(),
+		Payload:   payload,
+	})
+	if err != nil {
+		log.Printf("failed to marshal WSEvent: %v", err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	if _, err := h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{
+		ChannelId: channelID.String(),
+		Payload:   event,
+	}); err != nil {
+		log.Printf("failed to broadcast to gateway: %v", err)
+	}
 }
 
 // SendMessage checks channel membership before writing - Gemini's thread
@@ -95,8 +134,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Best-effort name lookup - if it fails, send the message anyway with an
-	// empty author name rather than fail the whole send over a cosmetic field.
 	authorName, err := h.Queries.GetUserDisplayName(r.Context(), userID)
 	if err != nil {
 		authorName = ""
@@ -105,16 +142,21 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	// Broadcast only after the DB write succeeds - never the other way
 	// around, or a message could appear live but fail to persist.
-	payload, err := json.Marshal(resp)
-	if err == nil {
-		event, err := json.Marshal(gateway.WSEvent{
-			Type:      gateway.EventMessageCreated,
-			ChannelID: channelID.String(),
-			Payload:   payload,
-		})
-		if err == nil {
-			h.Hub.BroadcastToChannel(channelID.String(), event)
-		}
+	if payload, err := json.Marshal(resp); err == nil {
+		h.broadcast(r.Context(), channelID, events.EventMessageCreated, payload)
+	}
+
+	// Durable event log entry - separate from the live broadcast above.
+	// Best-effort: the message already persisted, so a Kafka hiccup here
+	// shouldn't fail the response.
+	if err := h.Kafka.Publish(r.Context(), kafka.TopicMessageCreated, channelID.String(), kafka.MessageCreatedEvent{
+		MessageID: msg.ID.String(),
+		ChannelID: channelID.String(),
+		UserID:    userID.String(),
+		Content:   msg.Content,
+		CreatedAt: msg.CreatedAt,
+	}); err != nil {
+		log.Printf("failed to publish message.created event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -326,16 +368,8 @@ func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := MessageResponse{Message: reply, AuthorName: authorName}
 
-	payload, err := json.Marshal(resp)
-	if err == nil {
-		event, err := json.Marshal(gateway.WSEvent{
-			Type:      gateway.EventThreadReplyCreated,
-			ChannelID: channelID.String(),
-			Payload:   payload,
-		})
-		if err == nil {
-			h.Hub.BroadcastToChannel(channelID.String(), event)
-		}
+	if payload, err := json.Marshal(resp); err == nil {
+		h.broadcast(r.Context(), channelID, events.EventThreadReplyCreated, payload)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -407,20 +441,12 @@ func (h *Handler) AddReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := json.Marshal(gateway.ReactionPayload{
+	if payload, err := json.Marshal(events.ReactionPayload{
 		MessageID: messageID.String(),
 		UserID:    userID.String(),
 		Emoji:     req.Emoji,
-	})
-	if err == nil {
-		event, err := json.Marshal(gateway.WSEvent{
-			Type:      gateway.EventReactionAdded,
-			ChannelID: channelID.String(),
-			Payload:   payload,
-		})
-		if err == nil {
-			h.Hub.BroadcastToChannel(channelID.String(), event)
-		}
+	}); err == nil {
+		h.broadcast(r.Context(), channelID, events.EventReactionAdded, payload)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -537,20 +563,12 @@ func (h *Handler) RemoveReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload, err := json.Marshal(gateway.ReactionPayload{
+	if payload, err := json.Marshal(events.ReactionPayload{
 		MessageID: messageID.String(),
 		UserID:    userID.String(),
 		Emoji:     "",
-	})
-	if err == nil {
-		event, err := json.Marshal(gateway.WSEvent{
-			Type:      gateway.EventReactionRemoved,
-			ChannelID: channelID.String(),
-			Payload:   payload,
-		})
-		if err == nil {
-			h.Hub.BroadcastToChannel(channelID.String(), event)
-		}
+	}); err == nil {
+		h.broadcast(r.Context(), channelID, events.EventReactionRemoved, payload)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

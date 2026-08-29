@@ -10,7 +10,7 @@ type WSEvent = {
   payload: unknown;
 };
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080/ws";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8081/ws";
 
 // One connection for the whole session, not one per open room - the backend
 // (gateway.ServeWS) already subscribes this user to every channel they're a

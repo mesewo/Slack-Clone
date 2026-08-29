@@ -202,7 +202,7 @@ bun run prepare      # Install Husky hooks
 
 ## Environment Configuration
 
-Copy `env.example.txt` to `.env.local` and configure:
+Copy `.env.example` to `.env.local` and configure:
 
 ### Required for Authentication (Clerk)
 
@@ -310,22 +310,22 @@ See `docs/themes.md` for detailed theming guide.
 Navigation is organized into groups in `src/config/nav-config.ts`:
 
 ```typescript
-import { NavGroup } from '@/types';
+import { NavGroup } from "@/types";
 
 export const navGroups: NavGroup[] = [
   {
-    label: 'Overview',
+    label: "Overview",
     items: [
       {
-        title: 'Dashboard',
-        url: '/dashboard/overview',
-        icon: 'dashboard',
-        shortcut: ['d', 'd'],
+        title: "Dashboard",
+        url: "/dashboard/overview",
+        icon: "dashboard",
+        shortcut: ["d", "d"],
         items: [],
-        access: { requireOrg: true } // RBAC check
-      }
-    ]
-  }
+        access: { requireOrg: true }, // RBAC check
+      },
+    ],
+  },
 ];
 ```
 
@@ -350,12 +350,12 @@ The `useFilteredNavItems()` hook in `src/hooks/use-nav.ts` filters navigation cl
 Dashboard routes use Clerk's middleware pattern. Pages that require organization:
 
 ```tsx
-import { auth } from '@clerk/nextjs';
-import { redirect } from 'next/navigation';
+import { auth } from "@clerk/nextjs";
+import { redirect } from "next/navigation";
 
 export default async function Page() {
   const { orgId } = await auth();
-  if (!orgId) redirect('/dashboard/workspaces');
+  if (!orgId) redirect("/dashboard/workspaces");
   // ...
 }
 ```
@@ -365,9 +365,9 @@ export default async function Page() {
 Use Clerk's `<Protect>` component for client-side:
 
 ```tsx
-import { Protect } from '@clerk/nextjs';
+import { Protect } from "@clerk/nextjs";
 
-<Protect plan='pro' fallback={<UpgradePrompt />}>
+<Protect plan="pro" fallback={<UpgradePrompt />}>
   <PremiumContent />
 </Protect>;
 ```
@@ -375,10 +375,10 @@ import { Protect } from '@clerk/nextjs';
 Use `has()` function for server-side checks:
 
 ```tsx
-import { auth } from '@clerk/nextjs';
+import { auth } from "@clerk/nextjs";
 
 const { has } = await auth();
-const hasFeature = has({ feature: 'premium_access' });
+const hasFeature = has({ feature: "premium_access" });
 ```
 
 ---
@@ -416,9 +416,10 @@ Each feature defines a key factory in `queries.ts` for type-safe, hierarchical c
 
 ```tsx
 export const entityKeys = {
-  all: ['entities'] as const,
-  list: (filters: EntityFilters) => [...entityKeys.all, 'list', filters] as const,
-  detail: (id: number) => [...entityKeys.all, 'detail', id] as const
+  all: ["entities"] as const,
+  list: (filters: EntityFilters) =>
+    [...entityKeys.all, "list", filters] as const,
+  detail: (id: number) => [...entityKeys.all, "detail", id] as const,
 };
 
 // Usage in queryOptions
@@ -473,15 +474,15 @@ const { data } = useSuspenseQuery(entitiesQueryOptions(filters));
 Components import service functions for mutations. Use query key factories for invalidation:
 
 ```tsx
-import { createEntity } from '../api/service';
-import { entityKeys } from '../api/queries';
+import { createEntity } from "../api/service";
+import { entityKeys } from "../api/queries";
 
 const mutation = useMutation({
   mutationFn: (data) => createEntity(data),
   onSuccess: () => {
     queryClient.invalidateQueries({ queryKey: entityKeys.all });
-    toast.success('Created');
-  }
+    toast.success("Created");
+  },
 });
 ```
 
@@ -643,11 +644,11 @@ icon={Icons.check}
 
 ```tsx
 // In src/components/icons.tsx
-import { IconNewIcon } from '@tabler/icons-react';
+import { IconNewIcon } from "@tabler/icons-react";
 
 export const Icons = {
   // ...existing icons
-  newIcon: IconNewIcon
+  newIcon: IconNewIcon,
 };
 ```
 
