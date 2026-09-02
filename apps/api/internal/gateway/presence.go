@@ -12,6 +12,14 @@ const (
 	StatusAway   UserStatus = "away"
 )
 
+// PresenceManagerInterface defines the operations a PresenceManager must support,
+// allowing both in-memory and Redis-backed implementations.
+type PresenceManagerInterface interface {
+	SetStatus(userID string, status UserStatus)
+	GetStatus(userID string) UserStatus
+	Snapshot() map[string]UserStatus
+}
+
 // PresenceManager tracks each user's status and broadcasts changes.
 // Gemini's version tracked status in a map but never told anyone about
 // changes - which makes it presence-tracking, not presence.

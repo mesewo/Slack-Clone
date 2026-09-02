@@ -10,6 +10,7 @@ type EventType string
 
 const (
 	EventMessageCreated     EventType = "message_created"
+	EventMessageEdited      EventType = "message_edited"
 	EventMessageDeleted     EventType = "message_deleted"
 	EventThreadReplyCreated EventType = "thread_reply_created"
 	EventReactionAdded      EventType = "reaction_added"
@@ -35,6 +36,11 @@ type TypingPayload struct {
 type PresencePayload struct {
 	UserID string `json:"user_id"`
 	Status string `json:"status"`
+}
+
+type MessageEditedPayload struct {
+	MessageID string `json:"message_id"`
+	Content   string `json:"content"`
 }
 
 type MessageDeletedPayload struct {

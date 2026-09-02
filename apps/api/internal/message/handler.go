@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -39,6 +40,10 @@ type SendMessageRequest struct {
 type CreateThreadReplyRequest struct {
 	ParentID string `json:"parent_id"`
 	Content  string `json:"content"`
+}
+
+type EditMessageRequest struct {
+	Content string `json:"content"`
 }
 
 type ReactionRequest struct {
@@ -285,6 +290,102 @@ func (h *Handler) ListThreadReplies(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(replies)
 }
 
+func (h *Handler) EditMessage(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	messageID, err := uuid.Parse(chi.URLParam(r, "messageID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid message id")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
+		return
+	}
+
+	isMember, err := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{
+		ChannelID: channelID,
+		UserID:    userID,
+	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to verify channel membership")
+		return
+	}
+	if !isMember {
+		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
+		return
+	}
+
+	msg, err := h.Queries.GetMessageByID(r.Context(), messageID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "message not found")
+		return
+	}
+	if msg.ChannelID != channelID {
+		writeJSONError(w, http.StatusBadRequest, "message does not belong to this channel")
+		return
+	}
+	if !msg.UserID.Valid || msg.UserID.UUID != userID {
+		writeJSONError(w, http.StatusForbidden, "you can only edit your own messages")
+		return
+	}
+
+	var req EditMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		writeJSONError(w, http.StatusBadRequest, "content is required")
+		return
+	}
+
+	updated, err := h.Queries.UpdateMessageContent(r.Context(), database.UpdateMessageContentParams{
+		ID:      messageID,
+		Content: req.Content,
+	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to update message")
+		return
+	}
+
+	authorName, err := h.Queries.GetUserDisplayName(r.Context(), userID)
+	if err != nil {
+		authorName = ""
+	}
+	resp := MessageResponse{Message: updated, AuthorName: authorName}
+
+	if payload, err := json.Marshal(events.MessageEditedPayload{
+		MessageID: messageID.String(),
+		Content:   updated.Content,
+	}); err == nil {
+		h.broadcast(r.Context(), channelID, events.EventMessageEdited, payload)
+	}
+
+	if err := h.Kafka.Publish(r.Context(), kafka.TopicMessageEdited, messageID.String(), kafka.MessageEditedEvent{
+		MessageID: messageID.String(),
+		ChannelID: channelID.String(),
+		UserID:    userID.String(),
+		Content:   updated.Content,
+		UpdatedAt: time.Now(),
+	}); err != nil {
+		log.Printf("failed to publish message.edited event: %v", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(resp)
+}
+
 func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
 	if !ok {
@@ -441,12 +542,25 @@ func (h *Handler) AddReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Broadcast live update to WebSocket clients
 	if payload, err := json.Marshal(events.ReactionPayload{
 		MessageID: messageID.String(),
 		UserID:    userID.String(),
 		Emoji:     req.Emoji,
 	}); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventReactionAdded, payload)
+	}
+
+	// Publish durable event to Kafka for other services
+	if err := h.Kafka.Publish(r.Context(), kafka.TopicReactionAdded, messageID.String(), kafka.ReactionAddedEvent{
+		ReactionID: uuid.New().String(),
+		MessageID:  messageID.String(),
+		ChannelID:  channelID.String(),
+		UserID:     userID.String(),
+		Emoji:      req.Emoji,
+		CreatedAt:  time.Now(),
+	}); err != nil {
+		log.Printf("failed to publish reaction.added event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -563,12 +677,103 @@ func (h *Handler) RemoveReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Broadcast live update to WebSocket clients
 	if payload, err := json.Marshal(events.ReactionPayload{
 		MessageID: messageID.String(),
 		UserID:    userID.String(),
 		Emoji:     "",
 	}); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventReactionRemoved, payload)
+	}
+
+	// Publish durable event to Kafka for other services
+	if err := h.Kafka.Publish(r.Context(), kafka.TopicReactionRemoved, messageID.String(), kafka.ReactionRemovedEvent{
+		ReactionID: uuid.New().String(),
+		MessageID:  messageID.String(),
+		ChannelID:  channelID.String(),
+		UserID:     userID.String(),
+		Emoji:      "",
+		RemovedAt:  time.Now(),
+	}); err != nil {
+		log.Printf("failed to publish reaction.removed event: %v", err)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	messageID, err := uuid.Parse(chi.URLParam(r, "messageID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid message id")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
+		return
+	}
+
+	isMember, err := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{
+		ChannelID: channelID,
+		UserID:    userID,
+	})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to verify channel membership")
+		return
+	}
+	if !isMember {
+		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
+		return
+	}
+
+	msg, err := h.Queries.GetMessageByID(r.Context(), messageID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "message not found")
+		return
+	}
+	if msg.ChannelID != channelID {
+		writeJSONError(w, http.StatusBadRequest, "message does not belong to this channel")
+		return
+	}
+
+	// Only allow deletion by the message author or an admin
+	// For now, just check if the user is the author
+	if !msg.UserID.Valid || msg.UserID.UUID != userID {
+		writeJSONError(w, http.StatusForbidden, "you can only delete your own messages")
+		return
+	}
+
+	if err := h.Queries.DeleteMessage(r.Context(), messageID); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to delete message")
+		return
+	}
+
+	// Broadcast live update to WebSocket clients
+	if payload, err := json.Marshal(events.MessageDeletedPayload{
+		MessageID: messageID.String(),
+	}); err == nil {
+		h.broadcast(r.Context(), channelID, events.EventMessageDeleted, payload)
+	}
+
+	// Publish durable event to Kafka for other services
+	if err := h.Kafka.Publish(r.Context(), kafka.TopicMessageDeleted, messageID.String(), kafka.MessageDeletedEvent{
+		MessageID: messageID.String(),
+		ChannelID: channelID.String(),
+		UserID:    userID.String(),
+		DeletedAt: time.Now(),
+	}); err != nil {
+		log.Printf("failed to publish message.deleted event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

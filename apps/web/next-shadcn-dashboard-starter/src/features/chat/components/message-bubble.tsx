@@ -5,6 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { FilePreview } from "@/components/ui/file-preview";
+import { AlertModal } from "@/components/modal/alert-modal";
 import type { Message } from "../utils/types";
 
 const reactionChoices = Array.from(
@@ -118,12 +119,85 @@ const reactionChoices = Array.from(
   ]),
 );
 
+function renderFormattedText(text: string): React.ReactNode[] {
+  const normalizedText = text.replace(/<u>(.*?)<\/u>/g, "__$1__");
+  const segments = normalizedText.split(
+    /(\*\*.*?\*\*|__.*?__|~~.*?~~|`.*?`|\*.*?\*|> .*?(?:\n|$))/g,
+  );
+
+  return segments.map((segment, index) => {
+    if (!segment) return null;
+
+    if (segment.startsWith("**") && segment.endsWith("**")) {
+      return (
+        <strong key={`${segment}-${index}`}>
+          {renderFormattedText(segment.slice(2, -2))}
+        </strong>
+      );
+    }
+
+    if (segment.startsWith("__") && segment.endsWith("__")) {
+      return (
+        <span key={`${segment}-${index}`} className="underline">
+          {renderFormattedText(segment.slice(2, -2))}
+        </span>
+      );
+    }
+
+    if (segment.startsWith("~~") && segment.endsWith("~~")) {
+      return (
+        <span key={`${segment}-${index}`} className="line-through">
+          {renderFormattedText(segment.slice(2, -2))}
+        </span>
+      );
+    }
+
+    if (segment.startsWith("`") && segment.endsWith("`")) {
+      return (
+        <code
+          key={`${segment}-${index}`}
+          className="rounded bg-black/5 px-1 py-0.5 text-[0.8em]"
+        >
+          {segment.slice(1, -1)}
+        </code>
+      );
+    }
+
+    if (
+      segment.startsWith("*") &&
+      segment.endsWith("*") &&
+      segment.length > 2
+    ) {
+      return (
+        <em key={`${segment}-${index}`}>
+          {renderFormattedText(segment.slice(1, -1))}
+        </em>
+      );
+    }
+
+    if (segment.startsWith("> ")) {
+      return (
+        <blockquote
+          key={`${segment}-${index}`}
+          className="border-l border-current/30 pl-2 italic opacity-80"
+        >
+          {renderFormattedText(segment.slice(2))}
+        </blockquote>
+      );
+    }
+
+    return <span key={`${segment}-${index}`}>{segment}</span>;
+  });
+}
+
 interface MessageBubbleProps {
   message: Message;
   onOpenThread: (message: Message) => void;
   reactions: Array<{ userId: string; emoji: string }>;
   currentUserId: string;
   onToggleReaction: (messageId: string, emoji: string) => void;
+  onEdit: (messageId: string, content: string) => void;
+  onDelete: (messageId: string) => void;
 }
 
 export function MessageBubble({
@@ -132,12 +206,20 @@ export function MessageBubble({
   reactions,
   currentUserId,
   onToggleReaction,
+  onEdit,
+  onDelete,
 }: MessageBubbleProps) {
   const shouldReduceMotion = useReducedMotion();
   const isUser = message.sender === "user";
   const [menuOpen, setMenuOpen] = useState(false);
-  const [reactionSearch, setReactionSearch] = useState("");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState(message.text);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setEditDraft(message.text);
+  }, [message.text]);
 
   const reactionCounts = reactions.reduce<Record<string, number>>(
     (counts, reaction) => ({
@@ -146,9 +228,8 @@ export function MessageBubble({
     }),
     {},
   );
-  const filteredReactionChoices = reactionChoices.filter((emoji) =>
-    emoji.includes(reactionSearch.trim()),
-  );
+
+  const openActions = () => setMenuOpen(true);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -162,6 +243,13 @@ export function MessageBubble({
     return () => document.removeEventListener("pointerdown", closeMenuOutside);
   }, [menuOpen]);
 
+  const saveEdit = () => {
+    const trimmed = editDraft.trim();
+    if (!trimmed) return;
+    onEdit(message.id, trimmed);
+    setIsEditing(false);
+  };
+
   return (
     <motion.div
       initial={shouldReduceMotion ? false : { opacity: 0, y: 12, scale: 0.98 }}
@@ -173,9 +261,14 @@ export function MessageBubble({
       className="flex flex-col gap-1"
       role="group"
       aria-label={message.author + " at " + message.timestamp}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button, input, textarea"))
+          return;
+        openActions();
+      }}
       onContextMenu={(event) => {
         event.preventDefault();
-        setMenuOpen(true);
+        openActions();
       }}
     >
       <div
@@ -194,16 +287,47 @@ export function MessageBubble({
         >
           {message.author}
         </p>
-        {message.text && (
-          <p
+        {isEditing ? (
+          <div className="mt-2 space-y-2">
+            <textarea
+              value={editDraft}
+              onChange={(event) => setEditDraft(event.target.value)}
+              rows={3}
+              className={cn(
+                "w-full resize-none rounded-lg border border-border bg-background/80 p-2 text-[0.875rem] text-foreground outline-none ring-0 placeholder:text-muted-foreground/70",
+                isUser && "bg-primary-foreground/10 text-primary-foreground",
+              )}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditDraft(message.text);
+                }}
+                className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:opacity-90"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : message.text ? (
+          <div
             className={cn(
-              "mt-1 text-[0.875rem] sm:text-[0.95rem]",
+              "mt-1 whitespace-pre-wrap text-[0.875rem] sm:text-[0.95rem]",
               isUser ? "text-primary-foreground/90" : "text-foreground/90",
             )}
           >
-            {message.text}
-          </p>
-        )}
+            {renderFormattedText(message.text)}
+          </div>
+        ) : null}
         {message.attachments && message.attachments.length > 0 && (
           <FilePreview
             files={message.attachments.map((a) => ({
@@ -245,7 +369,7 @@ export function MessageBubble({
                   onClick={() => onToggleReaction(message.id, emoji)}
                   aria-label={`${hasReaction ? "Remove" : "Add"} ${emoji} reaction, ${count} total`}
                   className={cn(
-                    "rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "rounded-md border px-2 py-0.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
                     isUser
                       ? "border-primary-foreground/30 text-primary-foreground/90"
                       : "border-border text-foreground/80",
@@ -267,7 +391,6 @@ export function MessageBubble({
               "absolute z-20 mt-2 flex min-w-52 flex-col rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl",
               isUser ? "right-0" : "left-0",
             )}
-            onClick={(event) => event.stopPropagation()}
           >
             <button
               type="button"
@@ -282,51 +405,47 @@ export function MessageBubble({
                 ? `${message.replyCount} replies`
                 : "Reply in thread"}
             </button>
-            <div className="border-border mt-1 border-t px-2 pb-1 pt-2">
-              <input
-                type="search"
-                value={reactionSearch}
-                onChange={(event) => setReactionSearch(event.target.value)}
-                placeholder="Search emoji"
-                aria-label="Search emoji"
-                className="border-border bg-background text-foreground placeholder:text-muted-foreground mb-2 w-full rounded-md border px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-primary/40"
-              />
-              <div className="flex flex-wrap gap-1">
-                {filteredReactionChoices.map((emoji) => {
-                  const hasReaction = reactions.some(
-                    (reaction) =>
-                      reaction.userId === currentUserId &&
-                      reaction.emoji === emoji,
-                  );
-                  return (
-                    <button
-                      key={emoji}
-                      type="button"
-                      role="menuitem"
-                      aria-label={`${hasReaction ? "Remove" : "Add"} ${emoji} reaction`}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onToggleReaction(message.id, emoji);
-                      }}
-                      className={cn(
-                        "rounded-md px-2 py-1 text-base leading-none hover:bg-accent",
-                        hasReaction && "bg-accent ring-1 ring-primary/50",
-                      )}
-                    >
-                      {emoji}
-                    </button>
-                  );
-                })}
-              </div>
-              {filteredReactionChoices.length === 0 && (
-                <p className="text-muted-foreground py-2 text-center text-xs">
-                  No matching emoji
-                </p>
-              )}
-            </div>
+            {isUser && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setIsEditing(true);
+                  }}
+                  className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                >
+                  Edit message
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setIsDeleteDialogOpen(true);
+                  }}
+                  className="rounded-md px-3 py-2 text-left text-destructive hover:bg-destructive/10"
+                >
+                  Delete message
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
+      <AlertModal
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={() => {
+          setIsDeleteDialogOpen(false);
+          onDelete(message.id);
+        }}
+        loading={false}
+        title="Delete message?"
+        description="This message will be permanently removed from the conversation."
+        confirmLabel="Delete message"
+      />
     </motion.div>
   );
 }

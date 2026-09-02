@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -17,6 +18,16 @@ type MessagePayload struct {
 	UserID    string `json:"user_id"`
 	Content   string `json:"content"`
 	Type      string `json:"type"` // "message", "typing", ...
+}
+
+// HubInterface defines the operations a Hub must support, allowing both
+// in-memory and Redis-backed implementations.
+type HubInterface interface {
+	Register(client *Client)
+	Unregister(client *Client)
+	SubscribeToChannel(ctx context.Context, userID, channelID string) error
+	BroadcastToChannel(channelID string, message []byte)
+	BroadcastPresence(userID string, message []byte)
 }
 
 // Hub tracks live connections and channel subscriptions.
@@ -67,7 +78,7 @@ func (h *Hub) Unregister(client *Client) {
 	}
 }
 
-func (h *Hub) SubscribeToChannel(userID, channelID string) {
+func (h *Hub) SubscribeToChannel(ctx context.Context, userID, channelID string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -75,6 +86,7 @@ func (h *Hub) SubscribeToChannel(userID, channelID string) {
 		h.channels[channelID] = make(map[string]bool)
 	}
 	h.channels[channelID][userID] = true
+	return nil
 }
 
 // BroadcastPresence sends a presence change to every channel this user

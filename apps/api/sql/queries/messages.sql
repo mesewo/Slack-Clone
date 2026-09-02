@@ -3,6 +3,12 @@ INSERT INTO messages (channel_id, user_id, content)
 VALUES ($1, $2, $3)
 RETURNING *;
 
+-- name: UpdateMessageContent :one
+UPDATE messages
+SET content = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
+
 -- name: CreateThreadReply :one
 INSERT INTO messages (channel_id, user_id, content, parent_id)
 VALUES ($1, $2, $3, $4)
@@ -68,3 +74,8 @@ SELECT message_id, user_id, emoji, created_at
 FROM message_reactions
 WHERE message_id = $1
 ORDER BY created_at;
+
+-- name: DeleteMessage :exec
+UPDATE messages
+SET deleted_at = now()
+WHERE id = $1;

@@ -1,6 +1,18 @@
 @import 'tailwindcss';
 
 @import 'tw-animate-css';
+@import './theme.css';
+@import './themes/slack.css';
+@import './themes/claude.css';
+@import './themes/discord.css';
+@import './themes/supabase.css';
+@import './themes/vercel.css';
+@import './themes/mono.css';
+@import './themes/notebook.css';
+@import './themes/light-green.css';
+@import './themes/zen.css';
+@import './themes/astro-vista.css';
+@import './themes/whatsapp.css';
 
 @custom-variant dark (&:is(.dark *));
 

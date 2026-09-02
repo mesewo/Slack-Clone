@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
@@ -26,12 +28,22 @@ const (
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
 	maxMessageSize = 512 * 1024
+
+	// Rate limiting: 100 messages per 10 seconds per connection
+	rateLimitMessages = 100
+	rateLimitWindow   = 10 * time.Second
 )
 
 // ServeWS upgrades the connection, then subscribes the user to every channel
 // they're a member of - without this step, BroadcastToChannel has nobody to
 // send to, because nothing else populates the hub's channel subscriptions.
-func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, coreClient chatpb.CoreServiceClient, w http.ResponseWriter, r *http.Request) {
+// Pass nil for redisClient if using in-memory Hub/PresenceManager.
+func ServeWS(hub HubInterface, pm PresenceManagerInterface, tokens *auth.TokenManager, coreClient chatpb.CoreServiceClient, w http.ResponseWriter, r *http.Request) {
+	ServeWSWithRedis(hub, pm, tokens, coreClient, nil, w, r)
+}
+
+// ServeWSWithRedis is the full implementation supporting both in-memory and Redis-backed state.
+func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *auth.TokenManager, coreClient chatpb.CoreServiceClient, redisClient *redis.Client, w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(auth.CookieName)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -55,10 +67,17 @@ func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, coreClien
 		return
 	}
 
+	connID := uuid.New().String()
 	client := &Client{
 		UserID: claims.UserID,
 		Conn:   conn,
 		Send:   make(chan []byte, 256),
+	}
+
+	// Create rate limiter if Redis is available
+	var rateLimiter *RateLimiter
+	if redisClient != nil {
+		rateLimiter = NewRateLimiter(redisClient, claims.UserID, connID, rateLimitMessages, rateLimitWindow)
 	}
 
 	hub.Register(client)
@@ -72,9 +91,13 @@ func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, coreClien
 		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
 	} else {
 		for _, channelID := range resp.GetChannelIds() {
-			hub.SubscribeToChannel(claims.UserID, channelID)
+			if err := hub.SubscribeToChannel(r.Context(), claims.UserID, channelID); err != nil {
+				log.Printf("failed to subscribe %s to %s: %v", claims.UserID, channelID, err)
+			}
 		}
 	}
+
+	pm.SetStatus(claims.UserID, StatusActive)
 
 	// Tell this new connection about everyone who's already online - without
 	// this, it only learns about *future* status changes (see Snapshot's
@@ -97,14 +120,17 @@ func ServeWS(hub *Hub, pm *PresenceManager, tokens *auth.TokenManager, coreClien
 	}
 
 	go client.writePump()
-	go client.readPump(hub, pm)
+	go client.readPump(hub, pm, rateLimiter)
 }
 
-func (c *Client) readPump(hub *Hub, pm *PresenceManager) {
+func (c *Client) readPump(hub HubInterface, pm PresenceManagerInterface, rateLimiter *RateLimiter) {
 	defer func() {
 		pm.SetStatus(c.UserID, StatusAway)
 		hub.Unregister(c)
 		c.Conn.Close()
+		if rateLimiter != nil {
+			rateLimiter.Reset(context.Background())
+		}
 	}()
 
 	c.Conn.SetReadLimit(maxMessageSize)
@@ -123,6 +149,19 @@ func (c *Client) readPump(hub *Hub, pm *PresenceManager) {
 				log.Printf("websocket error: %v", err)
 			}
 			break
+		}
+
+		// Check rate limit before processing
+		if rateLimiter != nil {
+			allowed, err := rateLimiter.Allow(context.Background())
+			if err != nil {
+				log.Printf("rate limit check failed: %v", err)
+				// On error, allow the message rather than failing closed
+			} else if !allowed {
+				// Rate limited - ignore this message
+				log.Printf("client %s rate limited", c.UserID)
+				continue
+			}
 		}
 
 		var event WSEvent

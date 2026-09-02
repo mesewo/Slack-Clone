@@ -29,6 +29,22 @@ export const messageService = {
     return res.data;
   },
 
+  async edit(
+    channelId: string,
+    messageId: string,
+    content: string,
+  ): Promise<ChatMessage> {
+    const res = await apiClient.patch<ChatMessage>(
+      `/api/channels/${channelId}/messages/${messageId}`,
+      { content },
+    );
+    return res.data;
+  },
+
+  async delete(channelId: string, messageId: string): Promise<void> {
+    await apiClient.delete(`/api/channels/${channelId}/messages/${messageId}`);
+  },
+
   async list(
     channelId: string,
     opts?: { before?: string; limit?: number },

@@ -20,6 +20,8 @@ interface ChatAreaProps {
   reactions: Record<string, Array<{ userId: string; emoji: string }>>;
   currentUserId: string;
   onToggleReaction: (messageId: string, emoji: string) => void;
+  onEditMessage: (messageId: string, content: string) => void;
+  onDeleteMessage: (messageId: string) => void;
   typingUserCount: number;
   activeUserCount: number;
 }
@@ -37,6 +39,8 @@ export function ChatArea({
   reactions,
   currentUserId,
   onToggleReaction,
+  onEditMessage,
+  onDeleteMessage,
   typingUserCount,
   activeUserCount,
 }: ChatAreaProps) {
@@ -81,10 +85,10 @@ export function ChatArea({
           animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
           transition={{ duration: 0.32, ease: "easeOut" }}
-          className="border-border/40 bg-background/80 flex min-h-0 flex-col gap-3 overflow-hidden rounded-2xl border p-3 backdrop-blur sm:gap-4 sm:p-4 lg:col-start-2 lg:col-end-3 lg:rounded-3xl"
+          className="border-border/30 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border sm:gap-2.5 lg:col-start-2 lg:col-end-3"
         >
           <ChatHeader conversation={conversation} />
-          <div className="text-muted-foreground flex min-h-4 items-center gap-2 text-[0.7rem]">
+          <div className="text-muted-foreground px-3 sm:px-4 flex min-h-3 items-center gap-2 text-[0.7rem]">
             <span>
               {activeUserCount > 0
                 ? `${activeUserCount} active`
@@ -101,7 +105,7 @@ export function ChatArea({
 
           <div
             ref={messagesContainerRef}
-            className="[&::-webkit-scrollbar-thumb]:bg-muted relative min-h-0 flex-1 space-y-3 overflow-y-auto pr-2 sm:space-y-4 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full"
+            className="[&::-webkit-scrollbar-thumb]:bg-muted relative min-h-0 flex-1 space-y-2 overflow-y-auto px-3 sm:space-y-2.5 sm:px-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full"
             aria-live="off"
             aria-label={"Message thread with " + conversation.name}
           >
@@ -114,6 +118,8 @@ export function ChatArea({
                   reactions={reactions[message.id] || []}
                   currentUserId={currentUserId}
                   onToggleReaction={onToggleReaction}
+                  onEdit={onEditMessage}
+                  onDelete={onDeleteMessage}
                 />
               ))}
             </AnimatePresence>

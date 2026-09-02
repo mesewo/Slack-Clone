@@ -129,6 +129,26 @@ func main() {
 		},
 	)
 
+	messageEditedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageEdited, "core-message-edited", redisClient)
+	defer messageEditedConsumer.Close()
+	go messageEditedConsumer.Run(ctx, "dedup:message_edited:",
+		func(raw []byte) (string, error) {
+			var evt kafkapkg.MessageEditedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return "", err
+			}
+			return evt.MessageID, nil
+		},
+		func(raw []byte) error {
+			var evt kafkapkg.MessageEditedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return err
+			}
+			log.Printf("[kafka] message.edited: %s in channel %s by %s", evt.MessageID, evt.ChannelID, evt.UserID)
+			return nil
+		},
+	)
+
 	userConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicUserRegistered, "core-user-registered", redisClient)
 	defer userConsumer.Close()
 	go userConsumer.Run(ctx, "dedup:user_registered:",
@@ -145,6 +165,66 @@ func main() {
 				return err
 			}
 			log.Printf("[kafka] user.registered: %s (%s)", evt.UserID, evt.Email)
+			return nil
+		},
+	)
+
+	messageDeletedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageDeleted, "core-message-deleted", redisClient)
+	defer messageDeletedConsumer.Close()
+	go messageDeletedConsumer.Run(ctx, "dedup:message_deleted:",
+		func(raw []byte) (string, error) {
+			var evt kafkapkg.MessageDeletedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return "", err
+			}
+			return evt.MessageID, nil
+		},
+		func(raw []byte) error {
+			var evt kafkapkg.MessageDeletedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return err
+			}
+			log.Printf("[kafka] message.deleted: %s in channel %s", evt.MessageID, evt.ChannelID)
+			return nil
+		},
+	)
+
+	reactionAddedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionAdded, "core-reaction-added", redisClient)
+	defer reactionAddedConsumer.Close()
+	go reactionAddedConsumer.Run(ctx, "dedup:reaction_added:",
+		func(raw []byte) (string, error) {
+			var evt kafkapkg.ReactionAddedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return "", err
+			}
+			return evt.ReactionID, nil
+		},
+		func(raw []byte) error {
+			var evt kafkapkg.ReactionAddedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return err
+			}
+			log.Printf("[kafka] reaction.added: %s by %s on message %s", evt.Emoji, evt.UserID, evt.MessageID)
+			return nil
+		},
+	)
+
+	reactionRemovedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionRemoved, "core-reaction-removed", redisClient)
+	defer reactionRemovedConsumer.Close()
+	go reactionRemovedConsumer.Run(ctx, "dedup:reaction_removed:",
+		func(raw []byte) (string, error) {
+			var evt kafkapkg.ReactionRemovedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return "", err
+			}
+			return evt.ReactionID, nil
+		},
+		func(raw []byte) error {
+			var evt kafkapkg.ReactionRemovedEvent
+			if err := json.Unmarshal(raw, &evt); err != nil {
+				return err
+			}
+			log.Printf("[kafka] reaction.removed: %s by %s from message %s", evt.Emoji, evt.UserID, evt.MessageID)
 			return nil
 		},
 	)
@@ -196,6 +276,8 @@ func main() {
 
 		r.Post("/api/channels/{channelID}/messages", messageHandler.SendMessage)
 		r.Get("/api/channels/{channelID}/messages", messageHandler.ListMessages)
+		r.Patch("/api/channels/{channelID}/messages/{messageID}", messageHandler.EditMessage)
+		r.Delete("/api/channels/{channelID}/messages/{messageID}", messageHandler.DeleteMessage)
 		r.Get("/api/channels/{channelID}/messages/{messageID}/replies", messageHandler.ListThreadReplies)
 		r.Post("/api/channels/{channelID}/messages/{messageID}/replies", messageHandler.CreateThreadReply)
 		r.Get("/api/channels/{channelID}/messages/{messageID}/reactions", messageHandler.ListReactions)

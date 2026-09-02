@@ -9,10 +9,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { logout } from "@/lib/auth";
 import { useRouter } from "next/navigation";
 
 export function UserNav() {
   const router = useRouter();
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      router.replace("/auth/sign-in");
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -46,9 +55,7 @@ export function UserNav() {
           >
             Notifications
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => router.push("/auth/sign-in")}>
-            Sign out
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

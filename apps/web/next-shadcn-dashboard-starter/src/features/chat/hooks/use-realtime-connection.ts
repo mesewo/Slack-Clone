@@ -22,7 +22,9 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8081/ws";
 // straight off the request headers.
 export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
   const addIncomingMessage = useChatStore((s) => s.addIncomingMessage);
+  const updateIncomingMessage = useChatStore((s) => s.updateIncomingMessage);
   const addThreadReply = useChatStore((s) => s.addThreadReply);
+  const removeIncomingMessage = useChatStore((s) => s.removeIncomingMessage);
   const setUserPresence = useChatStore((s) => s.setUserPresence);
   const setTyping = useChatStore((s) => s.setTyping);
   const updateReactionUI = useChatStore((s) => s.updateReactionUI);
@@ -63,6 +65,33 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
               parsed.channel_id,
               parsed.payload as ChatMessage,
             );
+          }
+          break;
+        }
+
+        case "message_edited": {
+          const payload = parsed.payload as {
+            message_id?: string;
+            content?: string;
+          };
+          if (
+            parsed.channel_id &&
+            payload?.message_id &&
+            typeof payload.content === "string"
+          ) {
+            updateIncomingMessage(
+              parsed.channel_id,
+              payload.message_id,
+              payload.content,
+            );
+          }
+          break;
+        }
+
+        case "message_deleted": {
+          const payload = parsed.payload as { message_id?: string };
+          if (parsed.channel_id && payload?.message_id) {
+            removeIncomingMessage(parsed.channel_id, payload.message_id);
           }
           break;
         }
@@ -134,6 +163,8 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
     enabled,
     connectionKey,
     addIncomingMessage,
+    updateIncomingMessage,
+    removeIncomingMessage,
     addThreadReply,
     setUserPresence,
     setTyping,

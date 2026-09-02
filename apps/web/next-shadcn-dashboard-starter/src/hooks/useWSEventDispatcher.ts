@@ -15,6 +15,8 @@ interface WSEvent {
 export function useWSEventDispatcher(lastMessage: any) {
   const {
     addIncomingMessage,
+    updateIncomingMessage,
+    removeIncomingMessage,
     addThreadReply,
     setUserPresence,
     setTyping,
@@ -49,6 +51,34 @@ export function useWSEventDispatcher(lastMessage: any) {
               author_name: payload.author_name,
             };
             addIncomingMessage(event.channel_id, message);
+          }
+          break;
+        }
+
+        case "message_deleted": {
+          const payload = event.payload
+            ? JSON.parse(event.payload)
+            : event.payload;
+          if (event.channel_id && payload?.message_id) {
+            removeIncomingMessage(event.channel_id, payload.message_id);
+          }
+          break;
+        }
+
+        case "message_edited": {
+          const payload = event.payload
+            ? JSON.parse(event.payload)
+            : event.payload;
+          if (
+            event.channel_id &&
+            payload?.message_id &&
+            typeof payload.content === "string"
+          ) {
+            updateIncomingMessage(
+              event.channel_id,
+              payload.message_id,
+              payload.content,
+            );
           }
           break;
         }
@@ -142,6 +172,8 @@ export function useWSEventDispatcher(lastMessage: any) {
   }, [
     lastMessage,
     addIncomingMessage,
+    updateIncomingMessage,
+    removeIncomingMessage,
     addThreadReply,
     setUserPresence,
     setTyping,

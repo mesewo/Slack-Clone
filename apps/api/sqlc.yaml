@@ -21,5 +21,8 @@ sql:
           - db_type: "timestamptz"
             go_type: "time.Time"
           - db_type: "timestamptz"
-            go_type: "*time.Time"
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
             nullable: true

@@ -1,5 +1,8 @@
 // src/lib/auth.ts
-const GO_API_URL = process.env.GO_API_URL || "http://localhost:8080";
+const GO_API_URL =
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.GO_API_URL ||
+  "http://localhost:8080";
 
 export interface User {
   id: string;
@@ -32,10 +35,14 @@ export async function login(email: string, password: string): Promise<Session> {
 }
 
 export async function logout() {
-  await fetch(`${GO_API_URL}/api/auth/logout`, {
+  const response = await fetch(`${GO_API_URL}/api/auth/logout`, {
     method: "POST",
     credentials: "include",
   });
+
+  if (!response.ok) {
+    throw new Error("Logout failed");
+  }
 }
 
 export async function register(

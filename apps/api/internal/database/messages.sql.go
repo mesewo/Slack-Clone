@@ -77,6 +77,17 @@ func (q *Queries) CreateThreadReply(ctx context.Context, arg CreateThreadReplyPa
 	return i, err
 }
 
+const deleteMessage = `-- name: DeleteMessage :exec
+UPDATE messages
+SET deleted_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeleteMessage(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteMessage, id)
+	return err
+}
+
 const getMessageByID = `-- name: GetMessageByID :one
 SELECT id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count FROM messages
 WHERE id = $1
@@ -203,8 +214,8 @@ type ListChannelMessagesWithAuthorRow struct {
 	UserID     uuid.NullUUID `json:"user_id"`
 	Content    string        `json:"content"`
 	CreatedAt  time.Time     `json:"created_at"`
-	UpdatedAt  **time.Time   `json:"updated_at"`
-	DeletedAt  **time.Time   `json:"deleted_at"`
+	UpdatedAt  *time.Time    `json:"updated_at"`
+	DeletedAt  *time.Time    `json:"deleted_at"`
 	ParentID   uuid.NullUUID `json:"parent_id"`
 	ReplyCount int32         `json:"reply_count"`
 	AuthorName pgtype.Text   `json:"author_name"`
@@ -291,8 +302,8 @@ type ListThreadRepliesRow struct {
 	UserID     uuid.NullUUID `json:"user_id"`
 	Content    string        `json:"content"`
 	CreatedAt  time.Time     `json:"created_at"`
-	UpdatedAt  **time.Time   `json:"updated_at"`
-	DeletedAt  **time.Time   `json:"deleted_at"`
+	UpdatedAt  *time.Time    `json:"updated_at"`
+	DeletedAt  *time.Time    `json:"deleted_at"`
 	ParentID   uuid.NullUUID `json:"parent_id"`
 	ReplyCount int32         `json:"reply_count"`
 	AuthorName pgtype.Text   `json:"author_name"`
@@ -342,6 +353,35 @@ type RemoveMessageReactionParams struct {
 func (q *Queries) RemoveMessageReaction(ctx context.Context, arg RemoveMessageReactionParams) error {
 	_, err := q.db.Exec(ctx, removeMessageReaction, arg.MessageID, arg.UserID)
 	return err
+}
+
+const updateMessageContent = `-- name: UpdateMessageContent :one
+UPDATE messages
+SET content = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count
+`
+
+type UpdateMessageContentParams struct {
+	ID      uuid.UUID `json:"id"`
+	Content string    `json:"content"`
+}
+
+func (q *Queries) UpdateMessageContent(ctx context.Context, arg UpdateMessageContentParams) (Message, error) {
+	row := q.db.QueryRow(ctx, updateMessageContent, arg.ID, arg.Content)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ChannelID,
+		&i.UserID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ParentID,
+		&i.ReplyCount,
+	)
+	return i, err
 }
 
 const upsertMessageReaction = `-- name: UpsertMessageReaction :exec

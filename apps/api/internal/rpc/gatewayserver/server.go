@@ -11,7 +11,7 @@ import (
 // it needs to push a live event out to connected WebSocket clients.
 type Server struct {
 	chatpb.UnimplementedGatewayServiceServer
-	Hub *gateway.Hub
+	Hub gateway.HubInterface
 }
 
 func (s *Server) Broadcast(ctx context.Context, req *chatpb.BroadcastRequest) (*chatpb.BroadcastResponse, error) {

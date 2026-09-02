@@ -20,6 +20,8 @@ export function Messenger() {
     selectConversation,
     setDraft,
     sendMessage,
+    editMessage,
+    deleteMessage,
     getActiveConversation,
     openThreadPanel,
     selectedThreadParentId,
@@ -80,7 +82,7 @@ export function Messenger() {
     : undefined;
 
   return (
-    <div className="border-border/50 bg-background/70 relative grid h-[calc(100dvh-5.5rem)] w-full grid-rows-[auto,1fr] gap-3 overflow-hidden rounded-2xl border p-3 backdrop-blur-xl sm:gap-4 sm:p-4 lg:[grid-template-columns:30%_1fr] lg:grid-rows-[1fr] lg:gap-4 lg:rounded-3xl lg:p-5">
+    <div className="border-border/20 bg-background relative grid h-[calc(100dvh-5.5rem)] w-full grid-rows-[auto,1fr] gap-2 overflow-hidden rounded-lg border backdrop-blur-sm sm:gap-2.5 lg:[grid-template-columns:280px_1fr] lg:grid-rows-[1fr] lg:gap-2.5 lg:p-2">
       <ConversationSelect
         conversations={conversations}
         selectedId={selectedConversationId}
@@ -112,6 +114,12 @@ export function Messenger() {
           } else {
             void addReaction(messageId, currentUserId ?? "", emoji);
           }
+        }}
+        onEditMessage={(messageId, content) => {
+          void editMessage(messageId, content);
+        }}
+        onDeleteMessage={(messageId) => {
+          void deleteMessage(messageId);
         }}
         typingUserCount={
           (typingUsers[selectedConversationId] || []).filter(

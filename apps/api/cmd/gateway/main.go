@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -39,13 +41,47 @@ func main() {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
 
 	// Same signing secret as Core - JWT validation stays local to Gateway
 	// since it's pure crypto, not a DB lookup, so it doesn't need a gRPC
 	// round-trip to Core for every connection.
 	tokens := auth.NewTokenManager([]byte(jwtSecret), 24*time.Hour)
-	hub := gateway.NewHub()
-	presence := gateway.NewPresenceManager(hub)
+
+	// Initialize Redis client
+	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	defer redisClient.Close()
+
+	// Ping Redis to verify connectivity
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Printf("warning: Redis not available at %s: %v - falling back to in-memory state", redisAddr, err)
+		redisClient = nil
+	}
+	cancel()
+
+	// Create hub and presence manager - Redis-backed if available, in-memory otherwise
+	var hubInterface gateway.HubInterface
+	var presenceManager *gateway.PresenceManager
+	var redisPresence *gateway.RedisPresenceManager
+
+	if redisClient != nil {
+		redisHub := gateway.NewRedisHub(redisClient)
+		hubInterface = redisHub
+
+		redisPresence = gateway.NewRedisPresenceManager(redisClient, redisHub)
+
+		log.Println("using Redis-backed gateway state")
+	} else {
+		inMemHub := gateway.NewHub()
+		hubInterface = inMemHub
+		presenceManager = gateway.NewPresenceManager(inMemHub)
+
+		log.Println("using in-memory gateway state")
+	}
 
 	// Dial Core's gRPC server - used on every new connection to learn which
 	// channels to subscribe the user to. Gateway has no direct DB access.
@@ -58,7 +94,7 @@ func main() {
 
 	// gRPC server: Core calls this to push events to connected clients.
 	grpcServer := grpc.NewServer()
-	chatpb.RegisterGatewayServiceServer(grpcServer, &gatewayserver.Server{Hub: hub})
+	chatpb.RegisterGatewayServiceServer(grpcServer, &gatewayserver.Server{Hub: hubInterface})
 
 	lis, err := net.Listen("tcp", gatewayGRPCAddr)
 	if err != nil {
@@ -83,8 +119,16 @@ func main() {
 	}))
 
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
-		gateway.ServeWS(hub, presence, tokens, coreClient, w, r)
+		if redisClient != nil && redisPresence != nil {
+			gateway.ServeWSWithRedis(hubInterface, redisPresence, tokens, coreClient, redisClient, w, r)
+		} else if presenceManager != nil {
+			gateway.ServeWS(hubInterface, presenceManager, tokens, coreClient, w, r)
+		}
 	})
+
+	if redisPresence != nil {
+		defer redisPresence.Close()
+	}
 
 	log.Println("gateway HTTP listening on :8081")
 	log.Fatal(http.ListenAndServe(":8081", r))

@@ -80,7 +80,15 @@ type ChatState = {
   selectConversation: (id: string) => void;
   setDraft: (text: string) => void;
   sendMessage: (text: string) => Promise<void>;
+  editMessage: (messageId: string, content: string) => Promise<void>;
+  deleteMessage: (messageId: string) => Promise<void>;
   addIncomingMessage: (channelId: string, message: ChatMessage) => void;
+  updateIncomingMessage: (
+    channelId: string,
+    messageId: string,
+    content: string,
+  ) => void;
+  removeIncomingMessage: (channelId: string, messageId: string) => void;
   getActiveConversation: () => Conversation | undefined;
 
   // Thread panel methods
@@ -247,6 +255,85 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
   },
 
+  editMessage: async (messageId, content) => {
+    const channelId = get().selectedConversationId;
+    if (!channelId || !content.trim()) return;
+
+    const targetConversation = get().conversations.find(
+      (conversation) => conversation.id === channelId,
+    );
+    const originalMessage = targetConversation?.messages.find(
+      (message) => message.id === messageId,
+    );
+    if (!originalMessage) return;
+
+    const originalText = originalMessage.text;
+    set((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === channelId
+          ? {
+              ...conversation,
+              messages: conversation.messages.map((message) =>
+                message.id === messageId
+                  ? { ...message, text: content.trim() }
+                  : message,
+              ),
+            }
+          : conversation,
+      ),
+    }));
+
+    try {
+      await messageService.edit(channelId, messageId, content.trim());
+    } catch (error) {
+      set((state) => ({
+        conversations: state.conversations.map((conversation) =>
+          conversation.id === channelId
+            ? {
+                ...conversation,
+                messages: conversation.messages.map((message) =>
+                  message.id === messageId
+                    ? { ...message, text: originalText }
+                    : message,
+                ),
+              }
+            : conversation,
+        ),
+      }));
+      console.error("Failed to edit message:", error);
+    }
+  },
+
+  deleteMessage: async (messageId) => {
+    const channelId = get().selectedConversationId;
+    if (!channelId) return;
+
+    const conversation = get().conversations.find(
+      (item) => item.id === channelId,
+    );
+    const message = conversation?.messages.find(
+      (item) => item.id === messageId,
+    );
+    if (!message || message.sender !== "user") return;
+
+    get().removeIncomingMessage(channelId, messageId);
+    try {
+      await messageService.delete(channelId, messageId);
+    } catch (error) {
+      set((state) => ({
+        conversations: state.conversations.map((item) =>
+          item.id === channelId
+            ? {
+                ...item,
+                messages: [...item.messages, message],
+              }
+            : item,
+        ),
+      }));
+      console.error("Failed to delete message:", error);
+    }
+  },
+
   // Called by useRealtimeConnection when a message_created event arrives.
   addIncomingMessage: (channelId, message) => {
     const currentUserId = get().currentUserId ?? "";
@@ -261,6 +348,46 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           unread: isActive ? 0 : c.unread + 1,
         };
       }),
+    }));
+  },
+
+  updateIncomingMessage: (channelId, messageId, content) => {
+    set((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === channelId
+          ? {
+              ...conversation,
+              messages: conversation.messages.map((message) =>
+                message.id === messageId
+                  ? { ...message, text: content }
+                  : message,
+              ),
+            }
+          : conversation,
+      ),
+      threadReplies: state.threadReplies.map((message) =>
+        message.id === messageId ? { ...message, text: content } : message,
+      ),
+    }));
+  },
+
+  removeIncomingMessage: (channelId, messageId) => {
+    set((state) => ({
+      conversations: state.conversations.map((conversation) =>
+        conversation.id === channelId
+          ? {
+              ...conversation,
+              messages: conversation.messages.filter(
+                (message) => message.id !== messageId,
+              ),
+            }
+          : conversation,
+      ),
+      messageReactions: Object.fromEntries(
+        Object.entries(state.messageReactions).filter(
+          ([id]) => id !== messageId,
+        ),
+      ),
     }));
   },
 

@@ -32,8 +32,8 @@ type Message struct {
 	UserID     uuid.NullUUID `json:"user_id"`
 	Content    string        `json:"content"`
 	CreatedAt  time.Time     `json:"created_at"`
-	UpdatedAt  **time.Time   `json:"updated_at"`
-	DeletedAt  **time.Time   `json:"deleted_at"`
+	UpdatedAt  *time.Time    `json:"updated_at"`
+	DeletedAt  *time.Time    `json:"deleted_at"`
 	ParentID   uuid.NullUUID `json:"parent_id"`
 	ReplyCount int32         `json:"reply_count"`
 }

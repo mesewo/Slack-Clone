@@ -32,6 +32,7 @@ import { UserAvatarProfile } from "@/components/user-avatar-profile";
 import { navGroups } from "@/config/nav-config";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useFilteredNavGroups } from "@/hooks/use-nav";
+import { logout } from "@/lib/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -49,6 +50,14 @@ export default function AppSidebar() {
   React.useEffect(() => {
     // Side effects based on sidebar state changes
   }, [isOpen]);
+
+  const handleSignOut = async () => {
+    try {
+      await logout();
+    } finally {
+      router.replace("/auth/sign-in");
+    }
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -178,9 +187,7 @@ export default function AppSidebar() {
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                  <DropdownMenuItem
-                    onClick={() => router.push("/auth/sign-in")}
-                  >
+                  <DropdownMenuItem onClick={handleSignOut}>
                     <Icons.logout aria-hidden className="mr-2 h-4 w-4" />
                     Sign out
                   </DropdownMenuItem>
