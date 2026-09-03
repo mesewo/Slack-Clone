@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"github.com/minio/minio-go/v7"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -27,6 +29,8 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/message"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
+	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
+	"github.com/mesewo/slack-clone/apps/api/internal/upload"
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/worksapce"
 )
@@ -60,6 +64,10 @@ func main() {
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
+	}
+	searchURL := os.Getenv("ELASTICSEARCH_URL")
+	if searchURL == "" {
+		searchURL = "http://127.0.0.1:9200"
 	}
 
 	pool, err := pgxpool.New(context.Background(), dbURL)
@@ -100,6 +108,46 @@ func main() {
 
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
 	defer kafkaProducer.Close()
+	searchClient := searchpkg.NewClient(searchURL)
+	if err := searchClient.EnsureIndex(context.Background()); err != nil {
+		log.Printf("warning: Elasticsearch unavailable at startup: %v", err)
+	} else if messages, err := queries.ListMessagesForSearch(context.Background()); err != nil {
+		log.Printf("warning: failed to load messages for search backfill: %v", err)
+	} else {
+		for _, message := range messages {
+			author := ""
+			if message.AuthorName.Valid {
+				author = message.AuthorName.String
+			}
+			if err := searchClient.IndexMessage(context.Background(), searchpkg.ToDocument(database.Message{
+				ID: message.ID, ChannelID: message.ChannelID, UserID: message.UserID,
+				Content: message.Content, CreatedAt: message.CreatedAt,
+			}, author)); err != nil {
+				log.Printf("warning: failed to backfill message %s: %v", message.ID, err)
+			}
+		}
+	}
+	s3Endpoint := os.Getenv("S3_ENDPOINT")
+	if s3Endpoint == "" {
+		s3Endpoint = "127.0.0.1:9000"
+	}
+	s3AccessKey := os.Getenv("S3_ACCESS_KEY")
+	s3SecretKey := os.Getenv("S3_SECRET_KEY")
+	s3Bucket := os.Getenv("S3_BUCKET")
+	if s3Bucket == "" {
+		s3Bucket = "slack-uploads"
+	}
+	s3UseSSL, _ := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
+	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL)
+	if err != nil {
+		log.Fatalf("failed to create object store client: %v", err)
+	}
+	if err := objectStore.MakeBucket(context.Background(), s3Bucket, minio.MakeBucketOptions{}); err != nil {
+		if exists, checkErr := objectStore.BucketExists(context.Background(), s3Bucket); checkErr != nil || !exists {
+			log.Fatalf("failed to initialize object store bucket: %v", err)
+		}
+	}
+	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: ""}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer redisClient.Close()
@@ -107,7 +155,7 @@ func main() {
 	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer}
 	workspaceHandler := &workspace.Handler{Queries: queries}
 	channelHandler := &channel.Handler{Queries: queries}
-	messageHandler := &message.Handler{Queries: queries, GatewayClient: gatewayClient, Kafka: kafkaProducer}
+	messageHandler := &message.Handler{Queries: queries, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient}
 
 	messageConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageCreated, "core-message-created", redisClient)
 	defer messageConsumer.Close()
@@ -276,6 +324,10 @@ func main() {
 
 		r.Post("/api/channels/{channelID}/messages", messageHandler.SendMessage)
 		r.Get("/api/channels/{channelID}/messages", messageHandler.ListMessages)
+		r.Get("/api/search/messages", messageHandler.SearchMessages)
+		r.Post("/api/uploads", uploadHandler.Create)
+		r.Get("/api/uploads/{id}", uploadHandler.Serve)
+		r.Get("/api/uploads/{id}/{variant}", uploadHandler.Serve)
 		r.Patch("/api/channels/{channelID}/messages/{messageID}", messageHandler.EditMessage)
 		r.Delete("/api/channels/{channelID}/messages/{messageID}", messageHandler.DeleteMessage)
 		r.Get("/api/channels/{channelID}/messages/{messageID}/replies", messageHandler.ListThreadReplies)

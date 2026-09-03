@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { useChatStore } from "../utils/store";
 import type { Attachment } from "../utils/types";
+import { messageService } from "@/features/workspace/services/messageService";
 import { useRealtimeConnection } from "../hooks/use-realtime-connection";
 import { ConversationList } from "./conversation-list";
 import { ConversationSelect } from "./conversation-select";
@@ -52,6 +53,8 @@ export function Messenger() {
       name: file.name,
       size: file.size,
       type: file.type,
+      file,
+      url: URL.createObjectURL(file),
     }));
     setAttachments((prev) => [...prev, ...newAttachments]);
   }, []);
@@ -61,13 +64,19 @@ export function Messenger() {
   }, []);
 
   const handleSubmit = useCallback(
-    (e: FormEvent<HTMLFormElement>) => {
+    async (e: FormEvent<HTMLFormElement>) => {
       e.preventDefault();
       if (!draft.trim() && attachments.length === 0) return;
 
-      // Attachments aren't wired to the backend yet - no upload endpoint
-      // exists. Only the text content is actually sent for now.
-      sendMessage(draft);
+      const uploaded = await Promise.all(
+        attachments
+          .filter((attachment) => attachment.file)
+          .map((attachment) => messageService.upload(attachment.file!)),
+      );
+      await sendMessage(
+        draft,
+        uploaded.map((attachment) => attachment.id),
+      );
       setAttachments([]);
     },
     [draft, attachments, sendMessage],

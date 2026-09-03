@@ -13,6 +13,12 @@ import {
   type ChatMessage,
 } from "@/features/workspace/services/messageService";
 
+const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+
+function apiUrl(path: string): string {
+  return path.startsWith("http") ? path : `${apiOrigin}${path}`;
+}
+
 // ---- Backend -> UI adapters -----------------------------------------------
 
 function initials(name: string): string {
@@ -35,6 +41,16 @@ function toUIMessage(m: ChatMessage, currentUserId: string): Message {
     text: m.content,
     timestamp: formatTime(m.created_at),
     replyCount: m.reply_count,
+    attachments: m.attachments?.map((attachment) => ({
+      id: attachment.id,
+      name: attachment.filename,
+      size: attachment.size_bytes,
+      type: attachment.content_type,
+      url: apiUrl(attachment.url),
+      thumbnailUrl: attachment.thumbnail_url
+        ? apiUrl(attachment.thumbnail_url)
+        : undefined,
+    })),
   };
 }
 
@@ -79,7 +95,7 @@ type ChatState = {
   init: (userId: string) => Promise<void>;
   selectConversation: (id: string) => void;
   setDraft: (text: string) => void;
-  sendMessage: (text: string) => Promise<void>;
+  sendMessage: (text: string, attachmentIds?: string[]) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
   addIncomingMessage: (channelId: string, message: ChatMessage) => void;
@@ -238,7 +254,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   setDraft: (text) => set({ draft: text }),
 
-  sendMessage: async (text) => {
+  sendMessage: async (text, attachmentIds = []) => {
     const channelId = get().selectedConversationId;
     if (!channelId || !text.trim()) return;
 
@@ -248,7 +264,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     // which is the single source of truth for "a message was sent." Adding
     // it here too would show it twice.
     try {
-      await messageService.send(channelId, text.trim());
+      await messageService.send(channelId, text.trim(), attachmentIds);
     } catch (error) {
       set({ draft: text });
       console.error("Failed to send message:", error);

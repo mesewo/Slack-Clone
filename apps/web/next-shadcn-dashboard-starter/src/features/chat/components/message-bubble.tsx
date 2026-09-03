@@ -260,6 +260,7 @@ export function MessageBubble({
       transition={{ duration: 0.28, ease: "easeOut" }}
       className="flex flex-col gap-1"
       role="group"
+      data-message-id={message.id}
       aria-label={message.author + " at " + message.timestamp}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button, input, textarea"))
@@ -334,6 +335,8 @@ export function MessageBubble({
               id: a.id,
               name: a.name,
               type: a.type,
+              url: a.thumbnailUrl || a.url,
+              description: a.url,
             }))}
             variant={isUser ? "inverted" : "default"}
             className="mt-1 p-0"

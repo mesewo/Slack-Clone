@@ -3,6 +3,9 @@ export type Attachment = {
   name: string;
   size: number;
   type: string;
+  file?: File;
+  url?: string;
+  thumbnailUrl?: string;
 };
 
 export type Message = {

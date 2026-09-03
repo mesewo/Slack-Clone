@@ -1,7 +1,13 @@
 "use client";
 
-import { FormEvent, useEffect, useRef } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { Input } from "@/components/ui/input";
+import { Icons } from "@/components/icons";
+import {
+  messageService,
+  type MessageSearchResult,
+} from "@/features/workspace/services/messageService";
 import type { Attachment, Conversation } from "../utils/types";
 import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
@@ -47,6 +53,39 @@ export function ChatArea({
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
+  const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
+
+  useEffect(() => {
+    const query = search.trim();
+    if (!query) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    void messageService
+      .search(conversation.id, query)
+      .then((results) => {
+        if (!cancelled) setSearchResults(results);
+      })
+      .catch(() => {
+        if (!cancelled) setSearchResults([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [conversation.id, search]);
+
+  const jumpToMessage = (messageId: string) => {
+    const target = messagesContainerRef.current?.querySelector<HTMLElement>(
+      `[data-message-id="${messageId}"]`,
+    );
+    target?.scrollIntoView({
+      behavior: shouldReduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+    setSearch("");
+  };
 
   useEffect(() => {
     if (!messagesContainerRef.current) return;
@@ -88,6 +127,44 @@ export function ChatArea({
           className="border-border/30 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-lg border sm:gap-2.5 lg:col-start-2 lg:col-end-3"
         >
           <ChatHeader conversation={conversation} />
+          <div className="relative px-3 sm:px-4">
+            <Icons.search
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 sm:left-6"
+              aria-hidden="true"
+            />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={`Search ${conversation.name}`}
+              aria-label={`Search messages in ${conversation.name}`}
+              className="h-8 rounded-md pl-9 text-xs sm:text-sm"
+            />
+            {search.trim() && (
+              <div className="border-border bg-popover absolute top-10 right-3 left-3 z-30 max-h-56 overflow-y-auto rounded-md border p-1 shadow-lg sm:right-4 sm:left-4">
+                {searchResults.length === 0 ? (
+                  <p className="text-muted-foreground p-3 text-xs">
+                    No messages found
+                  </p>
+                ) : (
+                  searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onClick={() => jumpToMessage(result.id)}
+                      className="hover:bg-accent block w-full rounded p-2 text-left text-xs"
+                    >
+                      <span className="text-foreground font-medium">
+                        {result.author || "Unknown"}
+                      </span>
+                      <span className="text-muted-foreground mt-0.5 block line-clamp-2">
+                        {result.content}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
           <div className="text-muted-foreground px-3 sm:px-4 flex min-h-3 items-center gap-2 text-[0.7rem]">
             <span>
               {activeUserCount > 0

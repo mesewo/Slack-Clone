@@ -165,6 +165,7 @@ export function MessageComposer({
                 id: a.id,
                 name: a.name,
                 type: a.type,
+                url: a.url,
               }))}
               onRemove={onRemoveAttachment}
               className="mb-1 p-0"

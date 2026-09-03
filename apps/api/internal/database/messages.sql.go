@@ -13,6 +13,74 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const attachFilesToMessage = `-- name: AttachFilesToMessage :exec
+UPDATE attachments a
+SET message_id = $1
+FROM messages m
+WHERE a.id = ANY($2::uuid[])
+  AND a.user_id = $3
+  AND m.id = $1
+  AND m.channel_id = $4
+`
+
+type AttachFilesToMessageParams struct {
+	MessageID uuid.NullUUID `json:"message_id"`
+	Column2   []uuid.UUID   `json:"column_2"`
+	UserID    uuid.UUID     `json:"user_id"`
+	ChannelID uuid.UUID     `json:"channel_id"`
+}
+
+func (q *Queries) AttachFilesToMessage(ctx context.Context, arg AttachFilesToMessageParams) error {
+	_, err := q.db.Exec(ctx, attachFilesToMessage,
+		arg.MessageID,
+		arg.Column2,
+		arg.UserID,
+		arg.ChannelID,
+	)
+	return err
+}
+
+const createAttachment = `-- name: CreateAttachment :one
+INSERT INTO attachments (id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path)
+VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
+RETURNING id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at
+`
+
+type CreateAttachmentParams struct {
+	ID          uuid.UUID   `json:"id"`
+	UserID      uuid.UUID   `json:"user_id"`
+	Filename    string      `json:"filename"`
+	ContentType string      `json:"content_type"`
+	SizeBytes   int64       `json:"size_bytes"`
+	StoragePath string      `json:"storage_path"`
+	Column7     interface{} `json:"column_7"`
+}
+
+func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error) {
+	row := q.db.QueryRow(ctx, createAttachment,
+		arg.ID,
+		arg.UserID,
+		arg.Filename,
+		arg.ContentType,
+		arg.SizeBytes,
+		arg.StoragePath,
+		arg.Column7,
+	)
+	var i Attachment
+	err := row.Scan(
+		&i.ID,
+		&i.MessageID,
+		&i.UserID,
+		&i.Filename,
+		&i.ContentType,
+		&i.SizeBytes,
+		&i.StoragePath,
+		&i.ThumbnailPath,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (channel_id, user_id, content)
 VALUES ($1, $2, $3)
@@ -88,6 +156,27 @@ func (q *Queries) DeleteMessage(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+const getAttachmentByID = `-- name: GetAttachmentByID :one
+SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at FROM attachments WHERE id = $1
+`
+
+func (q *Queries) GetAttachmentByID(ctx context.Context, id uuid.UUID) (Attachment, error) {
+	row := q.db.QueryRow(ctx, getAttachmentByID, id)
+	var i Attachment
+	err := row.Scan(
+		&i.ID,
+		&i.MessageID,
+		&i.UserID,
+		&i.Filename,
+		&i.ContentType,
+		&i.SizeBytes,
+		&i.StoragePath,
+		&i.ThumbnailPath,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getMessageByID = `-- name: GetMessageByID :one
 SELECT id, channel_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count FROM messages
 WHERE id = $1
@@ -142,6 +231,42 @@ WHERE id = $1
 func (q *Queries) IncrementReplyCount(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, incrementReplyCount, id)
 	return err
+}
+
+const listAttachmentsForMessage = `-- name: ListAttachmentsForMessage :many
+SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at FROM attachments
+WHERE message_id = $1
+ORDER BY created_at
+`
+
+func (q *Queries) ListAttachmentsForMessage(ctx context.Context, messageID uuid.NullUUID) ([]Attachment, error) {
+	rows, err := q.db.Query(ctx, listAttachmentsForMessage, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Attachment
+	for rows.Next() {
+		var i Attachment
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.UserID,
+			&i.Filename,
+			&i.ContentType,
+			&i.SizeBytes,
+			&i.StoragePath,
+			&i.ThumbnailPath,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChannelMessages = `-- name: ListChannelMessages :many
@@ -276,6 +401,59 @@ func (q *Queries) ListMessageReactions(ctx context.Context, messageID uuid.UUID)
 			&i.UserID,
 			&i.Emoji,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMessagesForSearch = `-- name: ListMessagesForSearch :many
+SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, m.updated_at, m.deleted_at, m.parent_id, m.reply_count,
+       u.display_name AS author_name
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+WHERE m.deleted_at IS NULL
+ORDER BY m.created_at DESC
+`
+
+type ListMessagesForSearchRow struct {
+	ID         uuid.UUID     `json:"id"`
+	ChannelID  uuid.UUID     `json:"channel_id"`
+	UserID     uuid.NullUUID `json:"user_id"`
+	Content    string        `json:"content"`
+	CreatedAt  time.Time     `json:"created_at"`
+	UpdatedAt  *time.Time    `json:"updated_at"`
+	DeletedAt  *time.Time    `json:"deleted_at"`
+	ParentID   uuid.NullUUID `json:"parent_id"`
+	ReplyCount int32         `json:"reply_count"`
+	AuthorName pgtype.Text   `json:"author_name"`
+}
+
+func (q *Queries) ListMessagesForSearch(ctx context.Context) ([]ListMessagesForSearchRow, error) {
+	rows, err := q.db.Query(ctx, listMessagesForSearch)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMessagesForSearchRow
+	for rows.Next() {
+		var i ListMessagesForSearchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChannelID,
+			&i.UserID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.ParentID,
+			&i.ReplyCount,
+			&i.AuthorName,
 		); err != nil {
 			return nil, err
 		}

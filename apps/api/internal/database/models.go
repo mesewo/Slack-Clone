@@ -8,7 +8,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type Attachment struct {
+	ID            uuid.UUID     `json:"id"`
+	MessageID     uuid.NullUUID `json:"message_id"`
+	UserID        uuid.UUID     `json:"user_id"`
+	Filename      string        `json:"filename"`
+	ContentType   string        `json:"content_type"`
+	SizeBytes     int64         `json:"size_bytes"`
+	StoragePath   string        `json:"storage_path"`
+	ThumbnailPath pgtype.Text   `json:"thumbnail_path"`
+	CreatedAt     time.Time     `json:"created_at"`
+}
 
 type Channel struct {
 	ID          uuid.UUID     `json:"id"`
