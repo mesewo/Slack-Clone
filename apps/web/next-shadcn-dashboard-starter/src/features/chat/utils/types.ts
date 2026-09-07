@@ -14,6 +14,7 @@ export type Message = {
   author: string;
   text: string;
   timestamp: string;
+  createdAt?: string;
   replyCount?: number;
   attachments?: Attachment[];
 };
@@ -35,4 +36,7 @@ export type Conversation = {
   messages: Message[];
   quickReplies: string[];
   autoReplies: string[];
+  kind?: "channel" | "dm";
+  dmId?: string;
+  otherUserId?: string;
 };

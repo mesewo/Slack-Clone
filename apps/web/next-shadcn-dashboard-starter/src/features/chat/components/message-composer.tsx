@@ -151,13 +151,13 @@ export function MessageComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-2 sm:space-y-3"
+      className="space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 sm:space-y-3 sm:px-4"
       aria-label="Reply composer"
     >
       <label htmlFor="messenger-editor" className="sr-only">
         Write a message
       </label>
-      <div className="border-border/30 bg-background flex items-end gap-1.5 rounded-lg border p-2.5 backdrop-blur-sm sm:gap-2 sm:p-3">
+      <div className="border-border/70 bg-muted/40 flex items-end gap-1.5 rounded-[18px] border p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_8px_18px_rgba(15,23,42,0.04)] backdrop-blur-sm sm:gap-2 sm:p-3">
         <div className="min-w-0 flex-1">
           {attachments.length > 0 && (
             <FilePreview
@@ -171,12 +171,12 @@ export function MessageComposer({
               className="mb-1 p-0"
             />
           )}
-          <div className="border-border/40 bg-muted/40 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-md border p-1 sm:mb-2">
+          <div className="border-border/60 bg-background/70 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-inner shadow-black/5 sm:mb-2">
             <button
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("bold")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] font-bold transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-bold transition"
               aria-label="Bold"
             >
               B
@@ -185,7 +185,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("italic")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] italic transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] italic transition"
               aria-label="Italic"
             >
               I
@@ -194,7 +194,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("underline")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] underline transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] underline transition"
               aria-label="Underline"
             >
               U
@@ -203,7 +203,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("strikeThrough")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] line-through transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] line-through transition"
               aria-label="Strikethrough"
             >
               S
@@ -212,7 +212,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("formatBlock", "pre")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] font-mono transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-mono transition"
               aria-label="Inline code"
             >
               {"</>"}
@@ -221,7 +221,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("formatBlock", "blockquote")}
-              className="hover:bg-accent text-foreground/80 hover:text-foreground rounded px-2 py-1 text-xs"
+              className="hover:bg-accent text-foreground/80 hover:text-foreground rounded-md px-2 py-1 text-xs"
               aria-label="Quote"
             >
               Quote
@@ -230,20 +230,20 @@ export function MessageComposer({
               <button
                 type="button"
                 onClick={() => setEmojiOpen((current) => !current)}
-                className="hover:bg-accent/50 text-foreground/60 hover:text-foreground flex items-center gap-1 rounded px-1.5 py-0.5 text-sm transition"
+                className="hover:bg-accent/70 text-foreground/70 hover:text-foreground flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm transition"
                 aria-label="Insert emoji"
               >
                 <span>😊</span>
               </button>
               {emojiOpen && (
-                <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-border bg-popover p-1.5 shadow-lg">
+                <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
                   <div className="flex flex-wrap gap-1">
                     {emojiOptions.map((emoji) => (
                       <button
                         key={emoji}
                         type="button"
                         onClick={() => insertEmoji(emoji)}
-                        className="hover:bg-accent flex h-7 w-7 items-center justify-center rounded text-base transition"
+                        className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
                         aria-label={`Insert ${emoji}`}
                       >
                         {emoji}
@@ -260,13 +260,11 @@ export function MessageComposer({
             contentEditable
             suppressContentEditableWarning
             onInput={syncDraft}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (draft.trim() || attachments.length > 0) {
-                  const form = e.currentTarget.closest("form");
-                  form?.requestSubmit();
-                }
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                const form = event.currentTarget.closest("form");
+                form?.requestSubmit();
               }
             }}
             data-placeholder={`Message ${contactName} (Enter to send, Shift+Enter for newline)`}
@@ -302,7 +300,6 @@ export function MessageComposer({
           />
           <Button
             type="button"
-            variant="ghost"
             className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-7 rounded transition focus-visible:ring-1 focus-visible:ring-offset-1 sm:size-8"
             aria-label="Attach a file"
             onClick={() => fileInputRef.current?.click()}
@@ -311,12 +308,11 @@ export function MessageComposer({
           </Button>
           <Button
             type="submit"
-            size="sm"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:py-2 sm:text-sm"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0 rounded-2xl shadow-[0_8px_16px_rgba(99,102,241,0.25)] sm:h-11 sm:w-11"
             disabled={!draft.trim() && attachments.length === 0}
             aria-label="Send message"
           >
-            Send
+            <Icons.send className="h-4 w-4" />
           </Button>
         </div>
       </div>

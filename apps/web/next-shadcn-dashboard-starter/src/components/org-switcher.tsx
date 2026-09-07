@@ -1,232 +1,103 @@
-'use client';
+"use client";
 
-import { useAuth, useOrganizationList } from '@clerk/nextjs';
-import { Icons } from '@/components/icons';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation';
-
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Icons } from "@/components/icons";
+import {
+  workspaceService,
+  type Workspace,
+} from "@/features/workspace/services/workspaceService";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar
-} from '@/components/ui/sidebar';
-import { useEffect } from 'react';
+  useSidebar,
+} from "@/components/ui/sidebar";
+
+const activeWorkspaceKey = "active_workspace_id";
 
 export function OrgSwitcher() {
-  const { isMobile, state } = useSidebar();
   const router = useRouter();
-  const { isLoaded, setActive, userMemberships } = useOrganizationList({
-    userMemberships: {
-      infinite: true,
-      keepPreviousData: false
-    }
-  });
-
-  const { orgId } = useAuth();
+  const { state } = useSidebar();
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [activeId, setActiveId] = useState("");
 
   useEffect(() => {
-    if (userMemberships?.revalidate) {
-      void userMemberships.revalidate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only revalidate when org changes, not on every userMemberships ref change
-  }, [orgId]);
+    void workspaceService
+      .list()
+      .then((items) => {
+        setWorkspaces(items);
+        const saved = window.localStorage.getItem(activeWorkspaceKey);
+        setActiveId(
+          items.some((item) => item.id === saved) ? saved! : items[0]?.id || "",
+        );
+      })
+      .catch(() => setWorkspaces([]));
+  }, []);
 
-  // Get the currently active organization
-  const activeOrganization = userMemberships?.data?.find(
-    (membership) => membership.organization.id === orgId
-  )?.organization;
-
-  // Handle organization switch
-  const handleOrganizationSwitch = async (organizationId: string) => {
-    if (orgId === organizationId || !setActive) {
-      return; // Already active or setActive not available
-    }
-    try {
-      await setActive({ organization: organizationId });
-    } catch (error) {
-      console.error('Failed to switch organization:', error);
-    }
+  const active =
+    workspaces.find((workspace) => workspace.id === activeId) || workspaces[0];
+  const selectWorkspace = (workspace: Workspace) => {
+    setActiveId(workspace.id);
+    window.localStorage.setItem(activeWorkspaceKey, workspace.id);
+    router.push(`/dashboard/workspaces?workspace_id=${workspace.id}`);
   };
-
-  // Show loading state
-  if (!isLoaded) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton size='lg' disabled>
-            <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg'>
-              <Icons.galleryVerticalEnd className='size-4' />
-            </div>
-            <div
-              className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 overflow-hidden opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
-            >
-              <span className='truncate font-medium'>Loading...</span>
-              <span className='text-muted-foreground truncate text-xs'>Organizations</span>
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
-
-  // Show create organization option if no organizations
-  if (!userMemberships?.data || userMemberships.data.length === 0) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton
-            size='lg'
-            onClick={() => router.push('/dashboard/workspaces')}
-            className='data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground'
-          >
-            <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg'>
-              <Icons.add className='size-4' />
-            </div>
-            <div
-              className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 overflow-hidden opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
-            >
-              <span className='truncate font-medium'>Create organization</span>
-              <span className='text-muted-foreground truncate text-xs'>Get started</span>
-            </div>
-            <Icons.chevronsUpDown
-              className={`ml-auto transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
-            />
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
-
-  // Use active organization or first organization as fallback
-  const displayOrganization = activeOrganization || userMemberships.data[0]?.organization;
-
-  if (!displayOrganization) {
-    return null;
-  }
 
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={
-              <SidebarMenuButton
-                size='lg'
-                className='data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground'
-              />
-            }
+            render={<SidebarMenuButton size="lg" tooltip="Workspace" />}
           >
-            <div className='bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg'>
-              {displayOrganization.hasImage && displayOrganization.imageUrl ? (
-                <Image
-                  src={displayOrganization.imageUrl}
-                  alt={displayOrganization.name}
-                  width={32}
-                  height={32}
-                  className='size-full object-cover'
-                />
-              ) : (
-                <Icons.galleryVerticalEnd className='size-4' />
-              )}
+            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
+              <Icons.galleryVerticalEnd className="size-4" />
             </div>
             <div
-              className={`grid flex-1 text-left text-sm leading-tight transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 overflow-hidden opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
+              className={
+                state === "collapsed"
+                  ? "invisible max-w-0 overflow-hidden"
+                  : "grid min-w-0 flex-1 text-left"
+              }
             >
-              <span className='truncate font-medium'>{displayOrganization.name}</span>
-              <span className='text-muted-foreground truncate text-xs'>
-                {userMemberships.data.find((m) => m.organization.id === displayOrganization.id)
-                  ?.role || 'Organization'}
+              <span className="truncate text-sm font-medium">
+                {active?.name || "Select workspace"}
+              </span>
+              <span className="text-muted-foreground truncate text-xs">
+                {workspaces.length} workspace
+                {workspaces.length === 1 ? "" : "s"}
               </span>
             </div>
-            <Icons.chevronsUpDown
-              className={`ml-auto transition-all duration-200 ease-in-out ${
-                state === 'collapsed'
-                  ? 'invisible max-w-0 opacity-0'
-                  : 'visible max-w-full opacity-100'
-              }`}
-            />
+            <Icons.chevronsUpDown className="ml-auto" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            className='w-(--anchor-width) min-w-56 rounded-lg'
-            align='start'
-            side={isMobile ? 'bottom' : 'right'}
-            sideOffset={4}
-          >
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className='text-muted-foreground text-xs'>
-                Organizations
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuGroup>
-              {userMemberships.data.map((membership, index) => {
-                const isActive = membership.organization.id === orgId;
-                return (
-                  <DropdownMenuItem
-                    key={membership.id}
-                    onClick={() => handleOrganizationSwitch(membership.organization.id)}
-                    className='gap-2 p-2'
-                  >
-                    <div className='flex size-6 items-center justify-center overflow-hidden rounded-md border'>
-                      {membership.organization.hasImage && membership.organization.imageUrl ? (
-                        <Image
-                          src={membership.organization.imageUrl}
-                          alt={membership.organization.name}
-                          width={24}
-                          height={24}
-                          className='size-full object-cover'
-                        />
-                      ) : (
-                        <Icons.galleryVerticalEnd className='size-3.5 shrink-0' />
-                      )}
-                    </div>
-                    {membership.organization.name}
-                    {isActive && <Icons.check className='ml-auto size-4' />}
-                    {!isActive && <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>}
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
+          <DropdownMenuContent className="w-64" align="start">
+            <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            {workspaces.map((workspace) => (
               <DropdownMenuItem
-                className='gap-2 p-2'
-                onClick={() => {
-                  router.push('/dashboard/workspaces');
-                }}
+                key={workspace.id}
+                onClick={() => selectWorkspace(workspace)}
               >
-                <div className='flex size-6 items-center justify-center rounded-md border bg-transparent'>
-                  <Icons.add className='size-4' />
-                </div>
-                <div className='text-muted-foreground font-medium'>Add organization</div>
+                <Icons.galleryVerticalEnd className="mr-2 size-4" />
+                <span className="truncate">{workspace.name}</span>
+                {workspace.id === activeId && (
+                  <Icons.check className="ml-auto size-4" />
+                )}
               </DropdownMenuItem>
-            </DropdownMenuGroup>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => router.push("/dashboard/workspaces")}
+            >
+              <Icons.add className="mr-2 size-4" /> Create workspace
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

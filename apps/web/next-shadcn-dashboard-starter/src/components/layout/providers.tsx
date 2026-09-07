@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect } from "react";
-import { ClerkProvider } from "@clerk/nextjs";
 import { ActiveThemeProvider } from "../themes/active-theme";
 import QueryProvider from "./query-provider";
 
@@ -25,21 +24,11 @@ export default function Providers({
     }
   }, [activeThemeValue]);
 
-  const clerkPublishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
   const wrappedChildren = (
     <ActiveThemeProvider initialTheme={activeThemeValue}>
       <QueryProvider>{children}</QueryProvider>
     </ActiveThemeProvider>
   );
 
-  if (!clerkPublishableKey) {
-    return wrappedChildren;
-  }
-
-  return (
-    <ClerkProvider publishableKey={clerkPublishableKey}>
-      {wrappedChildren}
-    </ClerkProvider>
-  );
+  return wrappedChildren;
 }

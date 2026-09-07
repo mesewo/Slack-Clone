@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icons } from "@/components/icons";
 import { motion } from "motion/react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "../utils/types";
+import {
+  messageService,
+  type DirectUser,
+} from "@/features/workspace/services/messageService";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -18,14 +22,33 @@ interface ConversationListProps {
   conversations: Conversation[];
   selectedId: string;
   onSelect: (id: string) => void;
+  onCreateChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
+  onCreateDM: (userId: string) => Promise<void>;
 }
 
 export function ConversationList({
   conversations,
   selectedId,
   onSelect,
+  onCreateChannel,
+  onCreateDM,
 }: ConversationListProps) {
   const [search, setSearch] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [channelName, setChannelName] = useState("");
+  const [channelType, setChannelType] = useState<"PUBLIC" | "PRIVATE">(
+    "PUBLIC",
+  );
+  const [dmOpen, setDmOpen] = useState(false);
+  const [dmUsers, setDmUsers] = useState<DirectUser[]>([]);
+
+  useEffect(() => {
+    if (!dmOpen) return;
+    void messageService
+      .listDMUsers()
+      .then(setDmUsers)
+      .catch(() => setDmUsers([]));
+  }, [dmOpen]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
@@ -35,6 +58,13 @@ export function ConversationList({
         c.name.toLowerCase().includes(q) || c.title.toLowerCase().includes(q),
     );
   }, [conversations, search]);
+
+  const channels = filtered.filter(
+    (conversation) => conversation.kind !== "dm",
+  );
+  const directMessages = filtered.filter(
+    (conversation) => conversation.kind === "dm",
+  );
 
   return (
     <div className="border-border/40 bg-background/75 hidden h-full flex-col gap-4 overflow-hidden rounded-2xl border p-3 backdrop-blur lg:col-start-1 lg:col-end-2 lg:flex lg:rounded-3xl lg:p-4">
@@ -46,13 +76,63 @@ export function ConversationList({
             {conversations.length === 1 ? "" : "s"}
           </p>
         </div>
-        <Badge
-          variant="outline"
-          className="bg-primary/15 text-primary hover:bg-primary/15 hover:text-primary border-border/50 rounded-full border px-3 py-1 text-[0.7rem] tracking-[0.24em] uppercase"
-        >
-          Live
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge
+            variant="outline"
+            className="bg-primary/15 text-primary border-border/50 rounded-full border px-3 py-1 text-[0.7rem] tracking-[0.24em] uppercase"
+          >
+            Live
+          </Badge>
+          <button
+            type="button"
+            onClick={() => setCreateOpen((open) => !open)}
+            className="text-muted-foreground hover:bg-accent hover:text-foreground rounded p-1"
+            aria-label="Create channel"
+            title="Create channel"
+          >
+            <Icons.add className="size-4" />
+          </button>
+        </div>
       </div>
+
+      {createOpen && (
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            await onCreateChannel(channelName, channelType);
+            setChannelName("");
+            setCreateOpen(false);
+          }}
+          className="border-border/40 bg-muted/30 space-y-2 rounded-lg border p-2"
+        >
+          <Input
+            value={channelName}
+            onChange={(event) => setChannelName(event.target.value)}
+            placeholder="channel-name"
+            aria-label="Channel name"
+            autoFocus
+          />
+          <div className="flex items-center gap-2">
+            <select
+              value={channelType}
+              onChange={(event) =>
+                setChannelType(event.target.value as "PUBLIC" | "PRIVATE")
+              }
+              className="bg-background text-foreground border-border/40 h-8 flex-1 rounded border px-2 text-xs"
+            >
+              <option value="PUBLIC">Public</option>
+              <option value="PRIVATE">Private</option>
+            </select>
+            <button
+              type="submit"
+              disabled={!channelName.trim()}
+              className="bg-primary text-primary-foreground h-8 rounded px-2 text-xs disabled:opacity-50"
+            >
+              Create
+            </button>
+          </div>
+        </form>
+      )}
 
       <label htmlFor="messenger-search" className="sr-only">
         Search conversations
@@ -77,12 +157,12 @@ export function ConversationList({
         aria-label="Conversation list"
         role="list"
       >
-        {filtered.length === 0 ? (
+        {channels.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center text-xs">
             No conversations found
           </p>
         ) : null}
-        {filtered.map((conversation) => {
+        {channels.map((conversation) => {
           const isActive = conversation.id === selectedId;
           const lastMessage =
             conversation.messages[conversation.messages.length - 1];
@@ -95,8 +175,8 @@ export function ConversationList({
               className={cn(
                 "focus-visible:ring-primary/50 group focus-visible:ring-offset-background relative flex w-full items-start gap-3 rounded-2xl border border-transparent p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
                 isActive
-                  ? "border-primary/40 bg-primary/10"
-                  : "bg-background/70 hover:border-border/40 hover:bg-muted/40",
+                  ? "border-primary/30 bg-[linear-gradient(180deg,rgba(99,102,241,0.08),rgba(99,102,241,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+                  : "bg-background/70 hover:border-border/50 hover:bg-muted/45",
               )}
               role="listitem"
             >
@@ -119,7 +199,12 @@ export function ConversationList({
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-foreground text-sm font-semibold">
+                    <p
+                      className={cn(
+                        "text-sm font-semibold",
+                        isActive ? "text-foreground" : "text-foreground/90",
+                      )}
+                    >
                       {conversation.name}
                     </p>
                     <p className="text-muted-foreground text-xs">
@@ -150,6 +235,54 @@ export function ConversationList({
             </motion.button>
           );
         })}
+        <div className="mt-4 flex items-center justify-between px-1">
+          <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase">
+            Direct messages
+          </p>
+          <button
+            type="button"
+            onClick={() => setDmOpen((open) => !open)}
+            className="text-muted-foreground hover:bg-accent rounded p-1"
+            aria-label="Start direct message"
+          >
+            <Icons.add className="size-4" />
+          </button>
+        </div>
+        {dmOpen && (
+          <div className="border-border/40 bg-muted/30 my-1 rounded-lg border p-2">
+            <select
+              defaultValue=""
+              onChange={async (event) => {
+                if (event.target.value) {
+                  await onCreateDM(event.target.value);
+                  setDmOpen(false);
+                }
+              }}
+              className="bg-background text-foreground border-border/40 h-8 w-full rounded border px-2 text-xs"
+            >
+              <option value="">Select a person...</option>
+              {dmUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.display_name || user.email}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {directMessages.map((conversation) => (
+          <button
+            key={conversation.id}
+            type="button"
+            onClick={() => onSelect(conversation.id)}
+            className={cn(
+              "hover:bg-muted/40 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
+              selectedId === conversation.id && "bg-primary/10 text-primary",
+            )}
+          >
+            <span className="bg-emerald-500 size-2 rounded-full" />
+            <span className="truncate">{conversation.name}</span>
+          </button>
+        ))}
       </div>
     </div>
   );

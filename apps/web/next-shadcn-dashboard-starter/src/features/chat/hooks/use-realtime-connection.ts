@@ -169,6 +169,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
     setUserPresence,
     setTyping,
     updateReactionUI,
+    selectedThreadParentId,
   ]);
 
   return { sendTyping };

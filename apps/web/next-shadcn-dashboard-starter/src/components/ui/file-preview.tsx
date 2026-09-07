@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import { useState } from "react";
 import { Icons } from "@/components/icons";
 import { cn } from "@/lib/utils";
 
@@ -175,7 +176,50 @@ export const FilePreview: FC<FilePreviewProps> = ({
   variant = "default",
 }) => {
   const isInverted = variant === "inverted";
+  const [downloads, setDownloads] = useState<Record<string, number>>({});
+  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
   if (files.length === 0) return null;
+
+  const downloadFile = async (file: UploadedFile) => {
+    if (!file.url || downloading[file.id]) return;
+    setDownloading((current) => ({ ...current, [file.id]: true }));
+    setDownloads((current) => ({ ...current, [file.id]: 0 }));
+    try {
+      const response = await fetch(file.url, { credentials: "include" });
+      if (!response.ok || !response.body) throw new Error("Download failed");
+      const total = Number(response.headers.get("content-length")) || 0;
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) {
+            setDownloads((current) => ({
+              ...current,
+              [file.id]: Math.round((received / total) * 100),
+            }));
+          }
+        }
+      }
+      const objectUrl = URL.createObjectURL(
+        new Blob(chunks as BlobPart[], { type: file.type }),
+      );
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = file.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+      setDownloads((current) => ({ ...current, [file.id]: 100 }));
+    } finally {
+      setDownloading((current) => ({ ...current, [file.id]: false }));
+    }
+  };
 
   return (
     <div className={cn("flex w-full flex-col gap-2 rounded-xl p-2", className)}>
@@ -189,8 +233,8 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
                 : "bg-muted hover:bg-muted/80",
               file.type.startsWith("image/") && file.url
-                ? "h-14 w-14 justify-center"
-                : "max-w-[220px] min-w-[180px] p-2 pr-8",
+                ? "max-w-[320px] p-1"
+                : "max-w-[260px] min-w-[180px] p-2 pr-8",
             )}
           >
             {file.isUploading && (
@@ -215,13 +259,20 @@ export const FilePreview: FC<FilePreviewProps> = ({
             )}
 
             {file.type.startsWith("image/") && file.url ? (
-              <div className="h-12 w-12 overflow-hidden rounded-md">
+              <div className="max-h-72 max-w-[300px] overflow-hidden rounded-md">
                 <img
                   src={file.url}
                   alt={file.name}
-                  className="h-full w-full object-cover"
+                  className="h-auto max-h-72 max-w-full object-contain"
                 />
               </div>
+            ) : file.type.startsWith("video/") && file.url ? (
+              <video
+                src={file.url}
+                controls
+                preload="metadata"
+                className="max-h-72 max-w-[300px] rounded-md"
+              />
             ) : (
               <>
                 <div
@@ -259,6 +310,28 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   </span>
                 </div>
               </>
+            )}
+            {file.url && (
+              <button
+                type="button"
+                onClick={() => void downloadFile(file)}
+                disabled={downloading[file.id]}
+                className="text-primary absolute right-2 bottom-1 text-[0.65rem] font-medium hover:underline"
+              >
+                {downloading[file.id]
+                  ? `Downloading ${downloads[file.id] || 0}%`
+                  : downloads[file.id] === 100
+                    ? "Downloaded"
+                    : "Download"}
+              </button>
+            )}
+            {downloading[file.id] && (
+              <div className="absolute right-2 bottom-0 left-2 h-0.5 overflow-hidden rounded-full bg-primary/20">
+                <div
+                  className="bg-primary h-full transition-[width] duration-150"
+                  style={{ width: `${downloads[file.id] || 12}%` }}
+                />
+              </div>
             )}
           </div>
         ))}

@@ -33,6 +33,7 @@ import { navGroups } from "@/config/nav-config";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useFilteredNavGroups } from "@/hooks/use-nav";
 import { logout } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
@@ -43,7 +44,7 @@ export default function AppSidebar() {
   const pathname = usePathname();
   const { isOpen } = useMediaQuery();
   const router = useRouter();
-  const user = null;
+  const { user } = useAuth();
   const organization = null;
   const filteredGroups = useFilteredNavGroups(navGroups);
 
@@ -60,15 +61,20 @@ export default function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="group-data-[collapsible=icon]:pt-4">
+    <Sidebar
+      collapsible="icon"
+      className="border-sidebar-border/80 bg-sidebar text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]"
+    >
+      <SidebarHeader className="border-sidebar-border/70 border-b bg-sidebar/90 px-3 py-3 group-data-[collapsible=icon]:pt-4">
         <OrgSwitcher />
       </SidebarHeader>
-      <SidebarContent className="overflow-x-hidden">
+      <SidebarContent className="overflow-x-hidden bg-sidebar px-2 pb-2 pt-2">
         {filteredGroups.map((group) => (
           <SidebarGroup key={group.label || "ungrouped"} className="py-0">
             {group.label && (
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupLabel className="text-sidebar-foreground/60 px-2 text-[0.68rem] font-semibold tracking-[0.2em] uppercase">
+                {group.label}
+              </SidebarGroupLabel>
             )}
             <SidebarMenu>
               {group.items.map((item) => {
@@ -84,7 +90,7 @@ export default function AppSidebar() {
                         <SidebarMenuButton
                           tooltip={item.title}
                           isActive={pathname === item.url}
-                          className="group/collapsible"
+                          className="group/collapsible hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                         />
                       }
                     >
@@ -104,6 +110,7 @@ export default function AppSidebar() {
                                 />
                               }
                               isActive={pathname === subItem.url}
+                              className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                             >
                               <span>{subItem.title}</span>
                             </SidebarMenuSubButton>
@@ -118,6 +125,7 @@ export default function AppSidebar() {
                       render={<Link href={item.url} aria-label={item.title} />}
                       tooltip={item.title}
                       isActive={pathname === item.url}
+                      className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                     >
                       <Icon />
                       <span>{item.title}</span>
@@ -129,7 +137,7 @@ export default function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="border-sidebar-border/70 border-t bg-sidebar/90 p-2">
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
@@ -137,7 +145,7 @@ export default function AppSidebar() {
                 render={
                   <SidebarMenuButton
                     size="lg"
-                    className="data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground"
+                    className="data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
                   />
                 }
               >
@@ -151,7 +159,7 @@ export default function AppSidebar() {
                 <Icons.chevronsDown className="ml-auto size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
-                className="w-(--anchor-width) min-w-56 rounded-lg"
+                className="w-(--anchor-width) min-w-56 rounded-xl border border-border/70 bg-popover shadow-lg"
                 side="bottom"
                 align="end"
                 sideOffset={4}

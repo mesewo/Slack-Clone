@@ -19,7 +19,10 @@ export function Messenger() {
     draft,
     init,
     selectConversation,
+    markConversationRead,
     setDraft,
+    createChannel,
+    createDM,
     sendMessage,
     editMessage,
     deleteMessage,
@@ -42,6 +45,11 @@ export function Messenger() {
 
   // One shared connection for the session - see use-realtime-connection.ts
   const { sendTyping } = useRealtimeConnection(!!user, selectedConversationId);
+
+  const handleMarkRead = useCallback(() => {
+    if (selectedConversationId)
+      void markConversationRead(selectedConversationId);
+  }, [markConversationRead, selectedConversationId]);
 
   useEffect(() => {
     setAttachments([]);
@@ -91,19 +99,24 @@ export function Messenger() {
     : undefined;
 
   return (
-    <div className="border-border/20 bg-background relative grid h-[calc(100dvh-5.5rem)] w-full grid-rows-[auto,1fr] gap-2 overflow-hidden rounded-lg border backdrop-blur-sm sm:gap-2.5 lg:[grid-template-columns:280px_1fr] lg:grid-rows-[1fr] lg:gap-2.5 lg:p-2">
+    <div className="border-border/60 bg-background relative grid h-[calc(100dvh-5.5rem)] w-full grid-rows-[auto,1fr] gap-2 overflow-hidden rounded-[24px] border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] backdrop-blur-sm sm:gap-2.5 lg:[grid-template-columns:280px_1fr] lg:grid-rows-[1fr] lg:gap-2.5 lg:p-2">
       <ConversationSelect
         conversations={conversations}
         selectedId={selectedConversationId}
         onSelect={selectConversation}
+        onCreateChannel={createChannel}
+        onCreateDM={createDM}
       />
       <ConversationList
         conversations={conversations}
         selectedId={selectedConversationId}
         onSelect={selectConversation}
+        onCreateChannel={createChannel}
+        onCreateDM={createDM}
       />
       <ChatArea
         conversation={activeConversation}
+        onMarkRead={handleMarkRead}
         draft={draft}
         onDraftChange={setDraft}
         onTyping={() => sendTyping(selectedConversationId)}
