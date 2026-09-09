@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import { useChatStore } from "@/features/chat/utils/store";
 import { messageService } from "@/features/workspace/services/messageService";
@@ -15,6 +16,7 @@ interface ThreadPanelProps {
 }
 
 export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
+  const shouldReduceMotion = useReducedMotion();
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
   const {
@@ -46,7 +48,13 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
   };
 
   return (
-    <aside className="flex flex-col h-full border-l border-border bg-background w-80">
+    <motion.aside
+      initial={shouldReduceMotion ? false : { opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, x: 20 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="border-border bg-background flex h-full w-80 flex-col border-l"
+    >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <h2 className="font-semibold text-sm">Thread</h2>
@@ -73,7 +81,7 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
       </div>
 
       {/* Thread Replies */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {loadingThreadReplies ? (
           <p className="text-xs text-muted-foreground text-center">
             Loading replies...
@@ -83,17 +91,24 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
             No replies yet
           </p>
         ) : (
-          threadReplies.map((reply) => (
-            <div key={reply.id} className="text-sm">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-medium text-xs">{reply.author}</span>
-                <span className="text-xs text-muted-foreground">
-                  {reply.timestamp}
-                </span>
-              </div>
-              <p className="text-sm text-foreground">{reply.text}</p>
-            </div>
-          ))
+          <AnimatePresence initial={false}>
+            {threadReplies.map((reply) => (
+              <motion.div
+                key={reply.id}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-sm"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="font-medium text-xs">{reply.author}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {reply.timestamp}
+                  </span>
+                </div>
+                <p className="text-sm text-foreground">{reply.text}</p>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         )}
       </div>
 
@@ -105,6 +120,12 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
         <textarea
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
           placeholder="Reply in thread..."
           rows={3}
           className="w-full px-3 py-2 text-sm rounded-md bg-secondary border border-border focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
@@ -117,6 +138,6 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
           {sending ? "Sending..." : "Send Reply"}
         </button>
       </form>
-    </aside>
+    </motion.aside>
   );
 }

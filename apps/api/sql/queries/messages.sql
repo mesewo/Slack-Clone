@@ -54,6 +54,14 @@ WHERE m.channel_id = $1
 ORDER BY m.created_at DESC
 LIMIT $3;
 
+-- name: ListMessagesForSearch :many
+SELECT m.id, m.channel_id, m.user_id, m.content, m.created_at, m.updated_at, m.deleted_at, m.parent_id, m.reply_count,
+       u.display_name AS author_name
+FROM messages m
+LEFT JOIN users u ON u.id = m.user_id
+WHERE m.deleted_at IS NULL
+ORDER BY m.created_at DESC;
+
 -- name: UpsertMessageReaction :exec
 INSERT INTO message_reactions (message_id, user_id, emoji)
 VALUES ($1, $2, $3)
@@ -79,3 +87,25 @@ ORDER BY created_at;
 UPDATE messages
 SET deleted_at = now()
 WHERE id = $1;
+
+-- name: CreateAttachment :one
+INSERT INTO attachments (id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path)
+VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
+RETURNING *;
+
+-- name: GetAttachmentByID :one
+SELECT * FROM attachments WHERE id = $1;
+
+-- name: AttachFilesToMessage :exec
+UPDATE attachments a
+SET message_id = $1
+FROM messages m
+WHERE a.id = ANY($2::uuid[])
+  AND a.user_id = $3
+  AND m.id = $1
+  AND m.channel_id = $4;
+
+-- name: ListAttachmentsForMessage :many
+SELECT * FROM attachments
+WHERE message_id = $1
+ORDER BY created_at;

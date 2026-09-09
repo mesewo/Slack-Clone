@@ -5,8 +5,11 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { FilePreview } from "@/components/ui/file-preview";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AlertModal } from "@/components/modal/alert-modal";
+import { toast } from "sonner";
 import type { Message } from "../utils/types";
+import { productivityService } from "@/features/workspace/services/productivityService";
 
 const reactionChoices = Array.from(
   new Set([
@@ -119,6 +122,23 @@ const reactionChoices = Array.from(
   ]),
 );
 
+const reactionAliases: Record<string, string> = {
+  "👍": "thumbs up like",
+  "🎉": "party celebrate",
+  "✅": "check done yes",
+  "🔥": "fire hot",
+  "🚀": "rocket launch",
+  "❤️": "heart love",
+  "😂": "laugh funny",
+  "😊": "smile happy",
+  "🤔": "thinking",
+  "😮": "surprised",
+  "😢": "sad cry",
+  "👏": "clap applause",
+  "👀": "eyes look",
+  "💡": "idea lightbulb",
+};
+
 function renderFormattedText(text: string): React.ReactNode[] {
   const normalizedText = text.replace(/<u>(.*?)<\/u>/g, "__$1__");
   const segments = normalizedText.split(
@@ -198,6 +218,8 @@ interface MessageBubbleProps {
   onToggleReaction: (messageId: string, emoji: string) => void;
   onEdit: (messageId: string, content: string) => void;
   onDelete: (messageId: string) => void;
+  onToggleThreadSubscription?: (messageId: string) => void;
+  compact?: boolean;
 }
 
 export function MessageBubble({
@@ -208,18 +230,47 @@ export function MessageBubble({
   onToggleReaction,
   onEdit,
   onDelete,
+  onToggleThreadSubscription,
+  compact = false,
 }: MessageBubbleProps) {
   const shouldReduceMotion = useReducedMotion();
   const isUser = message.sender === "user";
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [reactionSearch, setReactionSearch] = useState("");
+  const [isSaved, setIsSaved] = useState(false);
   const [editDraft, setEditDraft] = useState(message.text);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const hasMention = /(^|\s)@\w+/.test(message.text);
 
   useEffect(() => {
     setEditDraft(message.text);
   }, [message.text]);
+
+  useEffect(() => {
+    void productivityService
+      .listSavedMessages()
+      .then((items) =>
+        setIsSaved(items.some((item) => item.message_id === message.id)),
+      )
+      .catch(() => {
+        const savedMessages = JSON.parse(
+          window.localStorage.getItem("slack_saved_messages") || "[]",
+        ) as string[];
+        setIsSaved(savedMessages.includes(message.id));
+      });
+  }, [message.id]);
+
+  const toggleSaved = () => {
+    void (isSaved
+      ? productivityService.unsaveMessage(message.id)
+      : productivityService.saveMessage(message.id));
+    setIsSaved(!isSaved);
+    toast.success(isSaved ? "Removed from Later" : "Saved to Later");
+  };
 
   const reactionCounts = reactions.reduce<Record<string, number>>(
     (counts, reaction) => ({
@@ -258,8 +309,15 @@ export function MessageBubble({
       }
       exit={{ opacity: 0, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      className="flex flex-col gap-1"
+      className={cn(
+        "group/message relative flex w-full max-w-[85%] gap-2 px-2 py-0.5 transition-colors hover:bg-muted/40",
+        isUser && "flex-row-reverse",
+        isUser && "ml-auto",
+        compact && (isUser ? "pr-10" : "pl-10"),
+        !compact && "mt-2",
+      )}
       role="group"
+      data-message-id={message.id}
       aria-label={message.author + " at " + message.timestamp}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest("button, input, textarea"))
@@ -271,22 +329,100 @@ export function MessageBubble({
         openActions();
       }}
     >
+      {!compact && (
+        <Avatar className="mt-0.5 size-8 shrink-0 rounded-md">
+          <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.65rem] font-semibold">
+            {message.author.slice(0, 2).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+      )}
       <div
         className={cn(
-          "relative max-w-[85%] rounded-xl border px-3 py-2 text-xs leading-relaxed sm:max-w-[82%] sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm",
-          isUser
-            ? "border-primary/40 bg-primary text-primary-foreground ml-auto"
-            : "bg-muted border-transparent",
+          "relative min-w-0 max-w-[calc(100%-2.5rem)] flex-none py-0.5 text-xs leading-relaxed sm:text-sm",
+          isUser ? "text-foreground" : "text-foreground",
         )}
       >
-        <p
-          className={cn(
-            "font-medium sm:text-sm",
-            isUser ? "text-primary-foreground/80" : "text-foreground/80",
-          )}
-        >
-          {message.author}
-        </p>
+        <div className="absolute top-0 right-1 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
+          <button
+            type="button"
+            title="Reply in thread"
+            aria-label="Reply in thread"
+            onClick={() => onOpenThread(message)}
+            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
+          >
+            <Icons.chat className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            title="Add reaction"
+            aria-label="Add reaction"
+            aria-expanded={reactionPickerOpen}
+            onClick={() => setReactionPickerOpen((open) => !open)}
+            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
+          >
+            😊
+          </button>
+          <button
+            type="button"
+            title="More message actions"
+            aria-label="More message actions"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            onClick={() => setMenuOpen((open) => !open)}
+            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
+          >
+            <Icons.ellipsis className="size-3.5" />
+          </button>
+        </div>
+        {reactionPickerOpen && (
+          <div className="border-border bg-popover absolute top-7 right-1 z-30 w-64 rounded-lg border p-2 shadow-xl">
+            <button
+              type="button"
+              onClick={() => setReactionPickerOpen(false)}
+              className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
+              aria-label="Close reaction picker"
+            >
+              <Icons.close className="size-3" />
+            </button>
+            <input
+              value={reactionSearch}
+              onChange={(event) => setReactionSearch(event.target.value)}
+              placeholder="Search emoji"
+              aria-label="Search reaction emoji"
+              className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 text-xs outline-none"
+            />
+            <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto pr-1">
+              {reactionChoices
+                .filter((emoji) =>
+                  `${emoji} ${reactionAliases[emoji] || ""}`
+                    .toLowerCase()
+                    .includes(reactionSearch.toLowerCase()),
+                )
+                .map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    title={`React ${emoji}`}
+                    onClick={() => {
+                      onToggleReaction(message.id, emoji);
+                      setReactionPickerOpen(false);
+                    }}
+                    className="hover:bg-accent flex size-7 items-center justify-center rounded text-lg"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
+        {!compact && (
+          <p className="text-foreground text-xs font-bold sm:text-sm">
+            {message.author}{" "}
+            <span className="text-muted-foreground ml-1 text-[0.65rem] font-normal">
+              {message.timestamp}
+            </span>
+          </p>
+        )}
         {isEditing ? (
           <div className="mt-2 space-y-2">
             <textarea
@@ -319,14 +455,20 @@ export function MessageBubble({
             </div>
           </div>
         ) : message.text ? (
-          <div
-            className={cn(
-              "mt-1 whitespace-pre-wrap text-[0.875rem] sm:text-[0.95rem]",
-              isUser ? "text-primary-foreground/90" : "text-foreground/90",
+          <>
+            {hasMention && (
+              <div className="mb-1 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[0.6rem] font-medium uppercase tracking-[0.16em] text-primary">
+                Mention
+              </div>
             )}
-          >
-            {renderFormattedText(message.text)}
-          </div>
+            <div
+              className={cn(
+                "whitespace-pre-wrap text-[0.875rem] sm:text-[0.95rem]",
+              )}
+            >
+              {renderFormattedText(message.text)}
+            </div>
+          </>
         ) : null}
         {message.attachments && message.attachments.length > 0 && (
           <FilePreview
@@ -334,27 +476,18 @@ export function MessageBubble({
               id: a.id,
               name: a.name,
               type: a.type,
+              url: a.url,
+              description: a.url,
             }))}
             variant={isUser ? "inverted" : "default"}
             className="mt-1 p-0"
           />
         )}
-        <div className="mt-2 flex items-center justify-end gap-1.5 text-[0.65rem] sm:mt-3 sm:gap-2 sm:text-[0.7rem]">
-          <span
-            className={cn(
-              "text-muted-foreground",
-              isUser && "text-primary-foreground/80",
-            )}
-          >
+        {compact && (
+          <span className="text-muted-foreground ml-1 text-[0.6rem]">
             {message.timestamp}
           </span>
-          {isUser && (
-            <Icons.checks
-              className="text-primary-foreground/80 h-3 w-3 sm:h-3.5 sm:w-3.5"
-              aria-hidden="true"
-            />
-          )}
-        </div>
+        )}
         {reactions.length > 0 && (
           <div className={cn("mt-2 flex flex-wrap gap-1")}>
             {Object.entries(reactionCounts).map(([emoji, count]) => {
@@ -397,6 +530,17 @@ export function MessageBubble({
               role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
+                toggleSaved();
+              }}
+              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              {isSaved ? "Remove saved item" : "Save for later"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
                 onOpenThread(message);
               }}
               className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
@@ -404,6 +548,28 @@ export function MessageBubble({
               {message.replyCount
                 ? `${message.replyCount} replies`
                 : "Reply in thread"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onToggleThreadSubscription?.(message.id);
+              }}
+              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Follow thread
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void navigator.clipboard?.writeText(message.text);
+                setMenuOpen(false);
+              }}
+              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Copy text
             </button>
             {isUser && (
               <>

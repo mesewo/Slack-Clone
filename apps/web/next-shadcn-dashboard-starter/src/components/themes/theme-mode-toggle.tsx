@@ -1,31 +1,42 @@
-'use client';
+"use client";
 
-import { Icons } from '@/components/icons';
-import { useTheme } from 'next-themes';
-import * as React from 'react';
+import { Icons } from "@/components/icons";
+import { useTheme } from "next-themes";
+import * as React from "react";
 
-import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Kbd } from '@/components/ui/kbd';
-import { startThemeTransition } from '@/lib/theme-transition';
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
+import { startThemeTransition } from "@/lib/theme-transition";
+import { toast } from "sonner";
 
 export function ThemeModeToggle() {
   const { setTheme, resolvedTheme } = useTheme();
 
   const handleThemeToggle = React.useCallback(
     (e?: React.MouseEvent) => {
-      const newMode = resolvedTheme === 'dark' ? 'light' : 'dark';
+      const newMode = resolvedTheme === "dark" ? "light" : "dark";
       // Circular reveal from the click point (falls back to center for the
       // keyboard shortcut, which passes no event).
       startThemeTransition(() => setTheme(newMode), e);
+      toast.success(`${newMode === "dark" ? "Dark" : "Light"} mode enabled`);
     },
-    [resolvedTheme, setTheme]
+    [resolvedTheme, setTheme],
   );
 
   // Cmd/Ctrl+Shift+D toggles the theme; kbar separately handles the 'D D' sequence
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'd' || !e.shiftKey || !(e.metaKey || e.ctrlKey)) return;
+      if (
+        e.key.toLowerCase() !== "d" ||
+        !e.shiftKey ||
+        !(e.metaKey || e.ctrlKey)
+      )
+        return;
       const target = e.target as HTMLElement | null;
       if (
         target instanceof HTMLInputElement ||
@@ -38,8 +49,8 @@ export function ThemeModeToggle() {
       e.preventDefault();
       handleThemeToggle();
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleThemeToggle]);
 
   return (
@@ -47,15 +58,15 @@ export function ThemeModeToggle() {
       <TooltipTrigger
         render={
           <Button
-            variant='secondary'
-            size='icon'
-            className='group/toggle size-8'
+            variant="secondary"
+            size="icon"
+            className="group/toggle size-8"
             onClick={handleThemeToggle}
           />
         }
       >
         <Icons.brightness />
-        <span className='sr-only'>Toggle theme</span>
+        <span className="sr-only">Toggle theme</span>
       </TooltipTrigger>
       <TooltipContent>
         Toggle theme <Kbd>⌘⇧D</Kbd> <Kbd>D D</Kbd>

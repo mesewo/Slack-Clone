@@ -3,6 +3,9 @@ export type Attachment = {
   name: string;
   size: number;
   type: string;
+  file?: File;
+  url?: string;
+  thumbnailUrl?: string;
 };
 
 export type Message = {
@@ -11,6 +14,7 @@ export type Message = {
   author: string;
   text: string;
   timestamp: string;
+  createdAt?: string;
   replyCount?: number;
   attachments?: Attachment[];
 };
@@ -32,4 +36,7 @@ export type Conversation = {
   messages: Message[];
   quickReplies: string[];
   autoReplies: string[];
+  kind?: "channel" | "dm";
+  dmId?: string;
+  otherUserId?: string;
 };

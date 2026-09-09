@@ -5,6 +5,7 @@ import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { FilePreview } from "@/components/ui/file-preview";
 import type { Attachment } from "../utils/types";
+import { toast } from "sonner";
 
 const emojiOptions = [
   "👍",
@@ -30,7 +31,54 @@ const emojiOptions = [
   "⚡",
   "🥳",
   "😢",
+  "🤣",
+  "🥰",
+  "🤩",
+  "🤯",
+  "🤗",
+  "😴",
+  "😡",
+  "🤷",
+  "🙈",
+  "💀",
+  "👻",
+  "🤖",
+  "🍕",
+  "🍔",
+  "🍻",
+  "☕",
+  "🌈",
+  "☀️",
+  "🌙",
+  "🌟",
+  "💎",
+  "🎵",
+  "🎮",
+  "📎",
+  "🔔",
+  "📈",
+  "🛠️",
+  "⏳",
+  "❗",
+  "❓",
 ];
+
+const emojiAliases: Record<string, string> = {
+  "👍": "thumbs up like",
+  "🎉": "party celebrate",
+  "✅": "check done yes",
+  "🔥": "fire hot",
+  "🚀": "rocket launch",
+  "❤️": "heart love",
+  "😂": "laugh funny joy",
+  "😊": "smile happy",
+  "🤔": "thinking",
+  "😮": "surprised",
+  "😢": "sad cry",
+  "👏": "clap applause",
+  "👀": "eyes look",
+  "💡": "idea lightbulb",
+};
 
 function escapeHtml(text: string) {
   return text
@@ -96,6 +144,8 @@ interface MessageComposerProps {
   attachments: Attachment[];
   onAddAttachments: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
+  mentionSuggestions?: string[];
+  onSchedule?: (scheduledFor: string) => Promise<void>;
 }
 
 export function MessageComposer({
@@ -108,11 +158,26 @@ export function MessageComposer({
   attachments,
   onAddAttachments,
   onRemoveAttachment,
+  mentionSuggestions = [],
+  onSchedule,
 }: MessageComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const renderedDraftRef = useRef<string | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [emojiSearch, setEmojiSearch] = useState("");
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState("");
+
+  const mentionMatch = draft.match(/(^|\s)@([\w-]*)$/);
+  const mentionQuery = mentionMatch?.[2].toLowerCase() ?? "";
+  const visibleMentions = mentionMatch
+    ? mentionSuggestions.filter((suggestion) =>
+        suggestion.toLowerCase().startsWith(mentionQuery),
+      )
+    : [];
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -148,16 +213,34 @@ export function MessageComposer({
     setEmojiOpen(false);
   };
 
+  const insertMention = (mention: string) => {
+    const editor = editorRef.current;
+    if (!editor || !mentionMatch) return;
+    editor.focus();
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (range) {
+      range.deleteContents();
+      range.insertNode(document.createTextNode(`@${mention} `));
+      range.collapse(false);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    } else {
+      document.execCommand("insertText", false, `@${mention} `);
+    }
+    syncDraft();
+  };
+
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-2 sm:space-y-3"
+      className="space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 sm:space-y-3 sm:px-4"
       aria-label="Reply composer"
     >
       <label htmlFor="messenger-editor" className="sr-only">
         Write a message
       </label>
-      <div className="border-border/30 bg-background flex items-end gap-1.5 rounded-lg border p-2.5 backdrop-blur-sm sm:gap-2 sm:p-3">
+      <div className="border-border/70 bg-muted/40 flex items-end gap-1.5 rounded-[18px] border p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_8px_18px_rgba(15,23,42,0.04)] backdrop-blur-sm sm:gap-2 sm:p-3">
         <div className="min-w-0 flex-1">
           {attachments.length > 0 && (
             <FilePreview
@@ -165,17 +248,18 @@ export function MessageComposer({
                 id: a.id,
                 name: a.name,
                 type: a.type,
+                url: a.url,
               }))}
               onRemove={onRemoveAttachment}
               className="mb-1 p-0"
             />
           )}
-          <div className="border-border/40 bg-muted/40 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-md border p-1 sm:mb-2">
+          <div className="border-border/60 bg-background/70 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-inner shadow-black/5 sm:mb-2">
             <button
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("bold")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] font-bold transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-bold transition"
               aria-label="Bold"
             >
               B
@@ -184,7 +268,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("italic")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] italic transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] italic transition"
               aria-label="Italic"
             >
               I
@@ -193,7 +277,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("underline")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] underline transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] underline transition"
               aria-label="Underline"
             >
               U
@@ -202,7 +286,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("strikeThrough")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] line-through transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] line-through transition"
               aria-label="Strikethrough"
             >
               S
@@ -211,7 +295,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("formatBlock", "pre")}
-              className="hover:bg-accent text-foreground/60 hover:text-foreground rounded px-1.5 py-0.5 text-[0.7rem] font-mono transition"
+              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-mono transition"
               aria-label="Inline code"
             >
               {"</>"}
@@ -220,7 +304,7 @@ export function MessageComposer({
               type="button"
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => applyFormat("formatBlock", "blockquote")}
-              className="hover:bg-accent text-foreground/80 hover:text-foreground rounded px-2 py-1 text-xs"
+              className="hover:bg-accent text-foreground/80 hover:text-foreground rounded-md px-2 py-1 text-xs"
               aria-label="Quote"
             >
               Quote
@@ -229,49 +313,94 @@ export function MessageComposer({
               <button
                 type="button"
                 onClick={() => setEmojiOpen((current) => !current)}
-                className="hover:bg-accent/50 text-foreground/60 hover:text-foreground flex items-center gap-1 rounded px-1.5 py-0.5 text-sm transition"
+                className="hover:bg-accent/70 text-foreground/70 hover:text-foreground flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm transition"
                 aria-label="Insert emoji"
               >
                 <span>😊</span>
               </button>
               {emojiOpen && (
-                <div className="absolute right-0 z-20 mt-1 w-48 rounded-lg border border-border bg-popover p-1.5 shadow-lg">
-                  <div className="flex flex-wrap gap-1">
-                    {emojiOptions.map((emoji) => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => insertEmoji(emoji)}
-                        className="hover:bg-accent flex h-7 w-7 items-center justify-center rounded text-base transition"
-                        aria-label={`Insert ${emoji}`}
-                      >
-                        {emoji}
-                      </button>
-                    ))}
+                <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => setEmojiOpen(false)}
+                    className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
+                    aria-label="Close emoji picker"
+                  >
+                    <Icons.close className="size-3" />
+                  </button>
+                  <input
+                    value={emojiSearch}
+                    onChange={(event) => setEmojiSearch(event.target.value)}
+                    placeholder="Search emoji"
+                    aria-label="Search emoji"
+                    className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 pr-7 text-xs outline-none"
+                  />
+                  <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+                    {emojiOptions
+                      .filter(
+                        (emoji) =>
+                          !emojiSearch ||
+                          `${emoji} ${emojiAliases[emoji] || ""}`
+                            .toLowerCase()
+                            .includes(emojiSearch.toLowerCase()),
+                      )
+                      .map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => insertEmoji(emoji)}
+                          className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
+                          aria-label={`Insert ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
                   </div>
                 </div>
               )}
             </div>
           </div>
-          <div
-            ref={editorRef}
-            id="messenger-editor"
-            contentEditable
-            suppressContentEditableWarning
-            onInput={syncDraft}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                if (draft.trim() || attachments.length > 0) {
-                  const form = e.currentTarget.closest("form");
+          <div className="relative">
+            <div
+              ref={editorRef}
+              id="messenger-editor"
+              contentEditable
+              suppressContentEditableWarning
+              role="textbox"
+              aria-multiline="true"
+              tabIndex={0}
+              onInput={syncDraft}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  const form = event.currentTarget.closest("form");
                   form?.requestSubmit();
                 }
-              }
-            }}
-            data-placeholder={`Message ${contactName} (Enter to send, Shift+Enter for newline)`}
-            className="text-foreground empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)] min-h-[2.5rem] w-full border-none bg-transparent text-sm outline-none sm:min-h-[3rem]"
-            aria-label={"Message " + contactName}
-          />
+              }}
+              data-placeholder={`Message ${contactName} (Enter to send, Shift+Enter for newline)`}
+              className="text-foreground empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)] min-h-[2.5rem] w-full border-none bg-transparent text-sm outline-none sm:min-h-[3rem]"
+              aria-label={"Message " + contactName}
+            />
+            {visibleMentions.length > 0 && (
+              <div className="border-border/70 bg-popover absolute right-0 bottom-full z-30 mb-2 w-56 rounded-xl border p-1 shadow-xl">
+                <p className="text-muted-foreground px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
+                  Mention someone
+                </p>
+                {visibleMentions.slice(0, 6).map((mention) => (
+                  <button
+                    key={mention}
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => insertMention(mention)}
+                    className="hover:bg-accent flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs"
+                  >
+                    <span className="text-primary mr-1">@</span>
+                    {mention}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="mt-1 flex flex-wrap gap-1 sm:mt-1.5 sm:gap-1.5">
             {quickReplies.map((reply) => (
               <button
@@ -299,24 +428,120 @@ export function MessageComposer({
               e.target.value = "";
             }}
           />
-          <Button
-            type="button"
-            variant="ghost"
-            className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-7 rounded transition focus-visible:ring-1 focus-visible:ring-offset-1 sm:size-8"
-            aria-label="Attach a file"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Icons.paperclip className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </Button>
-          <Button
-            type="submit"
-            size="sm"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-60 sm:px-4 sm:py-2 sm:text-sm"
-            disabled={!draft.trim() && attachments.length === 0}
-            aria-label="Send message"
-          >
-            Send
-          </Button>
+          <div className="relative flex items-center">
+            <Button
+              type="button"
+              className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-r-none rounded-l-xl border-r-0 transition focus-visible:ring-1 focus-visible:ring-offset-1"
+              aria-label="Attach content"
+              aria-expanded={attachOpen}
+              onClick={() => setAttachOpen((open) => !open)}
+            >
+              <Icons.paperclip className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-l-none rounded-r-xl border transition focus-visible:ring-1 focus-visible:ring-offset-1"
+              aria-label="More composer options"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <Icons.add className="size-3.5" />
+            </Button>
+            {attachOpen && (
+              <div className="border-border bg-popover absolute right-0 bottom-10 z-30 w-48 rounded-xl border p-1 shadow-xl">
+                {[
+                  ["image/*", "Images", "Choose images"],
+                  ["video/*", "Videos", "Choose videos"],
+                  ["application/pdf", "PDF", "Choose PDF files"],
+                  ["*/*", "Files", "Choose files"],
+                ].map(([accept, label, ariaLabel]) => (
+                  <button
+                    key={accept}
+                    type="button"
+                    onClick={() => {
+                      fileInputRef.current?.setAttribute("accept", accept);
+                      fileInputRef.current?.click();
+                      setAttachOpen(false);
+                    }}
+                    className="hover:bg-accent flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs"
+                  >
+                    <Icons.paperclip className="size-3.5" />
+                    <span aria-label={ariaLabel}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {moreOpen && (
+              <div className="border-border bg-popover absolute right-0 bottom-10 z-30 w-48 rounded-xl border p-1 shadow-xl">
+                {["Poll", "Canvas", "Location", "Workflow"].map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      toast.info(`${label} is not available yet`);
+                      setMoreOpen(false);
+                    }}
+                    className="text-muted-foreground hover:bg-accent hover:text-foreground w-full rounded-lg px-2 py-2 text-left text-xs"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center">
+            <Button
+              type="submit"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0 rounded-r-none rounded-l-2xl shadow-[0_8px_16px_rgba(99,102,241,0.25)] sm:h-11 sm:w-11"
+              disabled={!draft.trim() && attachments.length === 0}
+              aria-label="Send message"
+            >
+              <Icons.send className="size-4" />
+            </Button>
+            <Button
+              type="button"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-7 rounded-l-none rounded-r-2xl border-l border-primary-foreground/30 px-0 sm:h-11"
+              aria-label="Schedule message"
+              title="Schedule message"
+              onClick={() => setScheduleOpen((open) => !open)}
+            >
+              <Icons.chevronDown className="size-3.5" />
+            </Button>
+          </div>
+          {scheduleOpen && (
+            <div className="border-border bg-popover absolute right-3 bottom-16 z-30 w-56 rounded-xl border p-2 shadow-xl">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium">Schedule message</p>
+                <button
+                  type="button"
+                  onClick={() => setScheduleOpen(false)}
+                  aria-label="Close schedule picker"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Icons.close className="size-3.5" />
+                </button>
+              </div>
+              <input
+                type="datetime-local"
+                value={scheduledFor}
+                onChange={(event) => setScheduledFor(event.target.value)}
+                className="border-border bg-background mt-2 w-full rounded-md border px-2 py-1 text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="mt-2 w-full"
+                disabled={!scheduledFor || !draft.trim() || !onSchedule}
+                onClick={async () => {
+                  await onSchedule?.(new Date(scheduledFor).toISOString());
+                  setScheduleOpen(false);
+                  setScheduledFor("");
+                }}
+              >
+                Schedule
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </form>

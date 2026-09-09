@@ -11,6 +11,7 @@ export interface ChatMessage {
   parent_id: string | null;
   reply_count: number;
   author_name?: string | null;
+  attachments?: UploadedAttachment[];
 }
 
 export interface MessageReaction {
@@ -20,11 +21,184 @@ export interface MessageReaction {
   created_at: string;
 }
 
+export interface MessageSearchResult {
+  id: string;
+  channel_id: string;
+  user_id?: string;
+  author: string;
+  content: string;
+  created_at: string;
+}
+
+export interface UploadedAttachment {
+  id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  url: string;
+  thumbnail_url?: string;
+}
+
+export interface DirectConversation {
+  id: string;
+  other_user_id: string;
+  other_display_name: string;
+  other_email: string;
+}
+
+export interface DirectUser {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
 export const messageService = {
-  async send(channelId: string, content: string): Promise<ChatMessage> {
+  async listDMs(): Promise<DirectConversation[]> {
+    const res = await apiClient.get<DirectConversation[]>("/api/dms");
+    return res.data ?? [];
+  },
+
+  async listDMUsers(): Promise<DirectUser[]> {
+    const res = await apiClient.get<DirectUser[]>("/api/dms/users");
+    return res.data ?? [];
+  },
+
+  async createDM(userId: string): Promise<{ id: string }> {
+    const res = await apiClient.post<{ id: string }>("/api/dms", {
+      user_id: userId,
+    });
+    return res.data;
+  },
+
+  async listDMMessages(conversationId: string): Promise<ChatMessage[]> {
+    const res = await apiClient.get<ChatMessage[]>(
+      `/api/dms/${conversationId}/messages`,
+    );
+    return res.data ?? [];
+  },
+  async listDMMessagesPage(
+    conversationId: string,
+    opts?: { before?: string; limit?: number },
+  ): Promise<ChatMessage[]> {
+    const res = await apiClient.get<ChatMessage[]>(
+      `/api/dms/${conversationId}/messages`,
+      { params: opts },
+    );
+    return res.data ?? [];
+  },
+  async markChannelRead(channelId: string): Promise<void> {
+    await apiClient.post(`/api/channels/${channelId}/read`);
+  },
+  async getChannelUnread(channelId: string): Promise<number> {
+    const res = await apiClient.get<{ unread: number }>(
+      `/api/channels/${channelId}/unread`,
+    );
+    return res.data.unread;
+  },
+  async markDMRead(conversationId: string): Promise<void> {
+    await apiClient.post(`/api/dms/${conversationId}/read`);
+  },
+  async getDMUnread(conversationId: string): Promise<number> {
+    const res = await apiClient.get<{ unread: number }>(
+      `/api/dms/${conversationId}/unread`,
+    );
+    return res.data.unread;
+  },
+
+  async sendDM(
+    conversationId: string,
+    content: string,
+    attachmentIds: string[] = [],
+  ): Promise<ChatMessage> {
+    const res = await apiClient.post<ChatMessage>(
+      `/api/dms/${conversationId}/messages`,
+      { content, attachment_ids: attachmentIds },
+    );
+    return res.data;
+  },
+  async searchDM(
+    conversationId: string,
+    query: string,
+  ): Promise<MessageSearchResult[]> {
+    const res = await apiClient.get<MessageSearchResult[]>(
+      `/api/dms/${conversationId}/search`,
+      { params: { q: query } },
+    );
+    return res.data;
+  },
+  async listDMReactions(
+    conversationId: string,
+    messageId: string,
+  ): Promise<MessageReaction[]> {
+    const res = await apiClient.get<MessageReaction[]>(
+      `/api/dms/${conversationId}/messages/${messageId}/reactions`,
+    );
+    return res.data ?? [];
+  },
+  async addDMReaction(
+    conversationId: string,
+    messageId: string,
+    emoji: string,
+  ): Promise<void> {
+    await apiClient.post(
+      `/api/dms/${conversationId}/messages/${messageId}/reactions`,
+      { emoji },
+    );
+  },
+  async removeDMReaction(
+    conversationId: string,
+    messageId: string,
+  ): Promise<void> {
+    await apiClient.delete(
+      `/api/dms/${conversationId}/messages/${messageId}/reactions`,
+    );
+  },
+  async listDMThreadReplies(
+    conversationId: string,
+    messageId: string,
+  ): Promise<ChatMessage[]> {
+    const res = await apiClient.get<ChatMessage[]>(
+      `/api/dms/${conversationId}/messages/${messageId}/replies`,
+    );
+    return res.data;
+  },
+  async createDMThreadReply(
+    conversationId: string,
+    messageId: string,
+    content: string,
+  ): Promise<ChatMessage> {
+    const res = await apiClient.post<ChatMessage>(
+      `/api/dms/${conversationId}/messages/${messageId}/replies`,
+      { content },
+    );
+    return res.data;
+  },
+  async search(
+    channelId: string,
+    query: string,
+  ): Promise<MessageSearchResult[]> {
+    const res = await apiClient.get<MessageSearchResult[]>(
+      "/api/search/messages",
+      { params: { q: query, channel_id: channelId } },
+    );
+    return res.data;
+  },
+
+  async upload(file: File): Promise<UploadedAttachment> {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await apiClient.post<UploadedAttachment>("/api/uploads", form);
+    return res.data;
+  },
+
+  async send(
+    channelId: string,
+    content: string,
+    attachmentIds: string[] = [],
+  ): Promise<ChatMessage> {
     const res = await apiClient.post<ChatMessage>(
       `/api/channels/${channelId}/messages`,
-      { content },
+      { content, attachment_ids: attachmentIds },
     );
     return res.data;
   },

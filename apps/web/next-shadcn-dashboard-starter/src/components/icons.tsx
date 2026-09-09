@@ -4,6 +4,7 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconBell,
+  IconBookmark,
   IconBold,
   IconBox,
   IconBrandGithub,
@@ -87,8 +88,8 @@ import {
   IconUsers,
   IconVideo,
   IconCrown,
-  IconX
-} from '@tabler/icons-react';
+  IconX,
+} from "@tabler/icons-react";
 
 export type Icon = React.ComponentType<IconProps>;
 
@@ -145,6 +146,7 @@ export const Icons = {
   // Communication
   chat: IconMessage,
   notification: IconBell,
+  bookmark: IconBookmark,
   phone: IconPhone,
   video: IconVideo,
   send: IconSend,
@@ -219,5 +221,5 @@ export const Icons = {
   slash: IconSlash,
   calendar: IconCalendar,
   galleryVerticalEnd: IconStack2,
-  moreHorizontal: IconDots
+  moreHorizontal: IconDots,
 };

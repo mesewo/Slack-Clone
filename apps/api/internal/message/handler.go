@@ -19,6 +19,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
+	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
 )
 
 type Handler struct {
@@ -30,11 +31,13 @@ type Handler struct {
 	// Kafka publishes a durable event log entry alongside the live
 	// broadcast - two independent side effects, both best-effort relative
 	// to the DB write, which is the actual source of truth.
-	Kafka *kafka.Producer
+	Kafka  *kafka.Producer
+	Search *searchpkg.Client
 }
 
 type SendMessageRequest struct {
-	Content string `json:"content"`
+	Content       string   `json:"content"`
+	AttachmentIDs []string `json:"attachment_ids,omitempty"`
 }
 
 type CreateThreadReplyRequest struct {
@@ -54,7 +57,49 @@ type ReactionRequest struct {
 // frontend needs a name to render, and messages only store user_id.
 type MessageResponse struct {
 	database.Message
-	AuthorName string `json:"author_name"`
+	AuthorName  string               `json:"author_name"`
+	Attachments []AttachmentResponse `json:"attachments,omitempty"`
+}
+
+type AttachmentResponse struct {
+	ID          uuid.UUID `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"size_bytes"`
+	URL         string    `json:"url"`
+}
+
+func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID) []AttachmentResponse {
+	attachments, err := h.Queries.ListAttachmentsForMessage(ctx, uuid.NullUUID{UUID: messageID, Valid: true})
+	if err != nil {
+		log.Printf("failed to load attachments for message %s: %v", messageID, err)
+		return nil
+	}
+	result := make([]AttachmentResponse, 0, len(attachments))
+	for _, attachment := range attachments {
+		item := AttachmentResponse{
+			ID: attachment.ID, Filename: attachment.Filename,
+			ContentType: attachment.ContentType, SizeBytes: attachment.SizeBytes,
+			URL: "/api/uploads/" + attachment.ID.String(),
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func (h *Handler) responseFromRow(ctx context.Context, row database.ListChannelMessagesWithAuthorRow) MessageResponse {
+	author := ""
+	if row.AuthorName.Valid {
+		author = row.AuthorName.String
+	}
+	return MessageResponse{
+		Message: database.Message{
+			ID: row.ID, ChannelID: row.ChannelID, UserID: row.UserID,
+			Content: row.Content, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
+			DeletedAt: row.DeletedAt, ParentID: row.ParentID, ReplyCount: row.ReplyCount,
+		},
+		AuthorName: author, Attachments: h.attachmentsForMessage(ctx, row.ID),
+	}
 }
 
 // broadcast marshals a WSEvent and sends it to Gateway over gRPC. This is
@@ -64,6 +109,9 @@ type MessageResponse struct {
 // failing the whole request over. The timeout keeps a slow or down Gateway
 // from hanging the response indefinitely.
 func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType events.EventType, payload []byte) {
+	if h.GatewayClient == nil {
+		return
+	}
 	event, err := json.Marshal(events.WSEvent{
 		Type:      eventType,
 		ChannelID: channelID.String(),
@@ -77,11 +125,24 @@ func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	if _, err := h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{
-		ChannelId: channelID.String(),
-		Payload:   event,
-	}); err != nil {
-		log.Printf("failed to broadcast to gateway: %v", err)
+	var broadcastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, broadcastErr = h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{ChannelId: channelID.String(), Payload: event}); broadcastErr == nil {
+			return
+		}
+		if attempt < 2 {
+			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		}
+	}
+	log.Printf("failed to broadcast to gateway after retries: %v", broadcastErr)
+}
+
+func (h *Handler) indexMessage(ctx context.Context, message database.Message, author string) {
+	if h.Search == nil {
+		return
+	}
+	if err := h.Search.IndexMessage(ctx, searchpkg.ToDocument(message, author)); err != nil {
+		log.Printf("failed to index message %s: %v", message.ID, err)
 	}
 }
 
@@ -124,7 +185,7 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Content == "" {
+	if strings.TrimSpace(req.Content) == "" && len(req.AttachmentIDs) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "content is required")
 		return
 	}
@@ -138,12 +199,37 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to send message")
 		return
 	}
+	attachmentIDs := make([]uuid.UUID, 0, len(req.AttachmentIDs))
+	for _, rawID := range req.AttachmentIDs {
+		attachmentID, parseErr := uuid.Parse(rawID)
+		if parseErr != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid attachment id")
+			return
+		}
+		attachmentIDs = append(attachmentIDs, attachmentID)
+	}
+	if len(attachmentIDs) > 0 {
+		if err := h.Queries.AttachFilesToMessage(r.Context(), database.AttachFilesToMessageParams{
+			MessageID: uuid.NullUUID{UUID: msg.ID, Valid: true}, Column2: attachmentIDs, UserID: userID, ChannelID: channelID,
+		}); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to attach files to message")
+			return
+		}
+	}
 
 	authorName, err := h.Queries.GetUserDisplayName(r.Context(), userID)
 	if err != nil {
 		authorName = ""
 	}
-	resp := MessageResponse{Message: msg, AuthorName: authorName}
+	resp := MessageResponse{Message: msg, AuthorName: authorName, Attachments: h.attachmentsForMessage(r.Context(), msg.ID)}
+	h.indexMessage(r.Context(), msg, authorName)
+	if memberIDs, memberErr := h.Queries.ListChannelMemberIDs(r.Context(), channelID); memberErr == nil {
+		for _, memberID := range memberIDs {
+			if memberID != userID {
+				_ = h.Queries.CreateNotification(r.Context(), memberID, "New message in a channel", authorName+": "+msg.Content, "open-chat", channelID)
+			}
+		}
+	}
 
 	// Broadcast only after the DB write succeeds - never the other way
 	// around, or a message could appear live but fail to persist.
@@ -162,6 +248,9 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: msg.CreatedAt,
 	}); err != nil {
 		log.Printf("failed to publish message.created event: %v", err)
+		if payload, marshalErr := json.Marshal(kafka.MessageCreatedEvent{MessageID: msg.ID.String(), ChannelID: channelID.String(), UserID: userID.String(), Content: msg.Content, CreatedAt: msg.CreatedAt}); marshalErr == nil {
+			_ = h.Queries.EnqueueOutbox(r.Context(), kafka.TopicMessageCreated, msg.ID.String(), payload)
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -231,7 +320,53 @@ func (h *Handler) ListMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(messages)
+	responses := make([]MessageResponse, 0, len(messages))
+	for _, message := range messages {
+		responses = append(responses, h.responseFromRow(r.Context(), message))
+	}
+	json.NewEncoder(w).Encode(responses)
+}
+
+func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if query == "" {
+		writeJSONError(w, http.StatusBadRequest, "q is required")
+		return
+	}
+	channelID, err := uuid.Parse(r.URL.Query().Get("channel_id"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "valid channel_id is required")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
+		return
+	}
+	isMember, err := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: channelID, UserID: userID})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to verify channel membership")
+		return
+	}
+	if !isMember {
+		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
+		return
+	}
+	if h.Search == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
+		return
+	}
+	results, err := h.Search.SearchMessages(r.Context(), query, []string{channelID.String()}, 50)
+	if err != nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
+		return
+	}
+	json.NewEncoder(w).Encode(results)
 }
 
 func (h *Handler) ListThreadReplies(w http.ResponseWriter, r *http.Request) {
@@ -363,7 +498,8 @@ func (h *Handler) EditMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		authorName = ""
 	}
-	resp := MessageResponse{Message: updated, AuthorName: authorName}
+	resp := MessageResponse{Message: updated, AuthorName: authorName, Attachments: h.attachmentsForMessage(r.Context(), updated.ID)}
+	h.indexMessage(r.Context(), updated, authorName)
 
 	if payload, err := json.Marshal(events.MessageEditedPayload{
 		MessageID: messageID.String(),
@@ -757,6 +893,11 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	if err := h.Queries.DeleteMessage(r.Context(), messageID); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to delete message")
 		return
+	}
+	if h.Search != nil {
+		if err := h.Search.DeleteMessage(r.Context(), messageID.String()); err != nil {
+			log.Printf("failed to remove message %s from search index: %v", messageID, err)
+		}
 	}
 
 	// Broadcast live update to WebSocket clients
