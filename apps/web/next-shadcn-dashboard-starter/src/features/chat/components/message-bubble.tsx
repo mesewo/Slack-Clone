@@ -7,7 +7,9 @@ import { cn } from "@/lib/utils";
 import { FilePreview } from "@/components/ui/file-preview";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { AlertModal } from "@/components/modal/alert-modal";
+import { toast } from "sonner";
 import type { Message } from "../utils/types";
+import { productivityService } from "@/features/workspace/services/productivityService";
 
 const reactionChoices = Array.from(
   new Set([
@@ -120,6 +122,23 @@ const reactionChoices = Array.from(
   ]),
 );
 
+const reactionAliases: Record<string, string> = {
+  "👍": "thumbs up like",
+  "🎉": "party celebrate",
+  "✅": "check done yes",
+  "🔥": "fire hot",
+  "🚀": "rocket launch",
+  "❤️": "heart love",
+  "😂": "laugh funny",
+  "😊": "smile happy",
+  "🤔": "thinking",
+  "😮": "surprised",
+  "😢": "sad cry",
+  "👏": "clap applause",
+  "👀": "eyes look",
+  "💡": "idea lightbulb",
+};
+
 function renderFormattedText(text: string): React.ReactNode[] {
   const normalizedText = text.replace(/<u>(.*?)<\/u>/g, "__$1__");
   const segments = normalizedText.split(
@@ -199,6 +218,7 @@ interface MessageBubbleProps {
   onToggleReaction: (messageId: string, emoji: string) => void;
   onEdit: (messageId: string, content: string) => void;
   onDelete: (messageId: string) => void;
+  onToggleThreadSubscription?: (messageId: string) => void;
   compact?: boolean;
 }
 
@@ -210,6 +230,7 @@ export function MessageBubble({
   onToggleReaction,
   onEdit,
   onDelete,
+  onToggleThreadSubscription,
   compact = false,
 }: MessageBubbleProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -218,6 +239,7 @@ export function MessageBubble({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
+  const [reactionSearch, setReactionSearch] = useState("");
   const [isSaved, setIsSaved] = useState(false);
   const [editDraft, setEditDraft] = useState(message.text);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -227,6 +249,28 @@ export function MessageBubble({
   useEffect(() => {
     setEditDraft(message.text);
   }, [message.text]);
+
+  useEffect(() => {
+    void productivityService
+      .listSavedMessages()
+      .then((items) =>
+        setIsSaved(items.some((item) => item.message_id === message.id)),
+      )
+      .catch(() => {
+        const savedMessages = JSON.parse(
+          window.localStorage.getItem("slack_saved_messages") || "[]",
+        ) as string[];
+        setIsSaved(savedMessages.includes(message.id));
+      });
+  }, [message.id]);
+
+  const toggleSaved = () => {
+    void (isSaved
+      ? productivityService.unsaveMessage(message.id)
+      : productivityService.saveMessage(message.id));
+    setIsSaved(!isSaved);
+    toast.success(isSaved ? "Removed from Later" : "Saved to Later");
+  };
 
   const reactionCounts = reactions.reduce<Record<string, number>>(
     (counts, reaction) => ({
@@ -269,6 +313,7 @@ export function MessageBubble({
         "group/message relative flex w-full max-w-[85%] gap-2 px-2 py-0.5 transition-colors hover:bg-muted/40",
         isUser && "flex-row-reverse",
         isUser && "ml-auto",
+        compact && (isUser ? "pr-10" : "pl-10"),
         !compact && "mt-2",
       )}
       role="group"
@@ -330,21 +375,44 @@ export function MessageBubble({
           </button>
         </div>
         {reactionPickerOpen && (
-          <div className="border-border bg-popover absolute top-7 right-1 z-30 grid w-64 grid-cols-8 gap-1 rounded-lg border p-2 shadow-xl">
-            {reactionChoices.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                title={`React ${emoji}`}
-                onClick={() => {
-                  onToggleReaction(message.id, emoji);
-                  setReactionPickerOpen(false);
-                }}
-                className="hover:bg-accent flex size-7 items-center justify-center rounded text-lg"
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="border-border bg-popover absolute top-7 right-1 z-30 w-64 rounded-lg border p-2 shadow-xl">
+            <button
+              type="button"
+              onClick={() => setReactionPickerOpen(false)}
+              className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
+              aria-label="Close reaction picker"
+            >
+              <Icons.close className="size-3" />
+            </button>
+            <input
+              value={reactionSearch}
+              onChange={(event) => setReactionSearch(event.target.value)}
+              placeholder="Search emoji"
+              aria-label="Search reaction emoji"
+              className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 text-xs outline-none"
+            />
+            <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto pr-1">
+              {reactionChoices
+                .filter((emoji) =>
+                  `${emoji} ${reactionAliases[emoji] || ""}`
+                    .toLowerCase()
+                    .includes(reactionSearch.toLowerCase()),
+                )
+                .map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    title={`React ${emoji}`}
+                    onClick={() => {
+                      onToggleReaction(message.id, emoji);
+                      setReactionPickerOpen(false);
+                    }}
+                    className="hover:bg-accent flex size-7 items-center justify-center rounded text-lg"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+            </div>
           </div>
         )}
         {!compact && (
@@ -462,7 +530,7 @@ export function MessageBubble({
               role="menuitem"
               onClick={() => {
                 setMenuOpen(false);
-                setIsSaved((saved) => !saved);
+                toggleSaved();
               }}
               className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
             >
@@ -480,6 +548,17 @@ export function MessageBubble({
               {message.replyCount
                 ? `${message.replyCount} replies`
                 : "Reply in thread"}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setMenuOpen(false);
+                onToggleThreadSubscription?.(message.id);
+              }}
+              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Follow thread
             </button>
             <button
               type="button"

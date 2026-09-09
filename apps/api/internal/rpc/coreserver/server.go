@@ -35,6 +35,13 @@ func (s *Server) GetUserChannels(ctx context.Context, req *chatpb.GetUserChannel
 	for _, row := range rows {
 		ids = append(ids, row.ID.String())
 	}
+	directMessages, err := s.Queries.ListDirectConversationsForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for _, conversation := range directMessages {
+		ids = append(ids, "dm:"+conversation.ID.String())
+	}
 
 	return &chatpb.GetUserChannelsResponse{ChannelIds: ids}, nil
 }

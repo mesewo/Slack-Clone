@@ -8,6 +8,7 @@ import {
   workspaceService,
   type Workspace,
 } from "@/features/workspace/services/workspaceService";
+import { toast } from "sonner";
 
 export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -29,6 +30,7 @@ export default function WorkspacesPage() {
     setError("");
     try {
       await workspaceService.create({ name: name.trim() });
+      toast.success("Workspace created");
       setName("");
       await load();
     } finally {
@@ -43,6 +45,7 @@ export default function WorkspacesPage() {
     setError("");
     try {
       await workspaceService.join(slug.trim());
+      toast.success("Joined workspace");
       setSlug("");
       await load();
     } catch {

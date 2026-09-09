@@ -12,15 +12,16 @@ import (
 )
 
 type Attachment struct {
-	ID            uuid.UUID     `json:"id"`
-	MessageID     uuid.NullUUID `json:"message_id"`
-	UserID        uuid.UUID     `json:"user_id"`
-	Filename      string        `json:"filename"`
-	ContentType   string        `json:"content_type"`
-	SizeBytes     int64         `json:"size_bytes"`
-	StoragePath   string        `json:"storage_path"`
-	ThumbnailPath pgtype.Text   `json:"thumbnail_path"`
-	CreatedAt     time.Time     `json:"created_at"`
+	ID              uuid.UUID     `json:"id"`
+	MessageID       uuid.NullUUID `json:"message_id"`
+	UserID          uuid.UUID     `json:"user_id"`
+	Filename        string        `json:"filename"`
+	ContentType     string        `json:"content_type"`
+	SizeBytes       int64         `json:"size_bytes"`
+	StoragePath     string        `json:"storage_path"`
+	ThumbnailPath   pgtype.Text   `json:"thumbnail_path"`
+	CreatedAt       time.Time     `json:"created_at"`
+	DirectMessageID uuid.NullUUID `json:"direct_message_id"`
 }
 
 type Channel struct {
@@ -37,6 +38,47 @@ type ChannelMember struct {
 	UserID     uuid.UUID `json:"user_id"`
 	JoinedAt   time.Time `json:"joined_at"`
 	LastReadAt time.Time `json:"last_read_at"`
+}
+
+type DirectConversation struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedBy uuid.UUID `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type DirectConversationMember struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	JoinedAt       time.Time `json:"joined_at"`
+	LastReadAt     time.Time `json:"last_read_at"`
+}
+
+type DirectMessage struct {
+	ID             uuid.UUID     `json:"id"`
+	ConversationID uuid.UUID     `json:"conversation_id"`
+	UserID         uuid.NullUUID `json:"user_id"`
+	Content        string        `json:"content"`
+	CreatedAt      time.Time     `json:"created_at"`
+	UpdatedAt      *time.Time    `json:"updated_at"`
+	DeletedAt      *time.Time    `json:"deleted_at"`
+	ParentID       uuid.NullUUID `json:"parent_id"`
+	ReplyCount     int32         `json:"reply_count"`
+}
+
+type DirectMessageReaction struct {
+	MessageID uuid.UUID `json:"message_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Emoji     string    `json:"emoji"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type EventOutbox struct {
+	ID          uuid.UUID  `json:"id"`
+	Topic       string     `json:"topic"`
+	EventKey    string     `json:"event_key"`
+	Payload     []byte     `json:"payload"`
+	CreatedAt   time.Time  `json:"created_at"`
+	PublishedAt *time.Time `json:"published_at"`
 }
 
 type Message struct {
@@ -58,13 +100,59 @@ type MessageReaction struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type Notification struct {
+	ID        uuid.UUID     `json:"id"`
+	UserID    uuid.UUID     `json:"user_id"`
+	Title     string        `json:"title"`
+	Body      string        `json:"body"`
+	Action    pgtype.Text   `json:"action"`
+	EntityID  uuid.NullUUID `json:"entity_id"`
+	ReadAt    *time.Time    `json:"read_at"`
+	CreatedAt time.Time     `json:"created_at"`
+}
+
+type NotificationPreference struct {
+	UserID         uuid.UUID `json:"user_id"`
+	Mentions       bool      `json:"mentions"`
+	DirectMessages bool      `json:"direct_messages"`
+	ThreadReplies  bool      `json:"thread_replies"`
+	Reactions      bool      `json:"reactions"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type SavedMessage struct {
+	UserID    uuid.UUID `json:"user_id"`
+	MessageID uuid.UUID `json:"message_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ScheduledMessage struct {
+	ID             uuid.UUID     `json:"id"`
+	ChannelID      uuid.NullUUID `json:"channel_id"`
+	ConversationID uuid.NullUUID `json:"conversation_id"`
+	UserID         uuid.UUID     `json:"user_id"`
+	Content        string        `json:"content"`
+	AttachmentIds  []uuid.UUID   `json:"attachment_ids"`
+	ScheduledFor   time.Time     `json:"scheduled_for"`
+	SentAt         *time.Time    `json:"sent_at"`
+	CreatedAt      time.Time     `json:"created_at"`
+}
+
+type ThreadSubscription struct {
+	UserID    uuid.UUID `json:"user_id"`
+	MessageID uuid.UUID `json:"message_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	DisplayName  string    `json:"display_name"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID             uuid.UUID `json:"id"`
+	Email          string    `json:"email"`
+	PasswordHash   string    `json:"password_hash"`
+	DisplayName    string    `json:"display_name"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	AvatarUrl      string    `json:"avatar_url"`
+	PresenceStatus string    `json:"presence_status"`
 }
 
 type Workspace struct {

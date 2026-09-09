@@ -11,6 +11,7 @@ export type Notification = {
   body: string;
   status: NotificationStatus;
   createdAt: string;
+  entityId?: string;
   actions?: NotificationAction[];
 };
 
@@ -19,6 +20,7 @@ type NotificationState = {
   load: () => Promise<void>;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
+  markEntityAsRead: (entityId: string) => void;
   removeNotification: (id: string) => void;
   addNotification: (notification: Omit<Notification, "status">) => void;
   unreadCount: () => number;
@@ -36,6 +38,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
           action?: string;
           created_at: string;
           read_at?: string | null;
+          entity_id?: string | null;
         }>
       >("/api/notifications");
       set({
@@ -45,6 +48,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
           body: item.body,
           status: item.read_at ? "read" : "unread",
           createdAt: item.created_at,
+          entityId: item.entity_id || undefined,
           actions: item.action
             ? [
                 {
@@ -65,19 +69,31 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   markAsRead: (id) => {
     void apiClient.post(`/api/notifications/${id}/read`).catch(() => undefined);
     set((state) => ({
-      notifications: state.notifications.map((n) =>
-        n.id === id ? { ...n, status: "read" as const } : n,
-      ),
+      notifications: state.notifications.filter((n) => n.id !== id),
     }));
   },
 
   markAllAsRead: () => {
     void apiClient.post("/api/notifications/read-all").catch(() => undefined);
+    set({ notifications: [] });
+  },
+
+  markEntityAsRead: (entityId) => {
+    const matching = get().notifications.filter(
+      (notification) =>
+        notification.entityId === entityId ||
+        notification.entityId === entityId.replace(/^dm:/, "") ||
+        notification.entityId === `dm:${entityId}`,
+    );
+    for (const notification of matching) {
+      void apiClient
+        .post(`/api/notifications/${notification.id}/read`)
+        .catch(() => undefined);
+    }
     set((state) => ({
-      notifications: state.notifications.map((n) => ({
-        ...n,
-        status: "read" as const,
-      })),
+      notifications: state.notifications.filter(
+        (notification) => !matching.some((item) => item.id === notification.id),
+      ),
     }));
   },
 
@@ -88,10 +104,14 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
 
   addNotification: (notification) =>
     set((state) => ({
-      notifications: [
-        { ...notification, status: "unread" as const },
-        ...state.notifications,
-      ],
+      notifications: state.notifications.some(
+        (item) => item.id === notification.id,
+      )
+        ? state.notifications
+        : [
+            { ...notification, status: "unread" as const },
+            ...state.notifications,
+          ],
     })),
 
   unreadCount: () =>

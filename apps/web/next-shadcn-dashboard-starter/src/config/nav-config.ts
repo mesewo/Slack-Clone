@@ -1,4 +1,4 @@
-import { NavGroup } from '@/types';
+import { NavGroup } from "@/types";
 
 /**
  * Navigation configuration with RBAC support
@@ -35,171 +35,178 @@ import { NavGroup } from '@/types';
  */
 export const navGroups: NavGroup[] = [
   {
-    label: 'Overview',
+    label: "Overview",
     items: [
       {
-        title: 'Dashboard',
-        url: '/dashboard/overview',
-        icon: 'dashboard',
+        title: "Dashboard",
+        url: "/dashboard/overview",
+        icon: "dashboard",
         isActive: false,
-        shortcut: ['d', 'd'],
-        items: []
+        shortcut: ["d", "d"],
+        items: [],
       },
       {
-        title: 'Workspaces',
-        url: '/dashboard/workspaces',
-        icon: 'workspace',
-        isActive: false,
-        items: []
-      },
-      {
-        title: 'Teams',
-        url: '/dashboard/workspaces/team',
-        icon: 'teams',
+        title: "Workspaces",
+        url: "/dashboard/workspaces",
+        icon: "workspace",
         isActive: false,
         items: [],
-        access: { requireOrg: true }
       },
       {
-        title: 'Product',
-        url: '/dashboard/product',
-        icon: 'product',
-        shortcut: ['p', 'p'],
+        title: "Teams",
+        url: "/dashboard/workspaces/team",
+        icon: "teams",
         isActive: false,
-        items: []
+        items: [],
+        access: { requireOrg: true },
       },
       {
-        title: 'Users',
-        url: '/dashboard/users',
-        icon: 'teams',
-        shortcut: ['u', 'u'],
+        title: "Product",
+        url: "/dashboard/product",
+        icon: "product",
+        shortcut: ["p", "p"],
         isActive: false,
-        items: []
+        items: [],
       },
       {
-        title: 'Kanban',
-        url: '/dashboard/kanban',
-        icon: 'kanban',
-        shortcut: ['k', 'k'],
+        title: "Users",
+        url: "/dashboard/users",
+        icon: "teams",
+        shortcut: ["u", "u"],
         isActive: false,
-        items: []
+        items: [],
       },
       {
-        title: 'Chat',
-        url: '/dashboard/chat',
-        icon: 'chat',
-        shortcut: ['c', 'c'],
+        title: "Kanban",
+        url: "/dashboard/kanban",
+        icon: "kanban",
+        shortcut: ["k", "k"],
         isActive: false,
-        items: []
+        items: [],
       },
       {
-        title: 'AI Chat',
-        url: '/dashboard/ai-chat',
-        icon: 'sparkles',
-        shortcut: ['a', 'i'],
+        title: "Chat",
+        url: "/dashboard/chat",
+        icon: "chat",
+        shortcut: ["c", "c"],
         isActive: false,
-        items: []
-      }
-    ]
+        items: [],
+      },
+      {
+        title: "Saved items",
+        url: "/dashboard/saved",
+        icon: "bookmark",
+        isActive: false,
+        items: [],
+      },
+      {
+        title: "AI Chat",
+        url: "/dashboard/ai-chat",
+        icon: "sparkles",
+        shortcut: ["a", "i"],
+        isActive: false,
+        items: [],
+      },
+    ],
   },
   {
-    label: 'Elements',
+    label: "Elements",
     items: [
       {
-        title: 'Forms',
-        url: '#',
-        icon: 'forms',
+        title: "Forms",
+        url: "#",
+        icon: "forms",
         isActive: true,
         items: [
           {
-            title: 'Basic Form',
-            url: '/dashboard/forms/basic',
-            icon: 'forms',
-            shortcut: ['f', 'f']
+            title: "Basic Form",
+            url: "/dashboard/forms/basic",
+            icon: "forms",
+            shortcut: ["f", "f"],
           },
           {
-            title: 'Multi-Step Form',
-            url: '/dashboard/forms/multi-step',
-            icon: 'forms'
+            title: "Multi-Step Form",
+            url: "/dashboard/forms/multi-step",
+            icon: "forms",
           },
           {
-            title: 'Sheet & Dialog',
-            url: '/dashboard/forms/sheet-form',
-            icon: 'forms'
+            title: "Sheet & Dialog",
+            url: "/dashboard/forms/sheet-form",
+            icon: "forms",
           },
           {
-            title: 'Advanced Patterns',
-            url: '/dashboard/forms/advanced',
-            icon: 'forms'
-          }
-        ]
+            title: "Advanced Patterns",
+            url: "/dashboard/forms/advanced",
+            icon: "forms",
+          },
+        ],
       },
       {
-        title: 'React Query',
-        url: '/dashboard/react-query',
-        icon: 'code',
+        title: "React Query",
+        url: "/dashboard/react-query",
+        icon: "code",
         isActive: false,
-        items: []
+        items: [],
       },
       {
-        title: 'Icons',
-        url: '/dashboard/elements/icons',
-        icon: 'palette',
+        title: "Icons",
+        url: "/dashboard/elements/icons",
+        icon: "palette",
         isActive: false,
-        items: []
-      }
-    ]
+        items: [],
+      },
+    ],
   },
   {
-    label: '',
+    label: "",
     items: [
       {
-        title: 'Pro',
-        url: '#',
-        icon: 'pro',
+        title: "Pro",
+        url: "#",
+        icon: "pro",
         isActive: false,
         items: [
           {
-            title: 'Exclusive',
-            url: '/dashboard/exclusive',
-            icon: 'exclusive',
-            shortcut: ['e', 'e']
-          }
-        ]
+            title: "Exclusive",
+            url: "/dashboard/exclusive",
+            icon: "exclusive",
+            shortcut: ["e", "e"],
+          },
+        ],
       },
       {
-        title: 'Account',
-        url: '#',
-        icon: 'account',
+        title: "Account",
+        url: "#",
+        icon: "account",
         isActive: true,
         items: [
           {
-            title: 'Profile',
-            url: '/dashboard/profile',
-            icon: 'profile',
-            shortcut: ['m', 'm']
+            title: "Profile",
+            url: "/dashboard/profile",
+            icon: "profile",
+            shortcut: ["m", "m"],
           },
           {
-            title: 'Notifications',
-            url: '/dashboard/notifications',
-            icon: 'notification',
-            shortcut: ['n', 'n']
+            title: "Notifications",
+            url: "/dashboard/notifications",
+            icon: "notification",
+            shortcut: ["n", "n"],
           },
           {
-            title: 'Billing',
-            url: '/dashboard/billing',
-            icon: 'billing',
-            shortcut: ['b', 'b'],
-            access: { requireOrg: true }
+            title: "Billing",
+            url: "/dashboard/billing",
+            icon: "billing",
+            shortcut: ["b", "b"],
+            access: { requireOrg: true },
           },
           {
-            title: 'Login',
-            shortcut: ['l', 'l'],
-            url: '/',
-            icon: 'login'
-          }
-        ]
-      }
-    ]
-  }
+            title: "Login",
+            shortcut: ["l", "l"],
+            url: "/",
+            icon: "login",
+          },
+        ],
+      },
+    ],
+  },
 ];

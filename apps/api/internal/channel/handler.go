@@ -23,6 +23,10 @@ type CreateChannelRequest struct {
 	Type        string `json:"type,omitempty"` // PUBLIC or PRIVATE; defaults to PUBLIC
 }
 
+type AddMemberRequest struct {
+	UserID string `json:"user_id"`
+}
+
 func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
 	if !ok {
@@ -50,10 +54,23 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
 		return
 	}
+	member, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID})
+	if err != nil {
+		writeJSONError(w, http.StatusForbidden, "you are not a member of this workspace")
+		return
+	}
 
 	channelType := req.Type
 	if channelType == "" {
 		channelType = "PUBLIC"
+	}
+	if channelType != "PUBLIC" && channelType != "PRIVATE" {
+		writeJSONError(w, http.StatusBadRequest, "channel type must be PUBLIC or PRIVATE")
+		return
+	}
+	if channelType == "PRIVATE" && member.Role != "OWNER" && member.Role != "ADMIN" {
+		writeJSONError(w, http.StatusForbidden, "only workspace admins can create private channels")
+		return
 	}
 
 	ch, err := h.Queries.CreateChannel(r.Context(), database.CreateChannelParams{
@@ -99,6 +116,19 @@ func (h *Handler) JoinChannel(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
 		return
 	}
+	channel, err := h.Queries.GetChannelByID(r.Context(), channelID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "channel not found")
+		return
+	}
+	if channel.Type == "PRIVATE" {
+		writeJSONError(w, http.StatusForbidden, "private channels require an invitation")
+		return
+	}
+	if _, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: channel.WorkspaceID, UserID: userID}); err != nil {
+		writeJSONError(w, http.StatusForbidden, "you are not a member of this workspace")
+		return
+	}
 
 	if err := h.Queries.AddChannelMember(r.Context(), database.AddChannelMemberParams{
 		ChannelID: channelID,
@@ -108,6 +138,53 @@ func (h *Handler) JoinChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	requesterID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "invalid user")
+		return
+	}
+	channel, err := h.Queries.GetChannelByID(r.Context(), channelID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "channel not found")
+		return
+	}
+	member, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: channel.WorkspaceID, UserID: requesterID})
+	if err != nil || (member.Role != "OWNER" && member.Role != "ADMIN") {
+		writeJSONError(w, http.StatusForbidden, "only workspace admins can invite channel members")
+		return
+	}
+	var req AddMemberRequest
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	targetID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+	if _, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: channel.WorkspaceID, UserID: targetID}); err != nil {
+		writeJSONError(w, http.StatusForbidden, "user is not a workspace member")
+		return
+	}
+	if err := h.Queries.AddChannelMember(r.Context(), database.AddChannelMemberParams{ChannelID: channelID, UserID: targetID}); err != nil {
+		writeJSONError(w, http.StatusConflict, "user is already a channel member")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -156,4 +233,56 @@ func writeJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func (h *Handler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "invalid user")
+		return
+	}
+	member, err := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: channelID, UserID: userID})
+	if err != nil || !member {
+		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
+		return
+	}
+	if err := h.Queries.UpdateLastRead(r.Context(), database.UpdateLastReadParams{ChannelID: channelID, UserID: userID}); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to mark channel read")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) Unread(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "invalid user")
+		return
+	}
+	count, err := h.Queries.CountUnreadChannelMessages(r.Context(), database.UnreadCountParams{ChannelID: channelID, UserID: userID})
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to load unread count")
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]int64{"unread": count})
 }

@@ -4,7 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import type { Conversation } from "../utils/types";
 import { Input } from "@/components/ui/input";
 import { Icons } from "@/components/icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  messageService,
+  type DirectUser,
+} from "@/features/workspace/services/messageService";
 
 interface ConversationSelectProps {
   conversations: Conversation[];
@@ -26,6 +30,16 @@ export function ConversationSelect({
   const [channelType, setChannelType] = useState<"PUBLIC" | "PRIVATE">(
     "PUBLIC",
   );
+  const [dmOpen, setDmOpen] = useState(false);
+  const [dmUsers, setDmUsers] = useState<DirectUser[]>([]);
+
+  useEffect(() => {
+    if (!dmOpen) return;
+    void messageService
+      .listDMUsers()
+      .then(setDmUsers)
+      .catch(() => setDmUsers([]));
+  }, [dmOpen]);
   return (
     <div className="border-border/40 bg-background/75 flex flex-col gap-3 rounded-2xl border p-3 backdrop-blur sm:gap-4 sm:rounded-3xl sm:p-4 lg:hidden">
       <div className="flex items-center justify-between gap-2 sm:gap-3">
@@ -99,6 +113,37 @@ export function ConversationSelect({
           className="text-muted-foreground text-[0.65rem] font-medium sm:text-xs"
         >
           Conversation
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDmOpen((open) => !open)}
+              className="text-muted-foreground hover:bg-accent flex flex-1 items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs"
+              aria-expanded={dmOpen}
+            >
+              <Icons.chat className="size-4" />
+              New direct message
+            </button>
+            {dmOpen && (
+              <select
+                defaultValue=""
+                aria-label="Choose a person for a direct message"
+                onChange={async (event) => {
+                  if (event.target.value) {
+                    await onCreateDM(event.target.value);
+                    setDmOpen(false);
+                  }
+                }}
+                className="border-border bg-background text-foreground max-w-[52%] rounded-xl border px-2 py-1.5 text-xs"
+              >
+                <option value="">Choose...</option>
+                {dmUsers.map((dmUser) => (
+                  <option key={dmUser.id} value={dmUser.id}>
+                    {dmUser.display_name || dmUser.email}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </label>
         <select
           id="messenger-conversation"

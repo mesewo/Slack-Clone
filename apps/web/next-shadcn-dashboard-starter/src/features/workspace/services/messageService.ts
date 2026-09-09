@@ -76,6 +76,16 @@ export const messageService = {
     );
     return res.data ?? [];
   },
+  async listDMMessagesPage(
+    conversationId: string,
+    opts?: { before?: string; limit?: number },
+  ): Promise<ChatMessage[]> {
+    const res = await apiClient.get<ChatMessage[]>(
+      `/api/dms/${conversationId}/messages`,
+      { params: opts },
+    );
+    return res.data ?? [];
+  },
   async markChannelRead(channelId: string): Promise<void> {
     await apiClient.post(`/api/channels/${channelId}/read`);
   },

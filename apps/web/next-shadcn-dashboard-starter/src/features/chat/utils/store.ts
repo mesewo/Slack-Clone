@@ -15,6 +15,7 @@ import {
 import type { DirectConversation } from "@/features/workspace/services/messageService";
 
 const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const lastConversationKey = "slack_last_conversation_id";
 
 function apiUrl(path: string): string {
   return path.startsWith("http") ? path : `${apiOrigin}${path}`;
@@ -107,7 +108,10 @@ type ChatState = {
   conversations: Conversation[];
   selectedConversationId: string;
   draft: string;
+  drafts: Record<string, string>;
   loadingMessages: boolean;
+  loadingOlderMessages: boolean;
+  hasOlderMessages: Record<string, boolean>;
 
   // Thread panel state
   selectedThreadParentId: string | null;
@@ -123,10 +127,12 @@ type ChatState = {
 
   init: (userId: string) => Promise<void>;
   selectConversation: (id: string) => void;
+  loadOlderMessages: () => Promise<void>;
   markConversationRead: (id: string) => Promise<void>;
   setDraft: (text: string) => void;
   createChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
   createDM: (userId: string) => Promise<void>;
+  refreshDMs: () => Promise<void>;
   sendMessage: (text: string, attachmentIds?: string[]) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
@@ -164,7 +170,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   conversations: [],
   selectedConversationId: "",
   draft: "",
+  drafts: {},
   loadingMessages: false,
+  loadingOlderMessages: false,
+  hasOlderMessages: {},
 
   // Thread panel state
   selectedThreadParentId: null,
@@ -222,10 +231,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     );
 
     const allConversations = [...conversations, ...directMessages];
+    const savedConversationId =
+      window.localStorage.getItem(lastConversationKey);
+    const initialConversationId = allConversations.some(
+      (conversation) => conversation.id === savedConversationId,
+    )
+      ? savedConversationId!
+      : "";
     set({
       workspace,
       conversations: allConversations,
-      selectedConversationId: conversations[0]?.id ?? "",
+      selectedConversationId: initialConversationId,
     });
 
     const unreadCounts = await Promise.all(
@@ -248,13 +264,23 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       })),
     }));
 
-    if (conversations[0]) {
-      get().selectConversation(conversations[0].id);
+    if (initialConversationId) {
+      get().selectConversation(initialConversationId);
     }
   },
 
   selectConversation: (id) => {
-    set({ selectedConversationId: id });
+    const previousId = get().selectedConversationId;
+    const currentDraft = get().draft;
+    set((state) => ({
+      selectedConversationId: id,
+      draft: state.drafts[id] ?? "",
+      drafts:
+        previousId && previousId !== id
+          ? { ...state.drafts, [previousId]: currentDraft }
+          : state.drafts,
+    }));
+    window.localStorage.setItem(lastConversationKey, id);
 
     const conversation = get().conversations.find((c) => c.id === id);
     if (!conversation || conversation.messages.length > 0) return; // already loaded
@@ -307,6 +333,51 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       .catch(() => set({ loadingMessages: false }));
   },
 
+  loadOlderMessages: async () => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (item) => item.id === state.selectedConversationId,
+    );
+    if (
+      !conversation ||
+      state.loadingOlderMessages ||
+      conversation.messages.length === 0
+    )
+      return;
+    const oldest = conversation.messages[0];
+    if (state.hasOlderMessages[conversation.id] === false) return;
+    set({ loadingOlderMessages: true });
+    try {
+      const before = oldest.createdAt;
+      const items =
+        conversation.kind === "dm"
+          ? await messageService.listDMMessagesPage(conversation.dmId!, {
+              before,
+              limit: 50,
+            })
+          : await messageService.list(conversation.id, { before, limit: 50 });
+      const currentUserId = get().currentUserId ?? "";
+      const older = items
+        .slice()
+        .reverse()
+        .map((item) => toUIMessage(item, currentUserId));
+      set((current) => ({
+        conversations: current.conversations.map((item) =>
+          item.id === conversation.id
+            ? { ...item, messages: sortMessages([...older, ...item.messages]) }
+            : item,
+        ),
+        hasOlderMessages: {
+          ...current.hasOlderMessages,
+          [conversation.id]: items.length >= 50,
+        },
+        loadingOlderMessages: false,
+      }));
+    } catch {
+      set({ loadingOlderMessages: false });
+    }
+  },
+
   markConversationRead: async (id) => {
     const conversation = get().conversations.find((item) => item.id === id);
     if (!conversation) return;
@@ -326,7 +397,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
   },
 
-  setDraft: (text) => set({ draft: text }),
+  setDraft: (text) => {
+    const conversationId = get().selectedConversationId;
+    set((state) => ({
+      draft: text,
+      drafts: conversationId
+        ? { ...state.drafts, [conversationId]: text }
+        : state.drafts,
+    }));
+  },
 
   createChannel: async (name, type) => {
     const workspace = get().workspace;
@@ -341,6 +420,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       conversations: [...state.conversations, conversation],
       selectedConversationId: channel.id,
     }));
+    window.localStorage.setItem(lastConversationKey, channel.id);
   },
 
   createDM: async (userId) => {
@@ -356,13 +436,43 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       ],
       selectedConversationId: conversation.id,
     }));
+    window.localStorage.setItem(lastConversationKey, conversation.id);
+  },
+
+  refreshDMs: async () => {
+    const directMessages = (await messageService.listDMs()).map(
+      toDMConversation,
+    );
+    set((state) => ({
+      conversations: [
+        ...state.conversations.filter((item) => item.kind !== "dm"),
+        ...directMessages.map((conversation) =>
+          state.conversations.find((item) => item.id === conversation.id)
+            ? {
+                ...conversation,
+                messages:
+                  state.conversations.find(
+                    (item) => item.id === conversation.id,
+                  )?.messages ?? [],
+                unread:
+                  state.conversations.find(
+                    (item) => item.id === conversation.id,
+                  )?.unread ?? 0,
+              }
+            : conversation,
+        ),
+      ],
+    }));
   },
 
   sendMessage: async (text, attachmentIds = []) => {
     const channelId = get().selectedConversationId;
     if (!channelId || (!text.trim() && attachmentIds.length === 0)) return;
 
-    set({ draft: "" });
+    set((state) => ({
+      draft: "",
+      drafts: { ...state.drafts, [channelId]: "" },
+    }));
     // Channel messages come back over the WebSocket; DM sends are inserted
     // locally through addIncomingMessage, which also deduplicates broadcasts.
     try {
@@ -388,7 +498,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         await messageService.send(channelId, text.trim(), attachmentIds);
       }
     } catch (error) {
-      set({ draft: text });
+      set((state) => ({
+        draft: text,
+        drafts: { ...state.drafts, [channelId]: text },
+      }));
       console.error("Failed to send message:", error);
     }
   },

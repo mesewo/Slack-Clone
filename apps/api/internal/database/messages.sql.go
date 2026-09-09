@@ -43,7 +43,7 @@ func (q *Queries) AttachFilesToMessage(ctx context.Context, arg AttachFilesToMes
 const createAttachment = `-- name: CreateAttachment :one
 INSERT INTO attachments (id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path)
 VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
-RETURNING id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at
+RETURNING id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at, direct_message_id
 `
 
 type CreateAttachmentParams struct {
@@ -77,6 +77,7 @@ func (q *Queries) CreateAttachment(ctx context.Context, arg CreateAttachmentPara
 		&i.StoragePath,
 		&i.ThumbnailPath,
 		&i.CreatedAt,
+		&i.DirectMessageID,
 	)
 	return i, err
 }
@@ -157,7 +158,7 @@ func (q *Queries) DeleteMessage(ctx context.Context, id uuid.UUID) error {
 }
 
 const getAttachmentByID = `-- name: GetAttachmentByID :one
-SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at FROM attachments WHERE id = $1
+SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at, direct_message_id FROM attachments WHERE id = $1
 `
 
 func (q *Queries) GetAttachmentByID(ctx context.Context, id uuid.UUID) (Attachment, error) {
@@ -173,6 +174,7 @@ func (q *Queries) GetAttachmentByID(ctx context.Context, id uuid.UUID) (Attachme
 		&i.StoragePath,
 		&i.ThumbnailPath,
 		&i.CreatedAt,
+		&i.DirectMessageID,
 	)
 	return i, err
 }
@@ -234,7 +236,7 @@ func (q *Queries) IncrementReplyCount(ctx context.Context, id uuid.UUID) error {
 }
 
 const listAttachmentsForMessage = `-- name: ListAttachmentsForMessage :many
-SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at FROM attachments
+SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at, direct_message_id FROM attachments
 WHERE message_id = $1
 ORDER BY created_at
 `
@@ -258,6 +260,7 @@ func (q *Queries) ListAttachmentsForMessage(ctx context.Context, messageID uuid.
 			&i.StoragePath,
 			&i.ThumbnailPath,
 			&i.CreatedAt,
+			&i.DirectMessageID,
 		); err != nil {
 			return nil, err
 		}

@@ -5,10 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"image"
-	_ "image/gif"
-	"image/jpeg"
-	_ "image/png"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -33,12 +29,11 @@ type Handler struct {
 }
 
 type Response struct {
-	ID           uuid.UUID `json:"id"`
-	Filename     string    `json:"filename"`
-	ContentType  string    `json:"content_type"`
-	SizeBytes    int64     `json:"size_bytes"`
-	URL          string    `json:"url"`
-	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
+	ID          uuid.UUID `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"size_bytes"`
+	URL         string    `json:"url"`
 }
 
 func NewStore(endpoint, accessKey, secretKey string, useSSL bool) (*minio.Client, error) {
@@ -91,28 +86,20 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to store file")
 		return
 	}
-	thumbnailKey := ""
-	if strings.HasPrefix(contentType, "image/") {
-		if thumb, ok := makeThumbnail(data); ok {
-			thumbnailKey = key + ".thumb.jpg"
-			if _, err := h.Store.PutObject(r.Context(), h.Bucket, thumbnailKey, bytes.NewReader(thumb), int64(len(thumb)), minio.PutObjectOptions{ContentType: "image/jpeg"}); err != nil {
-				thumbnailKey = ""
-			}
-		}
-	}
 	id := uuid.New()
-	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), StoragePath: key, Column7: thumbnailKey}); err != nil {
+	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), StoragePath: key, Column7: ""}); err != nil {
 		_ = h.Store.RemoveObject(r.Context(), h.Bucket, key, minio.RemoveObjectOptions{})
 		writeError(w, http.StatusInternalServerError, "failed to save attachment metadata")
 		return
 	}
-	response := Response{ID: id, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), URL: h.BaseURL + "/api/uploads/" + id.String(), ThumbnailURL: h.BaseURL + "/api/uploads/" + id.String() + "/thumbnail"}
+	response := Response{ID: id, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), URL: h.BaseURL + "/api/uploads/" + id.String()}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
-	if _, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims); !ok {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
@@ -126,13 +113,44 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "attachment not found")
 		return
 	}
-	key, contentType, size := attachment.StoragePath, attachment.ContentType, attachment.SizeBytes
-	if chi.URLParam(r, "variant") == "thumbnail" {
-		if !attachment.ThumbnailPath.Valid {
-			writeError(w, http.StatusNotFound, "thumbnail not found")
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid user")
+		return
+	}
+	if attachment.MessageID.Valid {
+		message, messageErr := h.Queries.GetMessageByID(r.Context(), attachment.MessageID.UUID)
+		if messageErr != nil {
+			writeError(w, http.StatusNotFound, "attachment message not found")
 			return
 		}
-		key, contentType, size = attachment.ThumbnailPath.String, "image/jpeg", 0
+		member, memberErr := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: message.ChannelID, UserID: userID})
+		if memberErr != nil || !member {
+			writeError(w, http.StatusForbidden, "not allowed to download this file")
+			return
+		}
+	} else {
+		directMessageID, directErr := h.Queries.GetAttachmentDirectMessageID(r.Context(), id)
+		if directErr == nil && directMessageID.Valid {
+			conversationID, conversationErr := h.Queries.GetDirectMessageConversationID(r.Context(), directMessageID.UUID)
+			if conversationErr != nil {
+				writeError(w, http.StatusNotFound, "attachment conversation not found")
+				return
+			}
+			member, memberErr := h.Queries.IsDirectConversationMember(r.Context(), database.IsDirectConversationMemberParams{ConversationID: conversationID, UserID: userID})
+			if memberErr != nil || !member {
+				writeError(w, http.StatusForbidden, "not allowed to download this file")
+				return
+			}
+		} else if attachment.UserID != userID {
+			writeError(w, http.StatusForbidden, "not allowed to download this file")
+			return
+		}
+	}
+	key, contentType, size := attachment.StoragePath, attachment.ContentType, attachment.SizeBytes
+	if chi.URLParam(r, "variant") == "thumbnail" {
+		writeError(w, http.StatusNotFound, "thumbnail downloads are no longer supported")
+		return
 	}
 	object, err := h.Store.GetObject(r.Context(), h.Bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -150,38 +168,12 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+`"`)
 	_, _ = io.Copy(w, object)
 }
 
 func allowedType(contentType string) bool {
-	return contentType == "application/pdf" || contentType == "text/plain" || strings.HasPrefix(contentType, "image/")
-}
-func makeThumbnail(data []byte) ([]byte, bool) {
-	source, _, err := image.Decode(bytes.NewReader(data))
-	if err != nil {
-		return nil, false
-	}
-	bounds := source.Bounds()
-	width, height := bounds.Dx(), bounds.Dy()
-	if width > 320 {
-		height = height * 320 / width
-		width = 320
-	}
-	if height > 240 {
-		width = width * 240 / height
-		height = 240
-	}
-	target := image.NewRGBA(image.Rect(0, 0, width, height))
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			target.Set(x, y, source.At(x*bounds.Dx()/width, y*bounds.Dy()/height))
-		}
-	}
-	var out bytes.Buffer
-	if err := jpeg.Encode(&out, target, &jpeg.Options{Quality: 82}); err != nil {
-		return nil, false
-	}
-	return out.Bytes(), true
+	return contentType == "application/pdf" || contentType == "text/plain" || contentType == "application/octet-stream" || strings.HasPrefix(contentType, "image/") || strings.HasPrefix(contentType, "video/")
 }
 func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")

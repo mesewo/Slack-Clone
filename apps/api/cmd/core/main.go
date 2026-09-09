@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/minio/minio-go/v7"
@@ -25,14 +26,18 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channel"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/dm"
+	"github.com/mesewo/slack-clone/apps/api/internal/events"
 	kafkapkg "github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/message"
+	"github.com/mesewo/slack-clone/apps/api/internal/notification"
+	"github.com/mesewo/slack-clone/apps/api/internal/productivity"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
 	"github.com/mesewo/slack-clone/apps/api/internal/upload"
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
-	workspace "github.com/mesewo/slack-clone/apps/api/internal/worksapce"
+	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 )
 
 func main() {
@@ -155,7 +160,12 @@ func main() {
 	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer}
 	workspaceHandler := &workspace.Handler{Queries: queries}
 	channelHandler := &channel.Handler{Queries: queries}
+	dmHandler := &dm.Handler{Queries: queries, GatewayClient: gatewayClient}
 	messageHandler := &message.Handler{Queries: queries, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient}
+	notificationHandler := &notification.Handler{Queries: queries}
+	productivityHandler := &productivity.Handler{Queries: queries}
+	go runOutbox(ctx, queries, kafkaProducer)
+	go runScheduledMessages(ctx, queries, gatewayClient)
 
 	messageConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageCreated, "core-message-created", redisClient)
 	defer messageConsumer.Close()
@@ -302,6 +312,7 @@ func main() {
 		AllowedOrigins:   []string{frontendURL},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
+		ExposedHeaders:   []string{"Content-Length", "Content-Disposition"},
 		AllowCredentials: true,
 	}))
 
@@ -313,6 +324,19 @@ func main() {
 		r.Use(auth.Middleware(tokens))
 
 		r.Get("/api/auth/verify", userHandler.Verify)
+		r.Get("/api/notifications", notificationHandler.List)
+		r.Post("/api/notifications/{notificationID}/read", notificationHandler.MarkRead)
+		r.Post("/api/notifications/read-all", notificationHandler.MarkAllRead)
+		r.Get("/api/profile", productivityHandler.Profile)
+		r.Patch("/api/profile", productivityHandler.UpdateProfile)
+		r.Get("/api/saved-messages", productivityHandler.Saved)
+		r.Post("/api/saved-messages/{messageID}", productivityHandler.Save)
+		r.Delete("/api/saved-messages/{messageID}", productivityHandler.Unsave)
+		r.Post("/api/messages/{messageID}/thread-subscription", productivityHandler.SubscribeThread)
+		r.Delete("/api/messages/{messageID}/thread-subscription", productivityHandler.UnsubscribeThread)
+		r.Get("/api/notification-preferences", productivityHandler.Preferences)
+		r.Patch("/api/notification-preferences", productivityHandler.Preferences)
+		r.Post("/api/scheduled-messages", productivityHandler.Schedule)
 
 		r.Post("/api/workspaces", workspaceHandler.CreateWorkspace)
 		r.Post("/api/workspaces/join", workspaceHandler.JoinWorkspace)
@@ -321,6 +345,22 @@ func main() {
 		r.Post("/api/channels", channelHandler.CreateChannel)
 		r.Get("/api/channels", channelHandler.ListChannels)
 		r.Post("/api/channels/{channelID}/join", channelHandler.JoinChannel)
+		r.Post("/api/channels/{channelID}/members", channelHandler.AddMember)
+		r.Post("/api/channels/{channelID}/read", channelHandler.MarkRead)
+		r.Get("/api/channels/{channelID}/unread", channelHandler.Unread)
+		r.Get("/api/dms", dmHandler.List)
+		r.Get("/api/dms/users", dmHandler.Users)
+		r.Post("/api/dms", dmHandler.Create)
+		r.Get("/api/dms/{conversationID}/messages", dmHandler.ListMessages)
+		r.Post("/api/dms/{conversationID}/messages", dmHandler.SendMessage)
+		r.Get("/api/dms/{conversationID}/search", dmHandler.Search)
+		r.Get("/api/dms/{conversationID}/messages/{messageID}/replies", dmHandler.ThreadReplies)
+		r.Post("/api/dms/{conversationID}/messages/{messageID}/replies", dmHandler.CreateThreadReply)
+		r.Get("/api/dms/{conversationID}/messages/{messageID}/reactions", dmHandler.ListReactions)
+		r.Post("/api/dms/{conversationID}/messages/{messageID}/reactions", dmHandler.AddReaction)
+		r.Delete("/api/dms/{conversationID}/messages/{messageID}/reactions", dmHandler.RemoveReaction)
+		r.Post("/api/dms/{conversationID}/read", dmHandler.MarkRead)
+		r.Get("/api/dms/{conversationID}/unread", dmHandler.Unread)
 
 		r.Post("/api/channels/{channelID}/messages", messageHandler.SendMessage)
 		r.Get("/api/channels/{channelID}/messages", messageHandler.ListMessages)
@@ -359,4 +399,69 @@ func main() {
 		log.Fatalf("http server failed: %v", err)
 	}
 	log.Println("core stopped cleanly")
+}
+
+func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapkg.Producer) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			items, err := queries.ListPendingOutbox(ctx, 100)
+			if err != nil {
+				log.Printf("outbox read failed: %v", err)
+				continue
+			}
+			for _, item := range items {
+				if err := producer.PublishRaw(ctx, item.Topic, item.EventKey, item.Payload); err != nil {
+					log.Printf("outbox publish failed for %s: %v", item.ID, err)
+					continue
+				}
+				if err := queries.MarkOutboxPublished(ctx, item.ID); err != nil {
+					log.Printf("outbox ack failed for %s: %v", item.ID, err)
+				}
+			}
+		}
+	}
+}
+
+func runScheduledMessages(ctx context.Context, queries *database.Queries, gatewayClient chatpb.GatewayServiceClient) {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			items, err := queries.ClaimDueScheduledMessages(ctx, 100)
+			if err != nil {
+				log.Printf("scheduled message claim failed: %v", err)
+				continue
+			}
+			for _, item := range items {
+				if item.ChannelID != nil {
+					msg, createErr := queries.CreateMessage(ctx, database.CreateMessageParams{ChannelID: *item.ChannelID, UserID: uuid.NullUUID{UUID: item.UserID, Valid: true}, Content: item.Content})
+					if createErr != nil {
+						log.Printf("scheduled channel message failed: %v", createErr)
+						continue
+					}
+					payload, _ := json.Marshal(map[string]any{"id": msg.ID, "channel_id": msg.ChannelID, "user_id": msg.UserID, "content": msg.Content, "created_at": msg.CreatedAt, "updated_at": msg.UpdatedAt, "deleted_at": msg.DeletedAt, "parent_id": msg.ParentID, "reply_count": msg.ReplyCount})
+					event, _ := json.Marshal(events.WSEvent{Type: events.EventMessageCreated, ChannelID: item.ChannelID.String(), Payload: payload})
+					_, _ = gatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{ChannelId: item.ChannelID.String(), Payload: event})
+				}
+				if item.ConversationID != nil {
+					msg, createErr := queries.CreateDirectMessage(ctx, database.CreateDirectMessageParams{ConversationID: *item.ConversationID, UserID: uuid.NullUUID{UUID: item.UserID, Valid: true}, Content: item.Content})
+					if createErr != nil {
+						log.Printf("scheduled DM failed: %v", createErr)
+						continue
+					}
+					payload, _ := json.Marshal(map[string]any{"id": msg.ID, "conversation_id": msg.ConversationID, "user_id": msg.UserID, "content": msg.Content, "created_at": msg.CreatedAt, "updated_at": msg.UpdatedAt, "deleted_at": msg.DeletedAt, "parent_id": msg.ParentID, "reply_count": msg.ReplyCount, "author_name": ""})
+					event, _ := json.Marshal(events.WSEvent{Type: events.EventMessageCreated, ChannelID: "dm:" + item.ConversationID.String(), Payload: payload})
+					_, _ = gatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{ChannelId: "dm:" + item.ConversationID.String(), Payload: event})
+				}
+			}
+		}
+	}
 }

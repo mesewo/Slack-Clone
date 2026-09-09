@@ -27,7 +27,7 @@ type Handler struct {
 	// GatewayClient replaces the old *gateway.Hub field - Core no longer
 	// calls the Hub as a plain Go function, since Gateway is now a separate
 	// process. This is the whole point of Phase 3's split.
-	GatewayClient chatpb.GatewayServiceClient 
+	GatewayClient chatpb.GatewayServiceClient
 	// Kafka publishes a durable event log entry alongside the live
 	// broadcast - two independent side effects, both best-effort relative
 	// to the DB write, which is the actual source of truth.
@@ -62,12 +62,11 @@ type MessageResponse struct {
 }
 
 type AttachmentResponse struct {
-	ID           uuid.UUID `json:"id"`
-	Filename     string    `json:"filename"`
-	ContentType  string    `json:"content_type"`
-	SizeBytes    int64     `json:"size_bytes"`
-	URL          string    `json:"url"`
-	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
+	ID          uuid.UUID `json:"id"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"size_bytes"`
+	URL         string    `json:"url"`
 }
 
 func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID) []AttachmentResponse {
@@ -82,9 +81,6 @@ func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID
 			ID: attachment.ID, Filename: attachment.Filename,
 			ContentType: attachment.ContentType, SizeBytes: attachment.SizeBytes,
 			URL: "/api/uploads/" + attachment.ID.String(),
-		}
-		if attachment.ThumbnailPath.Valid {
-			item.ThumbnailURL = "/api/uploads/" + attachment.ID.String() + "/thumbnail"
 		}
 		result = append(result, item)
 	}
@@ -113,6 +109,9 @@ func (h *Handler) responseFromRow(ctx context.Context, row database.ListChannelM
 // failing the whole request over. The timeout keeps a slow or down Gateway
 // from hanging the response indefinitely.
 func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType events.EventType, payload []byte) {
+	if h.GatewayClient == nil {
+		return
+	}
 	event, err := json.Marshal(events.WSEvent{
 		Type:      eventType,
 		ChannelID: channelID.String(),
@@ -126,12 +125,16 @@ func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	if _, err := h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{
-		ChannelId: channelID.String(),
-		Payload:   event,
-	}); err != nil {
-		log.Printf("failed to broadcast to gateway: %v", err)
+	var broadcastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, broadcastErr = h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{ChannelId: channelID.String(), Payload: event}); broadcastErr == nil {
+			return
+		}
+		if attempt < 2 {
+			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+		}
 	}
+	log.Printf("failed to broadcast to gateway after retries: %v", broadcastErr)
 }
 
 func (h *Handler) indexMessage(ctx context.Context, message database.Message, author string) {
@@ -182,7 +185,7 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.Content == "" {
+	if strings.TrimSpace(req.Content) == "" && len(req.AttachmentIDs) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "content is required")
 		return
 	}
@@ -220,6 +223,13 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := MessageResponse{Message: msg, AuthorName: authorName, Attachments: h.attachmentsForMessage(r.Context(), msg.ID)}
 	h.indexMessage(r.Context(), msg, authorName)
+	if memberIDs, memberErr := h.Queries.ListChannelMemberIDs(r.Context(), channelID); memberErr == nil {
+		for _, memberID := range memberIDs {
+			if memberID != userID {
+				_ = h.Queries.CreateNotification(r.Context(), memberID, "New message in a channel", authorName+": "+msg.Content, "open-chat", channelID)
+			}
+		}
+	}
 
 	// Broadcast only after the DB write succeeds - never the other way
 	// around, or a message could appear live but fail to persist.
@@ -238,6 +248,9 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: msg.CreatedAt,
 	}); err != nil {
 		log.Printf("failed to publish message.created event: %v", err)
+		if payload, marshalErr := json.Marshal(kafka.MessageCreatedEvent{MessageID: msg.ID.String(), ChannelID: channelID.String(), UserID: userID.String(), Content: msg.Content, CreatedAt: msg.CreatedAt}); marshalErr == nil {
+			_ = h.Queries.EnqueueOutbox(r.Context(), kafka.TopicMessageCreated, msg.ID.String(), payload)
+		}
 	}
 
 	w.WriteHeader(http.StatusCreated)

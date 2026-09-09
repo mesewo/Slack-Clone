@@ -4,12 +4,59 @@ import { Button } from "@/components/ui/button";
 import { logout, useAuth } from "@/lib/auth";
 import { Icons } from "@/components/icons";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { productivityService } from "@/features/workspace/services/productivityService";
 
 export default function ProfileViewPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const [signingOut, setSigningOut] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [editingName, setEditingName] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    void productivityService
+      .getProfile()
+      .then((profile) => {
+        setAvatarUrl(profile.avatar_url);
+        setDisplayName(profile.display_name || user.name || "");
+      })
+      .catch(() => {
+        setAvatarUrl(window.localStorage.getItem("slack_profile_avatar") || "");
+        setDisplayName(
+          window.localStorage.getItem("slack_profile_display_name") ||
+            user.name ||
+            "",
+        );
+      });
+  }, [user?.name]);
+
+  const handleAvatarChange = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const nextAvatarUrl = String(reader.result || "");
+      setAvatarUrl(nextAvatarUrl);
+      void productivityService.updateProfile({ avatar_url: nextAvatarUrl });
+      window.localStorage.setItem("slack_profile_avatar", nextAvatarUrl);
+      toast.success("Profile photo updated");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const saveDisplayName = () => {
+    const nextName = displayName.trim();
+    if (!nextName) return;
+    void productivityService.updateProfile({ display_name: nextName });
+    window.localStorage.setItem("slack_profile_display_name", nextName);
+    setDisplayName(nextName);
+    setEditingName(false);
+    toast.success("Profile name updated");
+  };
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -53,11 +100,53 @@ export default function ProfileViewPage() {
       </div>
       <div className="border-border bg-card rounded-xl border p-5">
         <div className="flex items-center gap-4">
-          <div className="bg-primary text-primary-foreground flex h-14 w-14 items-center justify-center rounded-full text-lg font-semibold">
-            {(user.name || user.email).slice(0, 2).toUpperCase()}
-          </div>
+          <button
+            type="button"
+            onClick={() => avatarInputRef.current?.click()}
+            className="bg-primary text-primary-foreground relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full text-lg font-semibold transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            aria-label="Change profile photo"
+          >
+            {avatarUrl ? (
+              <span
+                role="img"
+                aria-label="Profile photo"
+                className="h-full w-full bg-cover bg-center"
+                style={{ backgroundImage: `url(${avatarUrl})` }}
+              />
+            ) : (
+              (user.name || user.email).slice(0, 2).toUpperCase()
+            )}
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => handleAvatarChange(event.target.files?.[0])}
+          />
           <div className="min-w-0">
-            <p className="truncate font-medium">{user.name || "Local user"}</p>
+            {editingName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  className="border-border bg-background w-40 rounded border px-2 py-1 text-sm"
+                  aria-label="Profile name"
+                />
+                <Button type="button" size="sm" onClick={saveDisplayName}>
+                  Save
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setEditingName(true)}
+                className="hover:text-primary flex items-center gap-1 truncate font-medium"
+              >
+                {displayName || "Local user"}
+                <Icons.edit className="size-3.5" />
+              </button>
+            )}
             <p className="text-muted-foreground truncate text-sm">
               {user.email}
             </p>

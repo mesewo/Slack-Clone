@@ -2,8 +2,15 @@
 
 import type { FC } from "react";
 import { useState } from "react";
+import Image from "next/image";
 import { Icons } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export interface UploadedFile {
   id: string;
@@ -178,6 +185,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
   const isInverted = variant === "inverted";
   const [downloads, setDownloads] = useState<Record<string, number>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+  const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   if (files.length === 0) return null;
 
   const downloadFile = async (file: UploadedFile) => {
@@ -259,20 +267,36 @@ export const FilePreview: FC<FilePreviewProps> = ({
             )}
 
             {file.type.startsWith("image/") && file.url ? (
-              <div className="max-h-72 max-w-[300px] overflow-hidden rounded-md">
-                <img
+              <button
+                type="button"
+                className="max-h-72 max-w-[300px] cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                onClick={() => setPreviewFile(file)}
+                aria-label={`Preview ${file.name}`}
+              >
+                <Image
                   src={file.url}
                   alt={file.name}
+                  width={300}
+                  height={288}
+                  unoptimized
                   className="h-auto max-h-72 max-w-full object-contain"
                 />
-              </div>
+              </button>
             ) : file.type.startsWith("video/") && file.url ? (
-              <video
-                src={file.url}
-                controls
-                preload="metadata"
-                className="max-h-72 max-w-[300px] rounded-md"
-              />
+              <button
+                type="button"
+                className="cursor-zoom-in rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
+                onClick={() => setPreviewFile(file)}
+                aria-label={`Preview ${file.name}`}
+              >
+                <video
+                  src={file.url}
+                  preload="metadata"
+                  className="pointer-events-none max-h-72 max-w-[300px] rounded-md"
+                >
+                  <track kind="captions" />
+                </video>
+              </button>
             ) : (
               <>
                 <div
@@ -325,6 +349,25 @@ export const FilePreview: FC<FilePreviewProps> = ({
                     : "Download"}
               </button>
             )}
+            {file.url && downloads[file.id] !== 100 && (
+              <button
+                type="button"
+                onClick={() => void downloadFile(file)}
+                disabled={downloading[file.id]}
+                className="bg-background/70 text-foreground hover:bg-background/90 absolute top-1/2 left-1/2 z-10 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full shadow-sm backdrop-blur"
+                aria-label={
+                  downloading[file.id]
+                    ? `Downloading ${file.name}`
+                    : `Download ${file.name}`
+                }
+              >
+                {downloading[file.id] ? (
+                  <Icons.spinner size={16} className="animate-spin" />
+                ) : (
+                  <Icons.chevronDown size={18} />
+                )}
+              </button>
+            )}
             {downloading[file.id] && (
               <div className="absolute right-2 bottom-0 left-2 h-0.5 overflow-hidden rounded-full bg-primary/20">
                 <div
@@ -336,6 +379,49 @@ export const FilePreview: FC<FilePreviewProps> = ({
           </div>
         ))}
       </div>
+      <Dialog
+        open={Boolean(previewFile)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewFile(null);
+        }}
+      >
+        <DialogContent className="max-w-4xl border-border/70 bg-background/95 p-3 sm:p-4">
+          <DialogTitle className="truncate pr-8 text-sm">
+            {previewFile?.name || "Attachment preview"}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Preview of the selected attachment
+          </DialogDescription>
+          {previewFile?.type.startsWith("image/") && previewFile.url ? (
+            <Image
+              src={previewFile.url}
+              alt={previewFile.name}
+              width={1200}
+              height={900}
+              unoptimized
+              className="max-h-[75vh] w-full rounded-lg object-contain"
+            />
+          ) : previewFile?.type.startsWith("video/") && previewFile.url ? (
+            <video
+              src={previewFile.url}
+              controls
+              autoPlay
+              className="max-h-[75vh] w-full rounded-lg"
+            >
+              <track kind="captions" />
+            </video>
+          ) : null}
+          {previewFile?.url && (
+            <button
+              type="button"
+              onClick={() => void downloadFile(previewFile)}
+              className="text-primary self-end text-xs font-medium hover:underline"
+            >
+              Download attachment
+            </button>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

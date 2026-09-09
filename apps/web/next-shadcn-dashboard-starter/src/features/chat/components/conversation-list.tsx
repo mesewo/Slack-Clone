@@ -33,6 +33,8 @@ export function ConversationList({
   onCreateChannel,
   onCreateDM,
 }: ConversationListProps) {
+  const [channelsOpen, setChannelsOpen] = useState(true);
+  const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [channelName, setChannelName] = useState("");
@@ -70,11 +72,8 @@ export function ConversationList({
     <div className="border-border/40 bg-background/75 hidden h-full flex-col gap-4 overflow-hidden rounded-2xl border p-3 backdrop-blur lg:col-start-1 lg:col-end-2 lg:flex lg:rounded-3xl lg:p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-foreground text-sm font-semibold">Messenger</p>
-          <p className="text-muted-foreground text-xs">
-            {conversations.length} active conversation
-            {conversations.length === 1 ? "" : "s"}
-          </p>
+          <p className="text-foreground text-sm font-semibold">Workspace</p>
+          <p className="text-muted-foreground text-xs">Your conversations</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge
@@ -153,92 +152,118 @@ export function ConversationList({
       </div>
 
       <div
-        className="flex-1 space-y-2 overflow-y-auto pr-1"
+        className="flex-1 space-y-1 overflow-y-auto pr-1"
         aria-label="Conversation list"
         role="list"
       >
-        {channels.length === 0 ? (
-          <p className="text-muted-foreground py-8 text-center text-xs">
-            No conversations found
-          </p>
-        ) : null}
-        {channels.map((conversation) => {
-          const isActive = conversation.id === selectedId;
-          const lastMessage =
-            conversation.messages[conversation.messages.length - 1];
-          return (
-            <motion.button
-              key={conversation.id}
-              type="button"
-              onClick={() => onSelect(conversation.id)}
-              aria-current={isActive ? "true" : undefined}
+        <div className="flex items-center justify-between px-1 pt-1">
+          <button
+            type="button"
+            onClick={() => setChannelsOpen((open) => !open)}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em]"
+            aria-expanded={channelsOpen}
+          >
+            <Icons.chevronRight
               className={cn(
-                "focus-visible:ring-primary/50 group focus-visible:ring-offset-background relative flex w-full items-start gap-3 rounded-2xl border border-transparent p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
-                isActive
-                  ? "border-primary/30 bg-[linear-gradient(180deg,rgba(99,102,241,0.08),rgba(99,102,241,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
-                  : "bg-background/70 hover:border-border/50 hover:bg-muted/45",
+                "size-3 transition-transform",
+                channelsOpen && "rotate-90",
               )}
-              role="listitem"
-            >
-              <div className="relative shrink-0">
-                <Avatar className="border-border/40 bg-background/80 text-foreground h-10 w-10 rounded-2xl border">
-                  <AvatarFallback className="bg-primary/15 text-primary rounded-2xl text-sm font-medium">
-                    {conversation.initials}
-                  </AvatarFallback>
-                </Avatar>
-                <span
-                  className={cn(
-                    "border-background absolute right-0 bottom-0 inline-flex h-3 w-3 rounded-full border-2",
-                    statusDotColor[conversation.status],
-                  )}
-                  aria-label={
-                    conversation.status === "online" ? "Online" : "Offline"
-                  }
-                />
-              </div>
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={cn(
-                        "text-sm font-semibold",
-                        isActive ? "text-foreground" : "text-foreground/90",
-                      )}
-                    >
-                      {conversation.name}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {conversation.title}
-                    </p>
+            />
+            Channels
+          </button>
+          <span className="text-muted-foreground/70 text-[0.65rem]">
+            {channels.length}
+          </span>
+        </div>
+        {channelsOpen &&
+          channels.map((conversation) => {
+            const isActive = conversation.id === selectedId;
+            const lastMessage =
+              conversation.messages[conversation.messages.length - 1];
+            return (
+              <motion.button
+                key={conversation.id}
+                type="button"
+                onClick={() => onSelect(conversation.id)}
+                aria-current={isActive ? "true" : undefined}
+                className={cn(
+                  "focus-visible:ring-primary/50 group focus-visible:ring-offset-background relative flex w-full items-start gap-3 rounded-2xl border border-transparent p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+                  isActive
+                    ? "border-primary/30 bg-[linear-gradient(180deg,rgba(99,102,241,0.08),rgba(99,102,241,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
+                    : "bg-background/70 hover:border-border/50 hover:bg-muted/45",
+                )}
+                role="listitem"
+              >
+                <div className="relative shrink-0">
+                  <Avatar className="border-border/40 bg-background/80 text-foreground h-10 w-10 rounded-2xl border">
+                    <AvatarFallback className="bg-primary/15 text-primary rounded-2xl text-sm font-medium">
+                      {conversation.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span
+                    className={cn(
+                      "border-background absolute right-0 bottom-0 inline-flex h-3 w-3 rounded-full border-2",
+                      statusDotColor[conversation.status],
+                    )}
+                    aria-label={
+                      conversation.status === "online" ? "Online" : "Offline"
+                    }
+                  />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cn(
+                          "text-sm font-semibold",
+                          isActive ? "text-foreground" : "text-foreground/90",
+                        )}
+                      >
+                        {conversation.name}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {conversation.title}
+                      </p>
+                    </div>
+                    {lastMessage && (
+                      <span className="text-muted-foreground shrink-0 text-[0.65rem]">
+                        {lastMessage.timestamp}
+                      </span>
+                    )}
                   </div>
-                  {lastMessage && (
-                    <span className="text-muted-foreground shrink-0 text-[0.65rem]">
-                      {lastMessage.timestamp}
-                    </span>
+                  {lastMessage ? (
+                    <p className="text-muted-foreground line-clamp-2 text-xs">
+                      {lastMessage.author}: {lastMessage.text}
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">
+                      No messages yet
+                    </p>
                   )}
                 </div>
-                {lastMessage ? (
-                  <p className="text-muted-foreground line-clamp-2 text-xs">
-                    {lastMessage.author}: {lastMessage.text}
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground text-xs">
-                    No messages yet
-                  </p>
+                {conversation.unread > 0 && (
+                  <span className="bg-primary text-primary-foreground ml-2 inline-flex min-h-[1.5rem] min-w-[1.5rem] items-center justify-center rounded-full text-[0.7rem] font-semibold shadow-lg">
+                    {conversation.unread}
+                  </span>
                 )}
-              </div>
-              {conversation.unread > 0 && (
-                <span className="bg-primary text-primary-foreground ml-2 inline-flex min-h-[1.5rem] min-w-[1.5rem] items-center justify-center rounded-full text-[0.7rem] font-semibold shadow-lg">
-                  {conversation.unread}
-                </span>
-              )}
-            </motion.button>
-          );
-        })}
+              </motion.button>
+            );
+          })}
         <div className="mt-4 flex items-center justify-between px-1">
-          <p className="text-muted-foreground text-[0.65rem] font-semibold uppercase">
+          <button
+            type="button"
+            onClick={() => setDirectMessagesOpen((open) => !open)}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em]"
+            aria-expanded={directMessagesOpen}
+          >
+            <Icons.chevronRight
+              className={cn(
+                "size-3 transition-transform",
+                directMessagesOpen && "rotate-90",
+              )}
+            />
             Direct messages
-          </p>
+          </button>
           <button
             type="button"
             onClick={() => setDmOpen((open) => !open)}
@@ -248,7 +273,7 @@ export function ConversationList({
             <Icons.add className="size-4" />
           </button>
         </div>
-        {dmOpen && (
+        {directMessagesOpen && dmOpen && (
           <div className="border-border/40 bg-muted/30 my-1 rounded-lg border p-2">
             <select
               defaultValue=""
@@ -269,20 +294,39 @@ export function ConversationList({
             </select>
           </div>
         )}
-        {directMessages.map((conversation) => (
-          <button
-            key={conversation.id}
-            type="button"
-            onClick={() => onSelect(conversation.id)}
-            className={cn(
-              "hover:bg-muted/40 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
-              selectedId === conversation.id && "bg-primary/10 text-primary",
-            )}
-          >
-            <span className="bg-emerald-500 size-2 rounded-full" />
-            <span className="truncate">{conversation.name}</span>
-          </button>
-        ))}
+        {directMessagesOpen &&
+          directMessages.map((conversation) => (
+            <button
+              key={conversation.id}
+              type="button"
+              onClick={() => onSelect(conversation.id)}
+              className={cn(
+                "hover:bg-muted/40 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
+                selectedId === conversation.id && "bg-primary/10 text-primary",
+              )}
+            >
+              <Avatar className="size-7 rounded-lg">
+                <AvatarFallback className="bg-primary/15 text-primary rounded-lg text-[0.6rem] font-semibold">
+                  {conversation.initials}
+                </AvatarFallback>
+              </Avatar>
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  conversation.status === "online" && "bg-emerald-500",
+                )}
+                aria-label={
+                  conversation.status === "online" ? "Online" : "Offline"
+                }
+              />
+              <span className="truncate">{conversation.name}</span>
+              {conversation.unread > 0 && (
+                <span className="bg-primary text-primary-foreground ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1 text-[0.65rem] font-semibold">
+                  {conversation.unread}
+                </span>
+              )}
+            </button>
+          ))}
       </div>
     </div>
   );

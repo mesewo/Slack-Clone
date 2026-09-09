@@ -28,9 +28,12 @@ interface ChatAreaProps {
   onToggleReaction: (messageId: string, emoji: string) => void;
   onEditMessage: (messageId: string, content: string) => void;
   onDeleteMessage: (messageId: string) => void;
+  onToggleThreadSubscription: (messageId: string) => void;
   onMarkRead: () => void;
+  onLoadOlderMessages: () => Promise<void>;
+  loadingOlderMessages: boolean;
+  onSchedule: (scheduledFor: string) => Promise<void>;
   typingUserCount: number;
-  activeUserCount: number;
 }
 
 export function ChatArea({
@@ -48,18 +51,30 @@ export function ChatArea({
   onToggleReaction,
   onEditMessage,
   onDeleteMessage,
+  onToggleThreadSubscription,
   onMarkRead,
+  onLoadOlderMessages,
+  loadingOlderMessages,
+  onSchedule,
   typingUserCount,
-  activeUserCount,
 }: ChatAreaProps) {
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const newMessagesMarkerRef = useRef<HTMLDivElement | null>(null);
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
   const [searchError, setSearchError] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const isAtBottomRef = useRef(true);
+  const isJumpingToLatestRef = useRef(false);
+  const mentionSuggestions = Array.from(
+    new Set([
+      "here",
+      "channel",
+      ...conversation.messages.map((message) => message.author),
+    ]),
+  );
 
   useEffect(() => {
     const query = search.trim();
@@ -104,8 +119,18 @@ export function ChatArea({
 
   useEffect(() => {
     isAtBottomRef.current = conversation.unread === 0;
-    setShowJumpToLatest(conversation.unread > 0);
+    setShowJumpToLatest(conversation.unread > 1);
   }, [conversation.id]);
+
+  useEffect(() => {
+    if (conversation.unread === 0 || !newMessagesMarkerRef.current) return;
+    requestAnimationFrame(() => {
+      newMessagesMarkerRef.current?.scrollIntoView({
+        behavior: "auto",
+        block: "center",
+      });
+    });
+  }, [conversation.id, conversation.messages.length, conversation.unread]);
 
   useEffect(() => {
     if (!messagesContainerRef.current) return;
@@ -137,23 +162,30 @@ export function ChatArea({
   const handleMessagesScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
+    if (container.scrollTop < 120 && !loadingOlderMessages) {
+      void onLoadOlderMessages();
+    }
     const atBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight <
-      32;
+      16;
+    if (isJumpingToLatestRef.current && atBottom) {
+      isJumpingToLatestRef.current = false;
+    }
     isAtBottomRef.current = atBottom;
-    setShowJumpToLatest(!atBottom);
+    if (!isJumpingToLatestRef.current) {
+      setShowJumpToLatest(!atBottom && conversation.unread > 1);
+    }
     if (atBottom && conversation.unread > 0) onMarkRead();
   };
 
   const jumpToLatest = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    container.scrollTo({
-      top: container.scrollHeight,
-      behavior: shouldReduceMotion ? "auto" : "smooth",
-    });
+    isJumpingToLatestRef.current = true;
+    container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
     isAtBottomRef.current = true;
     setShowJumpToLatest(false);
+    isJumpingToLatestRef.current = false;
     onMarkRead();
   };
 
@@ -225,9 +257,9 @@ export function ChatArea({
           </div>
           <div className="text-muted-foreground flex min-h-3 items-center gap-2 px-3 text-[0.7rem] sm:px-4">
             <span>
-              {activeUserCount > 0
-                ? `${activeUserCount} active`
-                : "No active users"}
+              {conversation.kind === "dm" && conversation.status === "online"
+                ? "Online"
+                : ""}
             </span>
             {typingUserCount > 0 && (
               <span className="text-primary">
@@ -261,7 +293,10 @@ export function ChatArea({
                           0,
                           conversation.messages.length - conversation.unread,
                         ) && (
-                        <div className="text-primary my-3 flex items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em]">
+                        <div
+                          ref={newMessagesMarkerRef}
+                          className="text-primary my-3 flex items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-[0.16em]"
+                        >
                           <span className="bg-primary/30 h-px flex-1" />
                           New messages
                           <span className="bg-primary/30 h-px flex-1" />
@@ -275,6 +310,7 @@ export function ChatArea({
                       onToggleReaction={onToggleReaction}
                       onEdit={onEditMessage}
                       onDelete={onDeleteMessage}
+                      onToggleThreadSubscription={onToggleThreadSubscription}
                       compact={compact}
                     />
                   </div>
@@ -285,14 +321,11 @@ export function ChatArea({
               <button
                 type="button"
                 onClick={jumpToLatest}
-                className="border-border bg-background/95 text-foreground hover:bg-accent absolute right-5 bottom-4 z-10 inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium shadow-lg backdrop-blur"
+                className="border-border bg-background/95 text-foreground hover:bg-accent absolute right-5 bottom-4 z-10 inline-flex animate-bounce items-center gap-1.5 rounded-full border px-2 py-2 text-xs font-medium shadow-lg backdrop-blur before:absolute before:right-1/2 before:bottom-full before:h-8 before:w-px before:bg-primary/50 motion-reduce:animate-none"
                 aria-label="Jump to latest messages"
                 title="Jump to latest messages"
               >
                 <Icons.chevronDown className="size-4" />
-                {conversation.unread > 0
-                  ? `${conversation.unread} new`
-                  : "Latest"}
               </button>
             )}
           </div>
@@ -307,6 +340,8 @@ export function ChatArea({
             attachments={attachments}
             onAddAttachments={onAddAttachments}
             onRemoveAttachment={onRemoveAttachment}
+            mentionSuggestions={mentionSuggestions}
+            onSchedule={onSchedule}
           />
         </motion.div>
       </AnimatePresence>

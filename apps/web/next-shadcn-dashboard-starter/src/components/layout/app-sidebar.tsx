@@ -39,6 +39,8 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { Icons } from "../icons";
 import { OrgSwitcher } from "../org-switcher";
+import { NotificationCenter } from "@/features/notifications/components/notification-center";
+import { toast } from "sonner";
 
 export default function AppSidebar() {
   const pathname = usePathname();
@@ -47,6 +49,27 @@ export default function AppSidebar() {
   const { user } = useAuth();
   const organization = null;
   const filteredGroups = useFilteredNavGroups(navGroups);
+  const sidebarGroups = filteredGroups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => ({
+          ...item,
+          items: item.items?.filter((child) =>
+            ["Profile"].includes(child.title),
+          ),
+        }))
+        .filter((item) =>
+          [
+            "Dashboard",
+            "Workspaces",
+            "Chat",
+            "Saved items",
+            "Profile",
+          ].includes(item.title),
+        ),
+    }))
+    .filter((group) => group.items.length > 0);
 
   React.useEffect(() => {
     // Side effects based on sidebar state changes
@@ -69,7 +92,7 @@ export default function AppSidebar() {
         <OrgSwitcher />
       </SidebarHeader>
       <SidebarContent className="overflow-x-hidden bg-sidebar px-2 pb-2 pt-2">
-        {filteredGroups.map((group) => (
+        {sidebarGroups.map((group) => (
           <SidebarGroup key={group.label || "ungrouped"} className="py-0">
             {group.label && (
               <SidebarGroupLabel className="text-sidebar-foreground/60 px-2 text-[0.68rem] font-semibold tracking-[0.2em] uppercase">
@@ -136,9 +159,38 @@ export default function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
         ))}
+        <SidebarGroup className="py-0">
+          <SidebarGroupLabel className="text-sidebar-foreground/60 px-2 text-[0.68rem] font-semibold tracking-[0.2em] uppercase">
+            Coming soon
+          </SidebarGroupLabel>
+          <SidebarMenu>
+            {[
+              ["Huddles", Icons.phone],
+              ["Canvas", Icons.forms],
+              ["Workflow builder", Icons.settings],
+            ].map(([label, Icon]) => (
+              <SidebarMenuItem key={label as string}>
+                <SidebarMenuButton
+                  type="button"
+                  tooltip={`${label as string} coming soon`}
+                  onClick={() =>
+                    toast.info(`${label as string} is coming soon`)
+                  }
+                  className="text-sidebar-foreground/60 hover:text-sidebar-foreground"
+                >
+                  <Icon />
+                  <span>{label as string}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-sidebar-border/70 border-t bg-sidebar/90 p-2">
         <SidebarMenu>
+          <SidebarMenuItem>
+            <NotificationCenter />
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger
