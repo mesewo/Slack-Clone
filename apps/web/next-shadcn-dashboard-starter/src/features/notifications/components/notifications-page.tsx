@@ -14,7 +14,7 @@ const actionRoutes: Record<string, string> = {
   "view-product": "/dashboard/product",
   billing: "/dashboard/billing",
   open: "/dashboard/kanban",
-  "open-chat": "/dashboard/chat",
+  "open-chat": "/dashboard/workspaces",
 };
 
 export default function NotificationsPage() {

@@ -7,6 +7,15 @@ export interface Workspace {
   created_at: string;
 }
 
+export interface WorkspaceMember {
+  workspace_id: string;
+  user_id: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  joined_at: string;
+  email: string;
+  display_name: string;
+}
+
 function makeUniqueSlug(name: string, attempt = 0): string {
   const base =
     name
@@ -54,5 +63,29 @@ export const workspaceService = {
   async list(): Promise<Workspace[]> {
     const res = await apiClient.get<Workspace[]>("/api/workspaces");
     return res.data ?? [];
+  },
+
+  async listMembers(workspaceId: string): Promise<{
+    role: WorkspaceMember["role"];
+    members: WorkspaceMember[];
+  }> {
+    const res = await apiClient.get(`/api/workspaces/${workspaceId}/members`);
+    return res.data;
+  },
+
+  async updateMemberRole(
+    workspaceId: string,
+    userId: string,
+    role: WorkspaceMember["role"],
+  ): Promise<WorkspaceMember> {
+    const res = await apiClient.patch<WorkspaceMember>(
+      `/api/workspaces/${workspaceId}/members/${userId}`,
+      { role },
+    );
+    return res.data;
+  },
+
+  async removeMember(workspaceId: string, userId: string): Promise<void> {
+    await apiClient.delete(`/api/workspaces/${workspaceId}/members/${userId}`);
   },
 };

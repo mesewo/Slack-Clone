@@ -54,8 +54,7 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
 		return
 	}
-	member, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID})
-	if err != nil {
+	if _, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: workspaceID, UserID: userID}); err != nil {
 		writeJSONError(w, http.StatusForbidden, "you are not a member of this workspace")
 		return
 	}
@@ -68,9 +67,10 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "channel type must be PUBLIC or PRIVATE")
 		return
 	}
-	if channelType == "PRIVATE" && member.Role != "OWNER" && member.Role != "ADMIN" {
-		writeJSONError(w, http.StatusForbidden, "only workspace admins can create private channels")
-		return
+	if channelType == "PRIVATE" {
+		if _, ok := auth.RequireRole(w, r, h.Queries, workspaceID, "OWNER", "ADMIN"); !ok {
+			return
+		}
 	}
 
 	ch, err := h.Queries.CreateChannel(r.Context(), database.CreateChannelParams{
@@ -142,19 +142,9 @@ func (h *Handler) JoinChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
-	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
-	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
-		return
-	}
 	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
-		return
-	}
-	requesterID, err := uuid.Parse(claims.UserID)
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid user")
 		return
 	}
 	channel, err := h.Queries.GetChannelByID(r.Context(), channelID)
@@ -162,9 +152,7 @@ func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "channel not found")
 		return
 	}
-	member, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{WorkspaceID: channel.WorkspaceID, UserID: requesterID})
-	if err != nil || (member.Role != "OWNER" && member.Role != "ADMIN") {
-		writeJSONError(w, http.StatusForbidden, "only workspace admins can invite channel members")
+	if _, ok := auth.RequireRole(w, r, h.Queries, channel.WorkspaceID, "OWNER", "ADMIN"); !ok {
 		return
 	}
 	var req AddMemberRequest

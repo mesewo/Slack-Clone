@@ -86,7 +86,7 @@ export const navGroups: NavGroup[] = [
       },
       {
         title: "Chat",
-        url: "/dashboard/chat",
+        url: "/dashboard/workspaces",
         icon: "chat",
         shortcut: ["c", "c"],
         isActive: false,

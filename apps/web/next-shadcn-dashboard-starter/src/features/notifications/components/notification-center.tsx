@@ -149,7 +149,17 @@ export function NotificationCenter() {
                         }
                       }
                       setOpen(false);
-                      window.location.assign("/dashboard/chat");
+                      const workspaceId = window.localStorage.getItem(
+                        "active_workspace_id",
+                      );
+                      if (workspaceId && notification?.entityId) {
+                        const target = notification.title.includes("direct")
+                          ? `/workspace/${workspaceId}/dms/${notification.entityId}`
+                          : `/workspace/${workspaceId}/channels/${notification.entityId}`;
+                        window.location.assign(target);
+                      } else {
+                        window.location.assign("/dashboard/workspaces");
+                      }
                     }
                   }}
                 />

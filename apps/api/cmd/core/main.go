@@ -341,6 +341,9 @@ func main() {
 		r.Post("/api/workspaces", workspaceHandler.CreateWorkspace)
 		r.Post("/api/workspaces/join", workspaceHandler.JoinWorkspace)
 		r.Get("/api/workspaces", workspaceHandler.ListWorkspaces)
+		r.Get("/api/workspaces/{workspaceID}/members", workspaceHandler.ListMembers)
+		r.Patch("/api/workspaces/{workspaceID}/members/{userID}", workspaceHandler.UpdateMemberRole)
+		r.Delete("/api/workspaces/{workspaceID}/members/{userID}", workspaceHandler.RemoveMember)
 
 		r.Post("/api/channels", channelHandler.CreateChannel)
 		r.Get("/api/channels", channelHandler.ListChannels)

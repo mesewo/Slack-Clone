@@ -115,8 +115,16 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
                         "slack_last_conversation_id",
                         parsed.channel_id!,
                       );
-                      if (window.location.pathname !== "/dashboard/chat") {
-                        window.location.assign("/dashboard/chat");
+                      const workspaceId = window.localStorage.getItem(
+                        "active_workspace_id",
+                      );
+                      const target = parsed.channel_id!.startsWith("dm:")
+                        ? `/workspace/${workspaceId}/dms/${parsed.channel_id!.slice(3)}`
+                        : `/workspace/${workspaceId}/channels/${parsed.channel_id}`;
+                      if (!workspaceId || window.location.pathname !== target) {
+                        window.location.assign(
+                          workspaceId ? target : "/dashboard/workspaces",
+                        );
                       } else {
                         useChatStore
                           .getState()

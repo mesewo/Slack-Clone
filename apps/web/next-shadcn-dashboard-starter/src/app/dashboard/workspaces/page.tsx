@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import PageContainer from "@/components/layout/page-container";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { channelService } from "@/features/workspace/services/channelService";
 import {
   workspaceService,
   type Workspace,
@@ -16,6 +17,9 @@ export default function WorkspacesPage() {
   const [slug, setSlug] = useState("");
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [openingWorkspaceId, setOpeningWorkspaceId] = useState<string | null>(
+    null,
+  );
   const [error, setError] = useState("");
 
   const load = () => workspaceService.list().then(setWorkspaces);
@@ -52,6 +56,23 @@ export default function WorkspacesPage() {
       setError("Workspace not found or could not be joined.");
     } finally {
       setJoining(false);
+    }
+  };
+
+  const openWorkspace = async (workspaceId: string) => {
+    setOpeningWorkspaceId(workspaceId);
+    setError("");
+    try {
+      const channels = await channelService.list(workspaceId);
+      const defaultChannel = channels[0];
+      window.localStorage.setItem("active_workspace_id", workspaceId);
+      window.location.href = defaultChannel
+        ? `/workspace/${workspaceId}/channels/${defaultChannel.id}`
+        : `/workspace/${workspaceId}`;
+    } catch {
+      setError("Workspace channels could not be loaded.");
+    } finally {
+      setOpeningWorkspaceId(null);
     }
   };
 
@@ -102,15 +123,10 @@ export default function WorkspacesPage() {
               </div>
               <Button
                 variant="outline"
-                onClick={() => {
-                  window.localStorage.setItem(
-                    "active_workspace_id",
-                    workspace.id,
-                  );
-                  window.location.href = "/dashboard/chat";
-                }}
+                onClick={() => void openWorkspace(workspace.id)}
+                disabled={openingWorkspaceId === workspace.id}
               >
-                Open
+                {openingWorkspaceId === workspace.id ? "Opening..." : "Open"}
               </Button>
             </div>
           ))}

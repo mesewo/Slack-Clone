@@ -33,11 +33,17 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
 
     setSending(true);
     try {
-      const reply = await messageService.createThreadReply(
-        selectedConversationId,
-        parentMessage.id,
-        replyText.trim(),
-      );
+      const reply = selectedConversationId.startsWith("dm:")
+        ? await messageService.createDMThreadReply(
+            selectedConversationId.slice(3),
+            parentMessage.id,
+            replyText.trim(),
+          )
+        : await messageService.createThreadReply(
+            selectedConversationId,
+            parentMessage.id,
+            replyText.trim(),
+          );
       addThreadReply(reply);
       setReplyText("");
     } catch (error) {

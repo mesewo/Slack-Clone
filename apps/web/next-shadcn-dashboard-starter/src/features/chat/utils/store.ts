@@ -125,7 +125,7 @@ type ChatState = {
   // Reactions: messageId -> [{ userId, emoji }, ...]
   messageReactions: Record<string, Array<{ userId: string; emoji: string }>>;
 
-  init: (userId: string) => Promise<void>;
+  init: (userId: string, workspaceId?: string) => Promise<void>;
   selectConversation: (id: string) => void;
   loadOlderMessages: () => Promise<void>;
   markConversationRead: (id: string) => Promise<void>;
@@ -190,22 +190,30 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // Local testing bootstrap: if the user has no workspace yet, or if they are
   // not in the shared demo workspace, we create/join a shared demo workspace and
   // ensure it has a default channel so two people can land in the same place.
-  init: async (userId) => {
+  init: async (userId, workspaceId) => {
     set({ currentUserId: userId });
 
     const workspaces = (await workspaceService.list()) ?? [];
-    let workspace =
-      workspaces.find(
-        (w) => w.id === window.localStorage.getItem("active_workspace_id"),
-      ) ??
-      workspaces[0] ??
-      null;
+    let workspace = workspaceId
+      ? (workspaces.find((item) => item.id === workspaceId) ?? null)
+      : (workspaces.find(
+          (w) => w.id === window.localStorage.getItem("active_workspace_id"),
+        ) ??
+        workspaces[0] ??
+        null);
 
-    if (!workspace) {
+    if (!workspace && !workspaceId) {
       workspace = await workspaceService.create({ name: "My Workspace" });
     }
 
-    window.localStorage.setItem("active_workspace_id", workspace.id);
+    if (!workspace) {
+      set({ workspace: null, conversations: [], selectedConversationId: "" });
+      return;
+    }
+
+    if (!workspaceId) {
+      window.localStorage.setItem("active_workspace_id", workspace.id);
+    }
 
     let channels = (await channelService.list(workspace.id)) ?? [];
     if (channels.length === 0) {
@@ -231,8 +239,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     );
 
     const allConversations = [...conversations, ...directMessages];
-    const savedConversationId =
-      window.localStorage.getItem(lastConversationKey);
+    const savedConversationId = workspaceId
+      ? null
+      : window.localStorage.getItem(lastConversationKey);
     const initialConversationId = allConversations.some(
       (conversation) => conversation.id === savedConversationId,
     )
