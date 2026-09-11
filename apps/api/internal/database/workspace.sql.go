@@ -65,6 +65,20 @@ func (q *Queries) AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMember
 	return err
 }
 
+const consumeWorkspaceInvite = `-- name: ConsumeWorkspaceInvite :one
+UPDATE workspace_invites
+SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+RETURNING workspace_id
+`
+
+func (q *Queries) ConsumeWorkspaceInvite(ctx context.Context, tokenHash string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, consumeWorkspaceInvite, tokenHash)
+	var workspace_id uuid.UUID
+	err := row.Scan(&workspace_id)
+	return workspace_id, err
+}
+
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (name, slug)
 VALUES ($1, $2)
@@ -86,6 +100,28 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const createWorkspaceInvite = `-- name: CreateWorkspaceInvite :exec
+INSERT INTO workspace_invites (workspace_id, token_hash, expires_at, created_by)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateWorkspaceInviteParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TokenHash   string    `json:"token_hash"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CreatedBy   uuid.UUID `json:"created_by"`
+}
+
+func (q *Queries) CreateWorkspaceInvite(ctx context.Context, arg CreateWorkspaceInviteParams) error {
+	_, err := q.db.Exec(ctx, createWorkspaceInvite,
+		arg.WorkspaceID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.CreatedBy,
+	)
+	return err
 }
 
 const getWorkspaceBySlug = `-- name: GetWorkspaceBySlug :one
@@ -129,7 +165,7 @@ func (q *Queries) GetWorkspaceMember(ctx context.Context, arg GetWorkspaceMember
 
 const listWorkspaceMembers = `-- name: ListWorkspaceMembers :many
 SELECT wm.workspace_id, wm.user_id, wm.role, wm.joined_at,
-	   u.email, u.display_name
+	u.email, u.display_name, u.presence_status
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = $1
@@ -138,12 +174,13 @@ ORDER BY CASE wm.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END,
 `
 
 type ListWorkspaceMembersRow struct {
-	WorkspaceID uuid.UUID `json:"workspace_id"`
-	UserID      uuid.UUID `json:"user_id"`
-	Role        string    `json:"role"`
-	JoinedAt    time.Time `json:"joined_at"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"display_name"`
+	WorkspaceID    uuid.UUID `json:"workspace_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	Role           string    `json:"role"`
+	JoinedAt       time.Time `json:"joined_at"`
+	Email          string    `json:"email"`
+	DisplayName    string    `json:"display_name"`
+	PresenceStatus string    `json:"presence_status"`
 }
 
 func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListWorkspaceMembersRow, error) {
@@ -162,6 +199,7 @@ func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUI
 			&i.JoinedAt,
 			&i.Email,
 			&i.DisplayName,
+			&i.PresenceStatus,
 		); err != nil {
 			return nil, err
 		}

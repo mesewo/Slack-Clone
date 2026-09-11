@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -75,6 +76,53 @@ func (q *Queries) IsChannelMember(ctx context.Context, arg IsChannelMemberParams
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const listChannelMembers = `-- name: ListChannelMembers :many
+SELECT cm.channel_id, cm.user_id, cm.joined_at, cm.last_read_at,
+    u.email, u.display_name, u.presence_status
+FROM channel_members cm
+JOIN users u ON u.id = cm.user_id
+WHERE cm.channel_id = $1
+ORDER BY u.display_name
+`
+
+type ListChannelMembersRow struct {
+	ChannelID      uuid.UUID `json:"channel_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	JoinedAt       time.Time `json:"joined_at"`
+	LastReadAt     time.Time `json:"last_read_at"`
+	Email          string    `json:"email"`
+	DisplayName    string    `json:"display_name"`
+	PresenceStatus string    `json:"presence_status"`
+}
+
+func (q *Queries) ListChannelMembers(ctx context.Context, channelID uuid.UUID) ([]ListChannelMembersRow, error) {
+	rows, err := q.db.Query(ctx, listChannelMembers, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChannelMembersRow
+	for rows.Next() {
+		var i ListChannelMembersRow
+		if err := rows.Scan(
+			&i.ChannelID,
+			&i.UserID,
+			&i.JoinedAt,
+			&i.LastReadAt,
+			&i.Email,
+			&i.DisplayName,
+			&i.PresenceStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChannelsForUser = `-- name: ListChannelsForUser :many
@@ -149,6 +197,21 @@ func (q *Queries) ListWorkspaceChannelsForUser(ctx context.Context, userID uuid.
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeChannelMember = `-- name: RemoveChannelMember :exec
+DELETE FROM channel_members
+WHERE channel_id = $1 AND user_id = $2
+`
+
+type RemoveChannelMemberParams struct {
+	ChannelID uuid.UUID `json:"channel_id"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RemoveChannelMember(ctx context.Context, arg RemoveChannelMemberParams) error {
+	_, err := q.db.Exec(ctx, removeChannelMember, arg.ChannelID, arg.UserID)
+	return err
 }
 
 const updateLastRead = `-- name: UpdateLastRead :exec

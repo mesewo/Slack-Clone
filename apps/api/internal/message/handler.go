@@ -62,11 +62,12 @@ type MessageResponse struct {
 }
 
 type AttachmentResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Filename    string    `json:"filename"`
-	ContentType string    `json:"content_type"`
-	SizeBytes   int64     `json:"size_bytes"`
-	URL         string    `json:"url"`
+	ID           uuid.UUID `json:"id"`
+	Filename     string    `json:"filename"`
+	ContentType  string    `json:"content_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	URL          string    `json:"url"`
+	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
 }
 
 func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID) []AttachmentResponse {
@@ -81,6 +82,9 @@ func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID
 			ID: attachment.ID, Filename: attachment.Filename,
 			ContentType: attachment.ContentType, SizeBytes: attachment.SizeBytes,
 			URL: "/api/uploads/" + attachment.ID.String(),
+		}
+		if attachment.ThumbnailPath.Valid && attachment.ThumbnailPath.String != "" {
+			item.ThumbnailURL = "/api/uploads/" + attachment.ID.String() + "/thumbnail"
 		}
 		result = append(result, item)
 	}
@@ -226,7 +230,9 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if memberIDs, memberErr := h.Queries.ListChannelMemberIDs(r.Context(), channelID); memberErr == nil {
 		for _, memberID := range memberIDs {
 			if memberID != userID {
-				_ = h.Queries.CreateNotification(r.Context(), memberID, "New message in a channel", authorName+": "+msg.Content, "open-chat", channelID)
+				if enabled, prefErr := h.Queries.NotificationEnabled(r.Context(), memberID, "mentions"); prefErr == nil && enabled {
+					_ = h.Queries.CreateNotification(r.Context(), memberID, "New message in a channel", authorName+": "+msg.Content, "open-chat", channelID)
+				}
 			}
 		}
 	}
@@ -604,6 +610,16 @@ func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 		authorName = ""
 	}
 	resp := MessageResponse{Message: reply, AuthorName: authorName}
+	if subscriberIDs, subscriberErr := h.Queries.ListThreadSubscriberIDs(r.Context(), parentID); subscriberErr == nil {
+		for _, subscriberID := range subscriberIDs {
+			if subscriberID == userID {
+				continue
+			}
+			if enabled, prefErr := h.Queries.NotificationEnabled(r.Context(), subscriberID, "thread_replies"); prefErr == nil && enabled {
+				_ = h.Queries.CreateNotification(r.Context(), subscriberID, "New thread reply", authorName+": "+reply.Content, "open-chat", channelID)
+			}
+		}
+	}
 
 	if payload, err := json.Marshal(resp); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventThreadReplyCreated, payload)

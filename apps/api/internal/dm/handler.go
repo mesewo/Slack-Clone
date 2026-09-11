@@ -26,10 +26,11 @@ type CreateRequest struct {
 	UserID string `json:"user_id"`
 }
 type ConversationResponse struct {
-	ID               uuid.UUID `json:"id"`
-	OtherUserID      uuid.UUID `json:"other_user_id"`
-	OtherDisplayName string    `json:"other_display_name"`
-	OtherEmail       string    `json:"other_email"`
+	ID                  uuid.UUID `json:"id"`
+	OtherUserID         uuid.UUID `json:"other_user_id"`
+	OtherDisplayName    string    `json:"other_display_name"`
+	OtherEmail          string    `json:"other_email"`
+	OtherPresenceStatus string    `json:"other_presence_status"`
 }
 type MessageResponse struct {
 	ID             uuid.UUID            `json:"id"`
@@ -44,11 +45,12 @@ type MessageResponse struct {
 }
 
 type AttachmentResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Filename    string    `json:"filename"`
-	ContentType string    `json:"content_type"`
-	SizeBytes   int64     `json:"size_bytes"`
-	URL         string    `json:"url"`
+	ID           uuid.UUID `json:"id"`
+	Filename     string    `json:"filename"`
+	ContentType  string    `json:"content_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	URL          string    `json:"url"`
+	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
 }
 
 type ReactionResponse struct {
@@ -64,7 +66,11 @@ func directAttachments(ctx context.Context, queries *database.Queries, messageID
 	}
 	result := make([]AttachmentResponse, 0, len(items))
 	for _, item := range items {
-		result = append(result, AttachmentResponse{ID: item.ID, Filename: item.Filename, ContentType: item.ContentType, SizeBytes: item.SizeBytes, URL: "/api/uploads/" + item.ID.String()})
+		attachment := AttachmentResponse{ID: item.ID, Filename: item.Filename, ContentType: item.ContentType, SizeBytes: item.SizeBytes, URL: "/api/uploads/" + item.ID.String()}
+		if item.ThumbnailPath.Valid && item.ThumbnailPath.String != "" {
+			attachment.ThumbnailURL = "/api/uploads/" + item.ID.String() + "/thumbnail"
+		}
+		result = append(result, attachment)
 	}
 	return result
 }
@@ -91,7 +97,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	result := make([]ConversationResponse, 0, len(items))
 	for _, item := range items {
-		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail})
+		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus})
 	}
 	writeJSON(w, result)
 }
@@ -228,7 +234,9 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if memberIDs, memberErr := h.Queries.ListDirectConversationMemberIDs(r.Context(), conversationID); memberErr == nil {
 		for _, memberID := range memberIDs {
 			if memberID != userID {
-				_ = h.Queries.CreateNotification(r.Context(), memberID, "New direct message", author+": "+message.Content, "open-chat", conversationID)
+				if enabled, prefErr := h.Queries.NotificationEnabled(r.Context(), memberID, "direct_messages"); prefErr == nil && enabled {
+					_ = h.Queries.CreateNotification(r.Context(), memberID, "New direct message", author+": "+message.Content, "open-chat", conversationID)
+				}
 			}
 		}
 	}

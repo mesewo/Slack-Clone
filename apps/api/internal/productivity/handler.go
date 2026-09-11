@@ -44,6 +44,20 @@ func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, item)
 }
+
+func (h *Handler) Threads(w http.ResponseWriter, r *http.Request) {
+	id, ok := currentUser(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	items, err := h.Queries.ListThreadsForUser(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load threads")
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	id, ok := currentUser(r)
 	if !ok {

@@ -27,6 +27,13 @@ type AddMemberRequest struct {
 	UserID string `json:"user_id"`
 }
 
+type ChannelMemberResponse struct {
+	database.ChannelMember
+	Email          string `json:"email"`
+	DisplayName    string `json:"display_name"`
+	PresenceStatus string `json:"presence_status"`
+}
+
 func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
 	if !ok {
@@ -171,6 +178,69 @@ func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.Queries.AddChannelMember(r.Context(), database.AddChannelMemberParams{ChannelID: channelID, UserID: targetID}); err != nil {
 		writeJSONError(w, http.StatusConflict, "user is already a channel member")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	channel, err := h.Queries.GetChannelByID(r.Context(), channelID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "channel not found")
+		return
+	}
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "invalid user")
+		return
+	}
+	if member, memberErr := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: channelID, UserID: userID}); memberErr != nil || !member {
+		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
+		return
+	}
+	members, err := h.Queries.ListChannelMembers(r.Context(), channelID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to list channel members")
+		return
+	}
+	response := make([]ChannelMemberResponse, 0, len(members))
+	for _, item := range members {
+		response = append(response, ChannelMemberResponse{ChannelMember: database.ChannelMember{ChannelID: item.ChannelID, UserID: item.UserID, JoinedAt: item.JoinedAt, LastReadAt: item.LastReadAt}, Email: item.Email, DisplayName: item.DisplayName, PresenceStatus: item.PresenceStatus})
+	}
+	json.NewEncoder(w).Encode(map[string]any{"channel": channel, "members": response})
+}
+
+func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
+	channelID, err := uuid.Parse(chi.URLParam(r, "channelID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid channel id")
+		return
+	}
+	channel, err := h.Queries.GetChannelByID(r.Context(), channelID)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "channel not found")
+		return
+	}
+	if _, ok := auth.RequireRole(w, r, h.Queries, channel.WorkspaceID, "OWNER", "ADMIN"); !ok {
+		return
+	}
+	targetID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	if err := h.Queries.RemoveChannelMember(r.Context(), database.RemoveChannelMemberParams{ChannelID: channelID, UserID: targetID}); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to remove channel member")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -5,6 +5,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -17,6 +22,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"golang.org/x/image/draw"
 )
 
 const maxUploadSize = 25 << 20
@@ -87,8 +93,21 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := uuid.New()
-	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), StoragePath: key, Column7: ""}); err != nil {
+	thumbnailPath := ""
+	if strings.HasPrefix(contentType, "image/") {
+		thumbnail, thumbnailErr := makeThumbnail(data)
+		if thumbnailErr == nil {
+			thumbnailPath = key + ".thumbnail.jpg"
+			if _, putErr := h.Store.PutObject(r.Context(), h.Bucket, thumbnailPath, bytes.NewReader(thumbnail), int64(len(thumbnail)), minio.PutObjectOptions{ContentType: "image/jpeg"}); putErr != nil {
+				thumbnailPath = ""
+			}
+		}
+	}
+	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), StoragePath: key, Column7: thumbnailPath}); err != nil {
 		_ = h.Store.RemoveObject(r.Context(), h.Bucket, key, minio.RemoveObjectOptions{})
+		if thumbnailPath != "" {
+			_ = h.Store.RemoveObject(r.Context(), h.Bucket, thumbnailPath, minio.RemoveObjectOptions{})
+		}
 		writeError(w, http.StatusInternalServerError, "failed to save attachment metadata")
 		return
 	}
@@ -149,8 +168,13 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	}
 	key, contentType, size := attachment.StoragePath, attachment.ContentType, attachment.SizeBytes
 	if chi.URLParam(r, "variant") == "thumbnail" {
-		writeError(w, http.StatusNotFound, "thumbnail downloads are no longer supported")
-		return
+		if !attachment.ThumbnailPath.Valid || attachment.ThumbnailPath.String == "" {
+			writeError(w, http.StatusNotFound, "thumbnail not available")
+			return
+		}
+		key = attachment.ThumbnailPath.String
+		contentType = "image/jpeg"
+		size = 0
 	}
 	object, err := h.Store.GetObject(r.Context(), h.Bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -168,8 +192,43 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+`"`)
+	if chi.URLParam(r, "variant") == "thumbnail" {
+		w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+".jpg\"")
+	} else {
+		w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+`"`)
+	}
 	_, _ = io.Copy(w, object)
+}
+
+func makeThumbnail(data []byte) ([]byte, error) {
+	source, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	bounds := source.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("invalid image dimensions")
+	}
+	const maxEdge = 200
+	scale := float64(maxEdge) / float64(max(width, height))
+	if scale > 1 {
+		scale = 1
+	}
+	destination := image.NewRGBA(image.Rect(0, 0, max(1, int(float64(width)*scale)), max(1, int(float64(height)*scale))))
+	draw.CatmullRom.Scale(destination, destination.Bounds(), source, bounds, draw.Over, nil)
+	var output bytes.Buffer
+	if err := jpeg.Encode(&output, destination, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+func max(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func allowedType(contentType string) bool {

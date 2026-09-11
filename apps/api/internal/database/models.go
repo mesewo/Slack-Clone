@@ -162,6 +162,16 @@ type Workspace struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type WorkspaceInvite struct {
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	TokenHash   string     `json:"token_hash"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	UsedAt      *time.Time `json:"used_at"`
+	CreatedBy   uuid.UUID  `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
 type WorkspaceMember struct {
 	WorkspaceID uuid.UUID `json:"workspace_id"`
 	UserID      uuid.UUID `json:"user_id"`

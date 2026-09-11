@@ -33,6 +33,59 @@ type ScheduledMessageRow struct {
 	SentAt         *time.Time `json:"sent_at,omitempty"`
 }
 
+type ThreadSummary struct {
+	ID             uuid.UUID  `json:"id"`
+	Kind           string     `json:"kind"`
+	ChannelID      *uuid.UUID `json:"channel_id,omitempty"`
+	ConversationID *uuid.UUID `json:"conversation_id,omitempty"`
+	Title          string     `json:"title"`
+	Preview        string     `json:"preview"`
+	ReplyCount     int32      `json:"reply_count"`
+	LastActivity   time.Time  `json:"last_activity"`
+}
+
+func (q *Queries) ListThreadsForUser(ctx context.Context, userID uuid.UUID) ([]ThreadSummary, error) {
+	rows, err := q.db.Query(ctx, `
+		WITH channel_threads AS (
+			SELECT parent.id, 'channel' AS kind, parent.channel_id, NULL::uuid AS conversation_id,
+			       '#' || c.name AS title, parent.content AS preview, parent.reply_count,
+			       GREATEST(parent.created_at, COALESCE(MAX(reply.created_at), parent.created_at)) AS last_activity
+			FROM messages parent
+			JOIN channels c ON c.id = parent.channel_id
+			JOIN channel_members cm ON cm.channel_id = parent.channel_id AND cm.user_id = $1
+			LEFT JOIN messages reply ON reply.parent_id = parent.id AND reply.deleted_at IS NULL
+			WHERE parent.parent_id IS NULL
+			  AND (parent.user_id = $1 OR EXISTS (SELECT 1 FROM messages mine WHERE mine.parent_id = parent.id AND mine.user_id = $1) OR EXISTS (SELECT 1 FROM thread_subscriptions ts WHERE ts.message_id = parent.id AND ts.user_id = $1))
+			GROUP BY parent.id, c.name
+		), dm_threads AS (
+			SELECT parent.id, 'dm' AS kind, NULL::uuid AS channel_id, parent.conversation_id,
+			       'Direct message' AS title, parent.content AS preview, parent.reply_count,
+			       GREATEST(parent.created_at, COALESCE(MAX(reply.created_at), parent.created_at)) AS last_activity
+			FROM direct_messages parent
+			JOIN direct_conversation_members member ON member.conversation_id = parent.conversation_id AND member.user_id = $1
+			LEFT JOIN direct_messages reply ON reply.parent_id = parent.id AND reply.deleted_at IS NULL
+			WHERE parent.parent_id IS NULL
+			  AND (parent.user_id = $1 OR EXISTS (SELECT 1 FROM direct_messages mine WHERE mine.parent_id = parent.id AND mine.user_id = $1))
+			GROUP BY parent.id
+		)
+		SELECT id, kind, channel_id, conversation_id, title, preview, reply_count, last_activity
+		FROM (SELECT * FROM channel_threads UNION ALL SELECT * FROM dm_threads) threads
+		ORDER BY last_activity DESC LIMIT 100`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []ThreadSummary
+	for rows.Next() {
+		var item ThreadSummary
+		if err := rows.Scan(&item.ID, &item.Kind, &item.ChannelID, &item.ConversationID, &item.Title, &item.Preview, &item.ReplyCount, &item.LastActivity); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 type NotificationPreferences struct {
 	Mentions       bool `json:"mentions"`
 	DirectMessages bool `json:"direct_messages"`
@@ -90,6 +143,42 @@ func (q *Queries) GetNotificationPreferences(ctx context.Context, userID uuid.UU
 	var item NotificationPreferences
 	err := q.db.QueryRow(ctx, `INSERT INTO notification_preferences (user_id) VALUES ($1) ON CONFLICT (user_id) DO UPDATE SET user_id = EXCLUDED.user_id RETURNING mentions, direct_messages, thread_replies, reactions`, userID).Scan(&item.Mentions, &item.DirectMessages, &item.ThreadReplies, &item.Reactions)
 	return item, err
+}
+
+func (q *Queries) NotificationEnabled(ctx context.Context, userID uuid.UUID, preference string) (bool, error) {
+	preferences, err := q.GetNotificationPreferences(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	switch preference {
+	case "mentions":
+		return preferences.Mentions, nil
+	case "direct_messages":
+		return preferences.DirectMessages, nil
+	case "thread_replies":
+		return preferences.ThreadReplies, nil
+	case "reactions":
+		return preferences.Reactions, nil
+	default:
+		return false, nil
+	}
+}
+
+func (q *Queries) ListThreadSubscriberIDs(ctx context.Context, messageID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, `SELECT user_id FROM thread_subscriptions WHERE message_id = $1`, messageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 func (q *Queries) UpdateNotificationPreferences(ctx context.Context, userID uuid.UUID, item NotificationPreferences) error {
 	_, err := q.db.Exec(ctx, `INSERT INTO notification_preferences (user_id, mentions, direct_messages, thread_replies, reactions, updated_at) VALUES ($1, $2, $3, $4, $5, now()) ON CONFLICT (user_id) DO UPDATE SET mentions = EXCLUDED.mentions, direct_messages = EXCLUDED.direct_messages, thread_replies = EXCLUDED.thread_replies, reactions = EXCLUDED.reactions, updated_at = now()`, userID, item.Mentions, item.DirectMessages, item.ThreadReplies, item.Reactions)
