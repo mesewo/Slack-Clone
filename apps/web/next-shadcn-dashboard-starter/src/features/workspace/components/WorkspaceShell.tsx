@@ -46,7 +46,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           <WorkspaceConversationSidebar />
         </SheetContent>
       </Sheet>
-      <main className="relative min-w-0 flex-1 pt-12 lg:pt-0">
+      <main className="relative min-w-0 flex-1 overflow-auto">
         <Button
           type="button"
           variant="ghost"

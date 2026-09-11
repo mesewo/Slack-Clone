@@ -7,6 +7,61 @@ import { FilePreview } from "@/components/ui/file-preview";
 import type { Attachment } from "../utils/types";
 import { toast } from "sonner";
 
+// File upload validation constants
+const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+const ALLOWED_FILE_TYPES = {
+  images: [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/svg+xml",
+  ],
+  videos: ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"],
+  documents: [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ],
+  general: ["*/*"],
+};
+
+const validateFiles = (
+  files: FileList,
+): { valid: File[]; errors: string[] } => {
+  const valid: File[] = [];
+  const errors: string[] = [];
+  const supportedMimes = [
+    ...ALLOWED_FILE_TYPES.images,
+    ...ALLOWED_FILE_TYPES.videos,
+    ...ALLOWED_FILE_TYPES.documents,
+  ];
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      errors.push(
+        `${file.name} exceeds the ${(MAX_FILE_SIZE / (1024 * 1024)).toFixed(0)}MB file size limit (${(file.size / (1024 * 1024)).toFixed(2)}MB)`,
+      );
+      continue;
+    }
+
+    // Check MIME type
+    if (!supportedMimes.includes(file.type) && file.type !== "") {
+      errors.push(
+        `${file.name} has unsupported file type "${file.type}". Supported: images, videos, and documents`,
+      );
+      continue;
+    }
+
+    valid.push(file);
+  }
+
+  return { valid, errors };
+};
+
 const emojiOptions = [
   "👍",
   "🎉",
@@ -423,7 +478,17 @@ export function MessageComposer({
             className="hidden"
             onChange={(e) => {
               if (e.target.files?.length) {
-                onAddAttachments(e.target.files);
+                const { valid, errors } = validateFiles(e.target.files);
+
+                if (errors.length > 0) {
+                  errors.forEach((error) => {
+                    toast.error(error);
+                  });
+                }
+
+                if (valid.length > 0) {
+                  onAddAttachments(e.target.files);
+                }
               }
               e.target.value = "";
             }}

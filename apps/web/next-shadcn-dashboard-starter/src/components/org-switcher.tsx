@@ -10,6 +10,7 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -79,7 +80,9 @@ export function OrgSwitcher() {
             <Icons.chevronsUpDown className="ml-auto" />
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-64" align="start">
-            <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+            </DropdownMenuGroup>
             {workspaces.map((workspace) => (
               <DropdownMenuItem
                 key={workspace.id}
