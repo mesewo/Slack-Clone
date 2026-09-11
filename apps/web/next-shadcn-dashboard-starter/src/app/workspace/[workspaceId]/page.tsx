@@ -12,6 +12,19 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     let active = true;
+    const lastVisited = window.localStorage.getItem(
+      `slack_last_conversation_id:${workspaceId}`,
+    );
+    if (lastVisited) {
+      router.replace(
+        lastVisited.startsWith("dm:")
+          ? `/workspace/${workspaceId}/dms/${lastVisited.slice(3)}`
+          : `/workspace/${workspaceId}/channels/${lastVisited}`,
+      );
+      return () => {
+        active = false;
+      };
+    }
     channelService
       .list(workspaceId)
       .then((channels) => {

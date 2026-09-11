@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useChatStore } from "@/features/chat/utils/store";
 import { messageService } from "@/features/workspace/services/messageService";
 import { IconX } from "@tabler/icons-react";
+import { AttachmentDownloadButton } from "@/features/chat/components/AttachmentDownloadButton";
 
 interface ThreadPanelProps {
   parentMessage: {
@@ -12,6 +13,13 @@ interface ThreadPanelProps {
     author: string;
     text: string;
     replyCount?: number;
+    attachments?: Array<{
+      id: string;
+      name: string;
+      type: string;
+      url?: string;
+      thumbnailUrl?: string;
+    }>;
   };
 }
 
@@ -84,6 +92,35 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
           </span>
         </div>
         <p className="text-sm text-foreground">{parentMessage.text}</p>
+        {parentMessage.attachments?.map((attachment) => (
+          <div
+            key={attachment.id}
+            className="mt-2 flex items-center gap-2 rounded-md bg-background/60 p-2"
+          >
+            {attachment.type.startsWith("image/") && attachment.url ? (
+              <img
+                src={attachment.thumbnailUrl || attachment.url}
+                alt={attachment.name}
+                className="size-12 rounded object-cover"
+              />
+            ) : (
+              <span className="text-muted-foreground text-xs">
+                {attachment.type || "Attachment"}
+              </span>
+            )}
+            <span className="min-w-0 flex-1 truncate text-xs">
+              {attachment.name}
+            </span>
+            {attachment.url && (
+              <AttachmentDownloadButton
+                id={attachment.id}
+                url={attachment.url}
+                filename={attachment.name}
+                contentType={attachment.type}
+              />
+            )}
+          </div>
+        ))}
       </div>
 
       {/* Thread Replies */}

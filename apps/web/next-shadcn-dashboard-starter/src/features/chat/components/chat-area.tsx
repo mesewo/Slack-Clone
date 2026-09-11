@@ -12,6 +12,8 @@ import type { Attachment, Conversation } from "../utils/types";
 import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
+import { PresenceIndicator } from "./PresenceIndicator";
+import { useChatStore } from "../utils/store";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -34,6 +36,7 @@ interface ChatAreaProps {
   loadingOlderMessages: boolean;
   onSchedule: (scheduledFor: string) => Promise<void>;
   typingUserCount: number;
+  canManageChannel?: boolean;
 }
 
 export function ChatArea({
@@ -57,7 +60,9 @@ export function ChatArea({
   loadingOlderMessages,
   onSchedule,
   typingUserCount,
+  canManageChannel,
 }: ChatAreaProps) {
+  const userPresence = useChatStore((state) => state.userPresence);
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const newMessagesMarkerRef = useRef<HTMLDivElement | null>(null);
@@ -212,7 +217,10 @@ export function ChatArea({
           transition={{ duration: 0.32, ease: "easeOut" }}
           className="border-border/60 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-[22px] border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
         >
-          <ChatHeader conversation={conversation} />
+          <ChatHeader
+            conversation={conversation}
+            canManageChannel={canManageChannel}
+          />
           <div className="relative px-3 sm:px-4">
             <Icons.search
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 sm:left-6"
@@ -256,11 +264,12 @@ export function ChatArea({
             )}
           </div>
           <div className="text-muted-foreground flex min-h-3 items-center gap-2 px-3 text-[0.7rem] sm:px-4">
-            <span>
-              {conversation.kind === "dm" && conversation.status === "online"
-                ? "Online"
-                : ""}
-            </span>
+            {conversation.kind === "dm" && conversation.otherUserId && (
+              <PresenceIndicator
+                state={userPresence[conversation.otherUserId] || "offline"}
+                customStatus={conversation.customStatus}
+              />
+            )}
             {typingUserCount > 0 && (
               <span className="text-primary">
                 {typingUserCount === 1

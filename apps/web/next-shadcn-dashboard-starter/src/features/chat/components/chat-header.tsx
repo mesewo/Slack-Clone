@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 import type { Conversation } from "../utils/types";
 import { toast } from "sonner";
 import { useState } from "react";
+import { ChannelMembersPanel } from "./ChannelMembersPanel";
+import { PresenceIndicator } from "./PresenceIndicator";
+import { useChatStore } from "../utils/store";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -17,8 +20,16 @@ interface ChatHeaderProps {
   conversation: Conversation;
 }
 
-export function ChatHeader({ conversation }: ChatHeaderProps) {
+export function ChatHeader({
+  conversation,
+  canManageChannel,
+}: ChatHeaderProps & { canManageChannel?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const userPresence = useChatStore((state) => state.userPresence);
+  const presence = conversation.otherUserId
+    ? userPresence[conversation.otherUserId] || "offline"
+    : "offline";
   return (
     <header className="border-border/60 bg-muted/30 relative flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:gap-4 sm:px-4">
       <div className="flex items-center gap-2 sm:gap-3">
@@ -28,13 +39,13 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
               {conversation.initials}
             </AvatarFallback>
           </Avatar>
-          <span
-            className={cn(
-              "border-background absolute right-0 bottom-0 inline-flex h-3 w-3 rounded-full border-2 sm:h-3.5 sm:w-3.5",
-              statusDotColor[conversation.status],
-            )}
-            aria-label={conversation.status === "online" ? "Online" : "Offline"}
-          />
+          {conversation.kind === "dm" && (
+            <PresenceIndicator
+              state={presence}
+              customStatus={conversation.customStatus}
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2"
+            />
+          )}
         </div>
         <div>
           <p className="text-foreground text-sm font-semibold tracking-tight sm:text-base">
@@ -91,10 +102,13 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => toast.info("Channel details are coming soon")}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setMembersOpen(true);
+                  }}
                   className="hover:bg-accent w-full rounded-lg px-3 py-2 text-left text-xs"
                 >
-                  Channel details
+                  Channel members
                 </button>
               </>
             ) : (
@@ -134,6 +148,15 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
           </div>
         )}
       </div>
+      {membersOpen &&
+        conversation.kind === "channel" &&
+        canManageChannel !== undefined && (
+          <ChannelMembersPanel
+            channelId={conversation.id}
+            canManage={canManageChannel}
+            onClose={() => setMembersOpen(false)}
+          />
+        )}
     </header>
   );
 }

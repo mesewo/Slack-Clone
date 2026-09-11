@@ -19,6 +19,8 @@ export default function WorkspaceAdminPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [creatingInvite, setCreatingInvite] = useState(false);
 
   async function loadMembers() {
     try {
@@ -72,6 +74,19 @@ export default function WorkspaceAdminPage() {
     }
   }
 
+  async function createInvite() {
+    setCreatingInvite(true);
+    setError(null);
+    try {
+      const invite = await workspaceService.createInvite(workspaceId);
+      setInviteLink(`${window.location.origin}/workspace/join/${invite.token}`);
+    } catch {
+      setError("The invite link could not be created.");
+    } finally {
+      setCreatingInvite(false);
+    }
+  }
+
   if (currentRole === "MEMBER") {
     return (
       <div className="p-8">
@@ -93,6 +108,38 @@ export default function WorkspaceAdminPage() {
         <p className="text-muted-foreground mt-1 text-sm">
           Manage workspace members and roles.
         </p>
+      </div>
+      <div className="border-border space-y-3 rounded-lg border p-4">
+        <div>
+          <h2 className="font-medium">Invite people</h2>
+          <p className="text-muted-foreground text-sm">
+            Create a single-use invite link valid for 24 hours.
+          </p>
+        </div>
+        <Button
+          type="button"
+          onClick={() => void createInvite()}
+          disabled={creatingInvite}
+        >
+          {creatingInvite ? "Creating link..." : "Create invite link"}
+        </Button>
+        {inviteLink && (
+          <div className="flex gap-2">
+            <input
+              readOnly
+              value={inviteLink}
+              className="bg-muted min-w-0 flex-1 rounded border px-2 py-1 text-sm"
+              aria-label="Workspace invite link"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void navigator.clipboard?.writeText(inviteLink)}
+            >
+              Copy
+            </Button>
+          </div>
+        )}
       </div>
       {error && <p className="text-destructive text-sm">{error}</p>}
       <div className="border-border divide-border overflow-hidden rounded-lg border divide-y">

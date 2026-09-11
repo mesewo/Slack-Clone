@@ -6,17 +6,16 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
 }: {
-  params: { workspaceId: string; channelId: string };
+  params: Promise<{ workspaceId: string; channelId: string }>;
 }): Promise<Metadata> {
+  const resolvedParams = await params;
   return {
-    title: `Channel ${params.channelId}`,
+    title: `Channel ${resolvedParams.channelId}`,
   };
 }
 
-export default function ChannelPage({
-  params,
-}: {
-  params: { workspaceId: string; channelId: string };
+export default function ChannelPage({}: {
+  params: Promise<{ workspaceId: string; channelId: string }>;
 }) {
   return <WorkspaceChatView />;
 }

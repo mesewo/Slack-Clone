@@ -14,6 +14,7 @@ export interface WorkspaceMember {
   joined_at: string;
   email: string;
   display_name: string;
+  presence_status?: string;
 }
 
 function makeUniqueSlug(name: string, attempt = 0): string {
@@ -87,5 +88,17 @@ export const workspaceService = {
 
   async removeMember(workspaceId: string, userId: string): Promise<void> {
     await apiClient.delete(`/api/workspaces/${workspaceId}/members/${userId}`);
+  },
+
+  async createInvite(
+    workspaceId: string,
+  ): Promise<{ token: string; expires_at: string }> {
+    const res = await apiClient.post(`/api/workspaces/${workspaceId}/invites`);
+    return res.data;
+  },
+
+  async acceptInvite(token: string): Promise<{ workspace_id: string }> {
+    const res = await apiClient.post(`/api/workspaces/join/${token}`);
+    return res.data;
   },
 };

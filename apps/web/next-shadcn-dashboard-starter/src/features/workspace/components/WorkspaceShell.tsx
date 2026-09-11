@@ -28,6 +28,7 @@ import {
   type Workspace,
 } from "@/features/workspace/services/workspaceService";
 import { WorkspaceConversationSidebar } from "./WorkspaceConversationSidebar";
+import { WorkspacePanelSystem } from "./WorkspacePanelSystem";
 
 type UnreadCounts = Record<string, number>;
 
@@ -393,6 +394,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
       <main className="min-w-0 flex-1">{children}</main>
+      <WorkspacePanelSystem />
     </div>
   );
 }

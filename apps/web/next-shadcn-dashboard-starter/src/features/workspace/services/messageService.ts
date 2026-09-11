@@ -30,6 +30,17 @@ export interface MessageSearchResult {
   created_at: string;
 }
 
+export interface ThreadSummary {
+  id: string;
+  kind: "channel" | "dm";
+  channel_id?: string;
+  conversation_id?: string;
+  title: string;
+  preview: string;
+  reply_count: number;
+  last_activity: string;
+}
+
 export interface UploadedAttachment {
   id: string;
   filename: string;
@@ -44,6 +55,7 @@ export interface DirectConversation {
   other_user_id: string;
   other_display_name: string;
   other_email: string;
+  other_presence_status?: string;
 }
 
 export interface DirectUser {
@@ -53,6 +65,10 @@ export interface DirectUser {
 }
 
 export const messageService = {
+  async listThreads(): Promise<ThreadSummary[]> {
+    const res = await apiClient.get<ThreadSummary[]>("/api/threads");
+    return res.data ?? [];
+  },
   async listDMs(): Promise<DirectConversation[]> {
     const res = await apiClient.get<DirectConversation[]>("/api/dms");
     return res.data ?? [];

@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "../utils/types";
+import { useChatStore } from "../utils/store";
+import { PresenceIndicator } from "./PresenceIndicator";
 import {
   messageService,
   type DirectUser,
@@ -33,6 +35,7 @@ export function ConversationList({
   onCreateChannel,
   onCreateDM,
 }: ConversationListProps) {
+  const userPresence = useChatStore((state) => state.userPresence);
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
   const [search, setSearch] = useState("");
@@ -200,14 +203,14 @@ export function ConversationList({
                       {conversation.initials}
                     </AvatarFallback>
                   </Avatar>
-                  <span
-                    className={cn(
-                      "border-background absolute right-0 bottom-0 inline-flex h-3 w-3 rounded-full border-2",
-                      statusDotColor[conversation.status],
-                    )}
-                    aria-label={
-                      conversation.status === "online" ? "Online" : "Offline"
+                  <PresenceIndicator
+                    state={
+                      conversation.otherUserId
+                        ? userPresence[conversation.otherUserId] || "offline"
+                        : "offline"
                     }
+                    customStatus={conversation.customStatus}
+                    className="absolute right-0 bottom-0"
                   />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1">
@@ -310,14 +313,13 @@ export function ConversationList({
                   {conversation.initials}
                 </AvatarFallback>
               </Avatar>
-              <span
-                className={cn(
-                  "size-2 rounded-full",
-                  conversation.status === "online" && "bg-emerald-500",
-                )}
-                aria-label={
-                  conversation.status === "online" ? "Online" : "Offline"
+              <PresenceIndicator
+                state={
+                  conversation.otherUserId
+                    ? userPresence[conversation.otherUserId] || "offline"
+                    : "offline"
                 }
+                customStatus={conversation.customStatus}
               />
               <span className="truncate">{conversation.name}</span>
               {conversation.unread > 0 && (

@@ -39,4 +39,5 @@ export type Conversation = {
   kind?: "channel" | "dm";
   dmId?: string;
   otherUserId?: string;
+  customStatus?: string | null;
 };

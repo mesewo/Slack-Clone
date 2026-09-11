@@ -99,6 +99,7 @@ function toDMConversation(dm: DirectConversation): Conversation {
     kind: "dm",
     dmId: dm.id,
     otherUserId: dm.other_user_id,
+    customStatus: dm.other_presence_status || null,
   };
 }
 
@@ -119,7 +120,7 @@ type ChatState = {
   loadingThreadReplies: boolean;
 
   // Presence & Typing state
-  userPresence: Record<string, "active" | "away" | "dnd">;
+  userPresence: Record<string, "active" | "away" | "dnd" | "offline">;
   typingUsers: Record<string, string[]>; // channelId -> [userId, ...]
 
   // Reactions: messageId -> [{ userId, emoji }, ...]
@@ -290,6 +291,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           : state.drafts,
     }));
     window.localStorage.setItem(lastConversationKey, id);
+    if (get().workspace?.id) {
+      window.localStorage.setItem(
+        `${lastConversationKey}:${get().workspace!.id}`,
+        id,
+      );
+    }
 
     const conversation = get().conversations.find((c) => c.id === id);
     if (!conversation || conversation.messages.length > 0) return; // already loaded
@@ -714,7 +721,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // Presence & typing methods
   setUserPresence: (userId: string, status: string) => {
     set((state) => ({
-      userPresence: { ...state.userPresence, [userId]: status as any },
+      userPresence: {
+        ...state.userPresence,
+        [userId]:
+          status === "active" || status === "away" || status === "dnd"
+            ? status
+            : "offline",
+      },
     }));
   },
 

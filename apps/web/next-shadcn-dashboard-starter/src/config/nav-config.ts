@@ -53,14 +53,6 @@ export const navGroups: NavGroup[] = [
         items: [],
       },
       {
-        title: "Teams",
-        url: "/dashboard/workspaces/team",
-        icon: "teams",
-        isActive: false,
-        items: [],
-        access: { requireOrg: true },
-      },
-      {
         title: "Product",
         url: "/dashboard/product",
         icon: "product",

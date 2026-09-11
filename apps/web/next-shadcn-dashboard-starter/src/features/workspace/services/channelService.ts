@@ -9,6 +9,16 @@ export interface Channel {
   created_at: string;
 }
 
+export interface ChannelMember {
+  channel_id: string;
+  user_id: string;
+  joined_at: string;
+  last_read_at: string;
+  email: string;
+  display_name: string;
+  presence_status?: string;
+}
+
 export const channelService = {
   async create(data: {
     workspace_id: string;
@@ -28,5 +38,22 @@ export const channelService = {
       params: { workspace_id: workspaceId },
     });
     return res.data;
+  },
+
+  async listMembers(channelId: string): Promise<ChannelMember[]> {
+    const res = await apiClient.get<{ members: ChannelMember[] }>(
+      `/api/channels/${channelId}/members`,
+    );
+    return res.data.members ?? [];
+  },
+
+  async addMember(channelId: string, userId: string): Promise<void> {
+    await apiClient.post(`/api/channels/${channelId}/members`, {
+      user_id: userId,
+    });
+  },
+
+  async removeMember(channelId: string, userId: string): Promise<void> {
+    await apiClient.delete(`/api/channels/${channelId}/members/${userId}`);
   },
 };

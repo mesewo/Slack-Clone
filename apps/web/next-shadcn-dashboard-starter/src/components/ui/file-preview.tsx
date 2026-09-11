@@ -4,6 +4,7 @@ import type { FC } from "react";
 import { useState } from "react";
 import Image from "next/image";
 import { Icons } from "@/components/icons";
+import { AttachmentDownloadButton } from "@/features/chat/components/AttachmentDownloadButton";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -183,51 +184,8 @@ export const FilePreview: FC<FilePreviewProps> = ({
   variant = "default",
 }) => {
   const isInverted = variant === "inverted";
-  const [downloads, setDownloads] = useState<Record<string, number>>({});
-  const [downloading, setDownloading] = useState<Record<string, boolean>>({});
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   if (files.length === 0) return null;
-
-  const downloadFile = async (file: UploadedFile) => {
-    if (!file.url || downloading[file.id]) return;
-    setDownloading((current) => ({ ...current, [file.id]: true }));
-    setDownloads((current) => ({ ...current, [file.id]: 0 }));
-    try {
-      const response = await fetch(file.url, { credentials: "include" });
-      if (!response.ok || !response.body) throw new Error("Download failed");
-      const total = Number(response.headers.get("content-length")) || 0;
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (value) {
-          chunks.push(value);
-          received += value.length;
-          if (total > 0) {
-            setDownloads((current) => ({
-              ...current,
-              [file.id]: Math.round((received / total) * 100),
-            }));
-          }
-        }
-      }
-      const objectUrl = URL.createObjectURL(
-        new Blob(chunks as BlobPart[], { type: file.type }),
-      );
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = file.name;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
-      setDownloads((current) => ({ ...current, [file.id]: 100 }));
-    } finally {
-      setDownloading((current) => ({ ...current, [file.id]: false }));
-    }
-  };
 
   return (
     <div className={cn("flex w-full flex-col gap-2 rounded-xl p-2", className)}>
@@ -336,45 +294,13 @@ export const FilePreview: FC<FilePreviewProps> = ({
               </>
             )}
             {file.url && (
-              <button
-                type="button"
-                onClick={() => void downloadFile(file)}
-                disabled={downloading[file.id]}
-                className="text-primary absolute right-2 bottom-1 text-[0.65rem] font-medium hover:underline"
-              >
-                {downloading[file.id]
-                  ? `Downloading ${downloads[file.id] || 0}%`
-                  : downloads[file.id] === 100
-                    ? "Downloaded"
-                    : "Download"}
-              </button>
-            )}
-            {file.url && downloads[file.id] !== 100 && (
-              <button
-                type="button"
-                onClick={() => void downloadFile(file)}
-                disabled={downloading[file.id]}
-                className="bg-background/70 text-foreground hover:bg-background/90 absolute top-1/2 left-1/2 z-10 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full shadow-sm backdrop-blur"
-                aria-label={
-                  downloading[file.id]
-                    ? `Downloading ${file.name}`
-                    : `Download ${file.name}`
-                }
-              >
-                {downloading[file.id] ? (
-                  <Icons.spinner size={16} className="animate-spin" />
-                ) : (
-                  <Icons.chevronDown size={18} />
-                )}
-              </button>
-            )}
-            {downloading[file.id] && (
-              <div className="absolute right-2 bottom-0 left-2 h-0.5 overflow-hidden rounded-full bg-primary/20">
-                <div
-                  className="bg-primary h-full transition-[width] duration-150"
-                  style={{ width: `${downloads[file.id] || 12}%` }}
-                />
-              </div>
+              <AttachmentDownloadButton
+                id={file.id}
+                url={file.url}
+                filename={file.name}
+                contentType={file.type}
+                className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+              />
             )}
           </div>
         ))}
@@ -412,13 +338,13 @@ export const FilePreview: FC<FilePreviewProps> = ({
             </video>
           ) : null}
           {previewFile?.url && (
-            <button
-              type="button"
-              onClick={() => void downloadFile(previewFile)}
-              className="text-primary self-end text-xs font-medium hover:underline"
-            >
-              Download attachment
-            </button>
+            <AttachmentDownloadButton
+              id={previewFile.id}
+              url={previewFile.url}
+              filename={previewFile.name}
+              contentType={previewFile.type}
+              className="self-end"
+            />
           )}
         </DialogContent>
       </Dialog>

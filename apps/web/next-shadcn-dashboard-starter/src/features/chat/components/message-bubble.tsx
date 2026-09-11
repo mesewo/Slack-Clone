@@ -317,6 +317,7 @@ export function MessageBubble({
         !compact && "mt-2",
       )}
       role="group"
+      id={`message-${message.id}`}
       data-message-id={message.id}
       aria-label={message.author + " at " + message.timestamp}
       onClick={(event) => {
@@ -570,6 +571,20 @@ export function MessageBubble({
               className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
             >
               Copy text
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void navigator.clipboard?.writeText(
+                  `${window.location.origin}${window.location.pathname}#message-${message.id}`,
+                );
+                toast.success("Message link copied");
+                setMenuOpen(false);
+              }}
+              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Copy link to message
             </button>
             {isUser && (
               <>

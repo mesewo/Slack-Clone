@@ -8,6 +8,7 @@ import { useChatStore } from "@/features/chat/utils/store";
 import type { Attachment, Message } from "@/features/chat/utils/types";
 import { messageService } from "@/features/workspace/services/messageService";
 import { productivityService } from "@/features/workspace/services/productivityService";
+import { workspaceService } from "@/features/workspace/services/workspaceService";
 import { ConversationSelect } from "@/features/chat/components/conversation-select";
 import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
@@ -27,6 +28,7 @@ export function WorkspaceChatView() {
       ? `dm:${params.dmId || params.conversationId}`
       : "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [workspaceRole, setWorkspaceRole] = useState<string | null>(null);
   const {
     conversations,
     selectedConversationId,
@@ -58,6 +60,12 @@ export function WorkspaceChatView() {
   }, [selectedConversationId, selectedRouteId, selectConversation]);
 
   useEffect(() => setAttachments([]), [selectedConversationId]);
+  useEffect(() => {
+    void workspaceService
+      .listMembers(params.workspaceId)
+      .then((result) => setWorkspaceRole(result.role))
+      .catch(() => setWorkspaceRole(null));
+  }, [params.workspaceId]);
 
   const activeConversation = getActiveConversation();
   const handleMarkRead = useCallback(() => {
@@ -181,6 +189,10 @@ export function WorkspaceChatView() {
           (typingUsers[selectedConversationId] || []).filter(
             (id) => id !== currentUserId,
           ).length
+        }
+        canManageChannel={
+          activeConversation.kind === "channel" &&
+          (workspaceRole === "OWNER" || workspaceRole === "ADMIN")
         }
       />
       {parentMessage && <ThreadPanel parentMessage={parentMessage} />}
