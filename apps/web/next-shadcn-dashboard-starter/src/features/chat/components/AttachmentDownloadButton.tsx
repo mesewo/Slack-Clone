@@ -9,12 +9,14 @@ export function AttachmentDownloadButton({
   filename,
   contentType,
   className = "",
+  onImagePreview,
 }: {
   id: string;
   url: string;
   filename: string;
   contentType?: string;
   className?: string;
+  onImagePreview?: (blob: Blob) => void;
 }) {
   const [progress, setProgress] = useState(0);
   const [state, setState] = useState<"idle" | "downloading" | "complete">(
@@ -41,6 +43,17 @@ export function AttachmentDownloadButton({
         if (total > 0) setProgress(Math.round((received / total) * 100));
       }
       const blob = new Blob(chunks as BlobPart[], { type: contentType });
+
+      // For images with lightbox callback, open lightbox instead of downloading
+      if (contentType?.startsWith("image/") && onImagePreview) {
+        onImagePreview(blob);
+        setProgress(100);
+        setState("complete");
+        window.setTimeout(() => setState("idle"), 1400);
+        return;
+      }
+
+      // For video/other files or no lightbox callback, save to disk
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;

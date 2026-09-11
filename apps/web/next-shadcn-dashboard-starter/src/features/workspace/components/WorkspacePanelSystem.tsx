@@ -99,7 +99,7 @@ export function WorkspacePanelSystem() {
 
   return (
     <>
-      <div className="fixed right-3 top-20 z-40 flex flex-col gap-1 rounded-lg border bg-background/95 p-1 shadow-lg backdrop-blur">
+      <div className="absolute right-3 top-3 z-40 flex flex-col gap-1 rounded-lg border bg-background/95 p-1 shadow-[0_8px_24px_rgba(15,23,42,0.12)] backdrop-blur">
         <PanelButton
           label="Threads"
           icon={<IconMessageCircle className="size-4" />}

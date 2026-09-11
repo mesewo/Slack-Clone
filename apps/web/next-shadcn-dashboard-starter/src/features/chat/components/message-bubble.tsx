@@ -479,9 +479,11 @@ export function MessageBubble({
               type: a.type,
               url: a.url,
               description: a.url,
+              size: a.size,
             }))}
             variant={isUser ? "inverted" : "default"}
             className="mt-1 p-0"
+            maxAutoPreviewSize={2 * 1024 * 1024}
           />
         )}
         {compact && (
