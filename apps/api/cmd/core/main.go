@@ -357,6 +357,7 @@ func main() {
 		r.Post("/api/channels/{channelID}/read", channelHandler.MarkRead)
 		r.Get("/api/channels/{channelID}/unread", channelHandler.Unread)
 		r.Get("/api/dms", dmHandler.List)
+		r.Post("/api/dms/self", dmHandler.Self)
 		r.Get("/api/dms/users", dmHandler.Users)
 		r.Post("/api/dms", dmHandler.Create)
 		r.Get("/api/dms/{conversationID}/messages", dmHandler.ListMessages)

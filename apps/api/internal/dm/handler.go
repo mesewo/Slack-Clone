@@ -99,7 +99,26 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	for _, item := range items {
 		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus})
 	}
+	if selfID, selfErr := h.Queries.FindSelfDirectConversation(r.Context(), userID); selfErr == nil {
+		if self, userErr := h.Queries.GetUserByID(r.Context(), userID); userErr == nil {
+			result = append(result, ConversationResponse{ID: selfID, OtherUserID: userID, OtherDisplayName: self.DisplayName, OtherEmail: self.Email, OtherPresenceStatus: self.PresenceStatus})
+		}
+	}
 	writeJSON(w, result)
+}
+
+func (h *Handler) Self(w http.ResponseWriter, r *http.Request) {
+	userID, ok := currentUser(r)
+	if !ok {
+		writeError(w, 401, "not authenticated")
+		return
+	}
+	conversationID, err := h.Queries.CreateSelfDirectConversation(r.Context(), userID)
+	if err != nil {
+		writeError(w, 500, "failed to create self direct message")
+		return
+	}
+	writeJSON(w, map[string]string{"id": conversationID.String()})
 }
 
 func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
