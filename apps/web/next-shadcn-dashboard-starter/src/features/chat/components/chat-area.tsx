@@ -24,6 +24,7 @@ interface ChatAreaProps {
   attachments: Attachment[];
   onAddAttachments: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
+  isUploading?: boolean;
   onOpenThread: (message: import("../utils/types").Message) => void;
   reactions: Record<string, Array<{ userId: string; emoji: string }>>;
   currentUserId: string;
@@ -48,6 +49,7 @@ export function ChatArea({
   attachments,
   onAddAttachments,
   onRemoveAttachment,
+  isUploading,
   onOpenThread,
   reactions,
   currentUserId,
@@ -194,6 +196,15 @@ export function ChatArea({
     onMarkRead();
   };
 
+  const dateLabel = (message: (typeof conversation.messages)[number]) => {
+    if (!message.createdAt) return null;
+    return new Date(message.createdAt).toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
   useEffect(() => {
     if (!liveRegionRef.current) return;
     const lastMessage = conversation.messages[conversation.messages.length - 1];
@@ -286,9 +297,24 @@ export function ChatArea({
             aria-live="off"
             aria-label={"Message thread with " + conversation.name}
           >
+            {conversation.name.endsWith("(you)") &&
+              conversation.messages.length === 0 && (
+                <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
+                  <div className="bg-sidebar-primary/15 text-sidebar-primary mb-4 flex size-14 items-center justify-center rounded-2xl">
+                    <Icons.user className="size-7" />
+                  </div>
+                  <h2 className="text-lg font-semibold">This is your space</h2>
+                  <p className="text-muted-foreground mt-2 max-w-md text-sm">
+                    Draft messages, list your to-dos, or keep links and files
+                    handy. Only you can see this conversation.
+                  </p>
+                </div>
+              )}
             <AnimatePresence initial={false}>
               {conversation.messages.map((message, index) => {
                 const previous = conversation.messages[index - 1];
+                const currentDate = dateLabel(message);
+                const previousDate = previous ? dateLabel(previous) : null;
                 const compact = Boolean(
                   previous &&
                   previous.sender === message.sender &&
@@ -296,6 +322,13 @@ export function ChatArea({
                 );
                 return (
                   <div key={message.id}>
+                    {currentDate !== previousDate && currentDate && (
+                      <div className="text-muted-foreground my-5 flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.14em]">
+                        <span className="bg-border h-px flex-1" />
+                        <span>{currentDate}</span>
+                        <span className="bg-border h-px flex-1" />
+                      </div>
+                    )}
                     {conversation.unread > 0 &&
                       index ===
                         Math.max(
@@ -349,6 +382,7 @@ export function ChatArea({
             attachments={attachments}
             onAddAttachments={onAddAttachments}
             onRemoveAttachment={onRemoveAttachment}
+            isUploading={isUploading}
             mentionSuggestions={mentionSuggestions}
             onSchedule={onSchedule}
           />

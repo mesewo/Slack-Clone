@@ -20,14 +20,12 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar";
 
 const activeWorkspaceKey = "active_workspace_id";
 
 export function OrgSwitcher() {
   const router = useRouter();
-  const { state } = useSidebar();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeId, setActiveId] = useState("");
 
@@ -49,7 +47,7 @@ export function OrgSwitcher() {
   const selectWorkspace = (workspace: Workspace) => {
     setActiveId(workspace.id);
     window.localStorage.setItem(activeWorkspaceKey, workspace.id);
-    router.push(`/dashboard/workspaces?workspace_id=${workspace.id}`);
+    router.push(`/home/${workspace.id}`);
   };
 
   return (
@@ -57,27 +55,14 @@ export function OrgSwitcher() {
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger
-            render={<SidebarMenuButton size="lg" tooltip="Workspace" />}
+            render={<SidebarMenuButton tooltip="Workspace" />}
           >
             <div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
               <Icons.galleryVerticalEnd className="size-4" />
             </div>
-            <div
-              className={
-                state === "collapsed"
-                  ? "invisible max-w-0 overflow-hidden"
-                  : "grid min-w-0 flex-1 text-left"
-              }
-            >
-              <span className="truncate text-sm font-medium">
-                {active?.name || "Select workspace"}
-              </span>
-              <span className="text-muted-foreground truncate text-xs">
-                {workspaces.length} workspace
-                {workspaces.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <Icons.chevronsUpDown className="ml-auto" />
+            <span className="sr-only">
+              {active?.name || "Select workspace"}
+            </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-64" align="start">
             <DropdownMenuGroup>
@@ -96,9 +81,7 @@ export function OrgSwitcher() {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => router.push("/dashboard/workspaces")}
-            >
+            <DropdownMenuItem onClick={() => router.push("/home")}>
               <Icons.add className="mr-2 size-4" /> Create workspace
             </DropdownMenuItem>
           </DropdownMenuContent>

@@ -66,6 +66,15 @@ function sortMessages(messages: Message[]): Message[] {
   });
 }
 
+function uniqueConversations(conversations: Conversation[]): Conversation[] {
+  return Array.from(
+    conversations.reduce((byId, conversation) => {
+      if (!byId.has(conversation.id)) byId.set(conversation.id, conversation);
+      return byId;
+    }, new Map<string, Conversation>()),
+  ).map(([, conversation]) => conversation);
+}
+
 function toConversation(channel: Channel, workspaceName: string): Conversation {
   return {
     id: channel.id,
@@ -85,14 +94,19 @@ function toConversation(channel: Channel, workspaceName: string): Conversation {
   };
 }
 
-function toDMConversation(dm: DirectConversation): Conversation {
+function toDMConversation(
+  dm: DirectConversation,
+  currentUserId?: string,
+): Conversation {
+  const isSelf = Boolean(currentUserId && dm.other_user_id === currentUserId);
+  const displayName = dm.other_display_name || dm.other_email;
   return {
     id: `dm:${dm.id}`,
-    name: dm.other_display_name || dm.other_email,
-    title: "Direct message",
+    name: isSelf ? `${displayName} (you)` : displayName,
+    title: isSelf ? "Your space" : "Direct message",
     status: "online",
     unread: 0,
-    initials: initials(dm.other_display_name || dm.other_email),
+    initials: initials(displayName),
     messages: [],
     quickReplies: [],
     autoReplies: [],
@@ -236,10 +250,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       toConversation(c, workspace.name),
     );
     const directMessages = (await messageService.listDMs().catch(() => [])).map(
-      toDMConversation,
+      (dm) => toDMConversation(dm, userId),
     );
 
-    const allConversations = [...conversations, ...directMessages];
+    const allConversations = uniqueConversations([
+      ...conversations,
+      ...directMessages,
+    ]);
     const savedConversationId = workspaceId
       ? null
       : window.localStorage.getItem(lastConversationKey);
@@ -444,7 +461,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const dms = await messageService.listDMs();
     const dm = dms.find((item) => item.id === result.id);
     if (!dm) return;
-    const conversation = toDMConversation(dm);
+    const conversation = toDMConversation(dm, get().currentUserId ?? undefined);
     set((state) => ({
       conversations: [
         ...state.conversations.filter((item) => item.id !== conversation.id),
@@ -456,11 +473,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   refreshDMs: async () => {
-    const directMessages = (await messageService.listDMs()).map(
-      toDMConversation,
+    const directMessages = (await messageService.listDMs()).map((dm) =>
+      toDMConversation(dm, get().currentUserId ?? undefined),
     );
     set((state) => ({
-      conversations: [
+      conversations: uniqueConversations([
         ...state.conversations.filter((item) => item.kind !== "dm"),
         ...directMessages.map((conversation) =>
           state.conversations.find((item) => item.id === conversation.id)
@@ -477,7 +494,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               }
             : conversation,
         ),
-      ],
+      ]),
     }));
   },
 

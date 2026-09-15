@@ -119,12 +119,10 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
                         "active_workspace_id",
                       );
                       const target = parsed.channel_id!.startsWith("dm:")
-                        ? `/workspace/${workspaceId}/dms/${parsed.channel_id!.slice(3)}`
-                        : `/workspace/${workspaceId}/channels/${parsed.channel_id}`;
+                        ? `/home/${workspaceId}/dms/${parsed.channel_id!.slice(3)}`
+                        : `/home/${workspaceId}/channels/${parsed.channel_id}`;
                       if (!workspaceId || window.location.pathname !== target) {
-                        window.location.assign(
-                          workspaceId ? target : "/dashboard/workspaces",
-                        );
+                        window.location.assign(workspaceId ? target : "/home");
                       } else {
                         useChatStore
                           .getState()

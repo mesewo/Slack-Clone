@@ -24,9 +24,16 @@ export default async function AppShell({
           Skip to content
         </a>
         <AppSidebar />
-        <SidebarInset id="main-content" tabIndex={-1} className="scroll-mt-16">
+        <SidebarInset
+          id="main-content"
+          tabIndex={-1}
+          className="m-0 h-svh min-h-0 overflow-hidden rounded-none scroll-mt-16"
+        >
           <Header />
-          <InfobarProvider defaultOpen={false}>
+          <InfobarProvider
+            defaultOpen={false}
+            className="min-h-0 overflow-hidden"
+          >
             {children}
             <InfoSidebar side="right" />
           </InfobarProvider>

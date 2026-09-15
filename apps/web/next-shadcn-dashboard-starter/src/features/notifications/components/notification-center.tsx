@@ -154,11 +154,11 @@ export function NotificationCenter() {
                       );
                       if (workspaceId && notification?.entityId) {
                         const target = notification.title.includes("direct")
-                          ? `/workspace/${workspaceId}/dms/${notification.entityId}`
-                          : `/workspace/${workspaceId}/channels/${notification.entityId}`;
+                          ? `/home/${workspaceId}/dms/${notification.entityId}`
+                          : `/home/${workspaceId}/channels/${notification.entityId}`;
                         window.location.assign(target);
                       } else {
-                        window.location.assign("/dashboard/workspaces");
+                        window.location.assign("/home");
                       }
                     }
                   }}

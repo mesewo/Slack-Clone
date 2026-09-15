@@ -483,6 +483,7 @@ export function MessageBubble({
             }))}
             variant={isUser ? "inverted" : "default"}
             className="mt-1 p-0"
+            mode="message"
             maxAutoPreviewSize={2 * 1024 * 1024}
           />
         )}

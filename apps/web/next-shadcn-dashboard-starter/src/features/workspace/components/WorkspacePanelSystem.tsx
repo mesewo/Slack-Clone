@@ -81,8 +81,8 @@ export function WorkspacePanelSystem() {
     setPanel(null);
     router.push(
       thread.kind === "dm"
-        ? `/workspace/${workspaceId}/dms/${thread.conversation_id}`
-        : `/workspace/${workspaceId}/channels/${thread.channel_id}`,
+        ? `/home/${workspaceId}/dms/${thread.conversation_id}`
+        : `/home/${workspaceId}/channels/${thread.channel_id}`,
     );
   }
 
@@ -105,12 +105,6 @@ export function WorkspacePanelSystem() {
           icon={<IconMessageCircle className="size-4" />}
           active={panel === "threads"}
           onClick={() => setPanel("threads")}
-        />
-        <PanelButton
-          label="Activity"
-          icon={<IconActivity className="size-4" />}
-          active={panel === "activity"}
-          onClick={() => setPanel("activity")}
         />
         <PanelButton
           label="Saved items"

@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { Conversation } from "../utils/types";
 import { useChatStore } from "../utils/store";
 import { PresenceIndicator } from "./PresenceIndicator";
@@ -38,6 +39,10 @@ export function ConversationList({
   const userPresence = useChatStore((state) => state.userPresence);
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
+  const [starredOpen, setStarredOpen] = useState(true);
+  const [starredHintVisible, setStarredHintVisible] = useState(true);
+  const [directoriesOpen, setDirectoriesOpen] = useState(false);
+  const [directoryTab, setDirectoryTab] = useState("People");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [channelName, setChannelName] = useState("");
@@ -329,6 +334,82 @@ export function ConversationList({
               )}
             </button>
           ))}
+        <div className="mt-4 flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={() => setStarredOpen((open) => !open)}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em]"
+            aria-expanded={starredOpen}
+          >
+            <Icons.chevronRight
+              className={cn(
+                "size-3 transition-transform",
+                starredOpen && "rotate-90",
+              )}
+            />
+            Starred
+          </button>
+        </div>
+        {starredOpen && starredHintVisible && (
+          <div className="text-muted-foreground flex items-center gap-2 px-2 py-2 text-xs">
+            <span className="flex-1 indent-4">
+              Drag and drop important stuff here
+            </span>
+            <button
+              type="button"
+              onClick={() => setStarredHintVisible(false)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Hide starred hint"
+            >
+              ▾
+            </button>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => toast.info("Huddles are coming soon.")}
+          className="text-muted-foreground hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+        >
+          <Icons.phone className="size-4" /> Huddles
+        </button>
+        <button
+          type="button"
+          onClick={() => setDirectoriesOpen((open) => !open)}
+          className="text-muted-foreground hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+          aria-expanded={directoriesOpen}
+        >
+          <Icons.search className="size-4" /> Directories
+        </button>
+        {directoriesOpen && (
+          <div className="border-border/60 bg-muted/30 space-y-2 rounded-lg border p-2">
+            <div className="flex flex-wrap gap-1">
+              {[
+                "People",
+                "Channels",
+                "User groups",
+                "External",
+                "Invitations",
+              ].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setDirectoryTab(tab)}
+                  className={cn(
+                    "rounded px-1.5 py-1 text-[0.65rem]",
+                    directoryTab === tab
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent",
+                  )}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {directoryTab} directory search is coming soon.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

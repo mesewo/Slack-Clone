@@ -1,33 +1,101 @@
+"use client";
+
 import React from "react";
-import { SidebarTrigger } from "../ui/sidebar";
-import { Separator } from "../ui/separator";
-import { Breadcrumbs } from "../breadcrumbs";
 import SearchInput from "../search-input";
-import { ThemeSelector } from "../themes/theme-selector";
-import { ThemeModeToggle } from "../themes/theme-mode-toggle";
-import CtaGithub from "./cta-github";
+import { Button } from "../ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "../ui/sheet";
+import { Icons } from "../icons";
 
 export default function Header() {
   return (
-    <header className="border-border/60 bg-background/80 sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-2 border-b px-3 shadow-[0_1px_0_rgba(15,23,42,0.04)] backdrop-blur-xl md:h-14 md:px-4">
-      <div className="flex items-center gap-2 pr-2">
-        <SidebarTrigger className="-ml-1 rounded-full hover:bg-accent/70" />
-        <Separator
-          orientation="vertical"
-          className="mr-1 h-4 data-vertical:self-center"
-        />
-        <Breadcrumbs />
-      </div>
-
-      <div className="flex items-center gap-2 pl-2 md:gap-3">
-        <CtaGithub />
-        <div className="hidden md:flex">
+    <header className="bg-sidebar text-sidebar-foreground sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3 shadow-[0_1px_0_rgba(0,0,0,0.16)] md:px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="min-w-0 max-w-2xl flex-1">
           <SearchInput />
         </div>
-        <ThemeModeToggle />
-        <div className="hidden sm:block">
-          <ThemeSelector />
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => window.history.back()}
+          aria-label="Go back"
+          title="Go back"
+        >
+          <Icons.chevronLeft className="size-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          onClick={() => window.history.forward()}
+          aria-label="Go forward"
+          title="Go forward"
+        >
+          <Icons.chevronRight className="size-4" />
+        </Button>
+        <Sheet>
+          <SheetTrigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                aria-label="Open help"
+                title="Help"
+              />
+            }
+          >
+            <Icons.help className="size-4" />
+          </SheetTrigger>
+          <SheetContent side="right" className="w-[min(28rem,92vw)]">
+            <SheetHeader>
+              <SheetTitle>How to use this workspace</SheetTitle>
+              <SheetDescription>
+                Everything you need to find your way around the Slack clone.
+              </SheetDescription>
+            </SheetHeader>
+            <div className="space-y-5 overflow-y-auto px-4 pb-6 text-sm">
+              {[
+                ["Home", "Returns to your last channel or direct message."],
+                [
+                  "Direct messages",
+                  "Browse real DMs, search people, and open a conversation.",
+                ],
+                [
+                  "Activity",
+                  "Review notifications, mentions, and thread activity in one place.",
+                ],
+                [
+                  "Create",
+                  "Start a message or channel, invite people, or try coming-soon tools.",
+                ],
+                [
+                  "Workspace menu",
+                  "Use the avatar at the top of the rail to switch or create workspaces.",
+                ],
+                [
+                  "Composer",
+                  "Use Aa for formatting, @ for mentions, the paperclip for files, and the arrow for scheduled sending.",
+                ],
+              ].map(([title, description]) => (
+                <div key={title}>
+                  <p className="font-medium">{title}</p>
+                  <p className="text-muted-foreground mt-1">{description}</p>
+                </div>
+              ))}
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </header>
   );

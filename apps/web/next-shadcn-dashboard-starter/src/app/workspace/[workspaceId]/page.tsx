@@ -18,8 +18,8 @@ export default function WorkspacePage() {
     if (lastVisited) {
       router.replace(
         lastVisited.startsWith("dm:")
-          ? `/workspace/${workspaceId}/dms/${lastVisited.slice(3)}`
-          : `/workspace/${workspaceId}/channels/${lastVisited}`,
+          ? `/home/${workspaceId}/dms/${lastVisited.slice(3)}`
+          : `/home/${workspaceId}/channels/${lastVisited}`,
       );
       return () => {
         active = false;
@@ -30,9 +30,7 @@ export default function WorkspacePage() {
       .then((channels) => {
         if (!active) return;
         if (channels[0]) {
-          router.replace(
-            `/workspace/${workspaceId}/channels/${channels[0].id}`,
-          );
+          router.replace(`/home/${workspaceId}/channels/${channels[0].id}`);
         } else {
           setError("This workspace has no channels yet.");
         }

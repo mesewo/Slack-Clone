@@ -8,7 +8,7 @@ import type { Attachment } from "../utils/types";
 import { toast } from "sonner";
 
 // File upload validation constants
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
 const ALLOWED_FILE_TYPES = {
   images: [
     "image/jpeg",
@@ -199,6 +199,7 @@ interface MessageComposerProps {
   attachments: Attachment[];
   onAddAttachments: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
+  isUploading?: boolean;
   mentionSuggestions?: string[];
   onSchedule?: (scheduledFor: string) => Promise<void>;
 }
@@ -213,6 +214,7 @@ export function MessageComposer({
   attachments,
   onAddAttachments,
   onRemoveAttachment,
+  isUploading = false,
   mentionSuggestions = [],
   onSchedule,
 }: MessageComposerProps) {
@@ -225,6 +227,8 @@ export function MessageComposer({
   const [moreOpen, setMoreOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
+  const [formatterOpen, setFormatterOpen] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   const mentionMatch = draft.match(/(^|\s)@([\w-]*)$/);
   const mentionQuery = mentionMatch?.[2].toLowerCase() ?? "";
@@ -289,7 +293,7 @@ export function MessageComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 sm:space-y-3 sm:px-4"
+      className={`group/composer relative space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 sm:space-y-3 sm:px-4 ${expanded ? "min-h-[18rem]" : ""}`}
       aria-label="Reply composer"
     >
       <label htmlFor="messenger-editor" className="sr-only">
@@ -304,117 +308,156 @@ export function MessageComposer({
                 name: a.name,
                 type: a.type,
                 url: a.url,
+                isUploading: a.isUploading,
               }))}
               onRemove={onRemoveAttachment}
               className="mb-1 p-0"
+              mode="compose"
             />
           )}
-          <div className="border-border/60 bg-background/70 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-inner shadow-black/5 sm:mb-2">
+          {isUploading && (
+            <div
+              className="text-muted-foreground mb-2 flex items-center gap-2 px-1 text-xs"
+              role="status"
+              aria-live="polite"
+            >
+              <Icons.spinner className="size-3.5 animate-spin" />
+              Uploading {attachments.length} attachment
+              {attachments.length === 1 ? "" : "s"}...
+            </div>
+          )}
+          <div className="mb-1 flex items-center gap-1">
             <button
               type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyFormat("bold")}
-              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-bold transition"
-              aria-label="Bold"
+              onClick={() => setFormatterOpen((open) => !open)}
+              className="text-muted-foreground hover:bg-accent rounded-md px-2 py-1 text-xs font-semibold"
+              aria-label="Toggle formatting toolbar"
+              title="Show or hide formatting tools"
             >
-              B
+              Aa
             </button>
             <button
               type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyFormat("italic")}
-              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] italic transition"
-              aria-label="Italic"
+              onClick={() => {
+                editorRef.current?.focus();
+                document.execCommand("insertText", false, "@");
+                syncDraft();
+              }}
+              className="text-muted-foreground hover:bg-accent rounded-md px-2 py-1 text-xs font-semibold"
+              aria-label="Mention a user"
+              title="Mention a user"
             >
-              I
+              @
             </button>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyFormat("underline")}
-              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] underline transition"
-              aria-label="Underline"
-            >
-              U
-            </button>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyFormat("strikeThrough")}
-              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] line-through transition"
-              aria-label="Strikethrough"
-            >
-              S
-            </button>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyFormat("formatBlock", "pre")}
-              className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-mono transition"
-              aria-label="Inline code"
-            >
-              {"</>"}
-            </button>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => applyFormat("formatBlock", "blockquote")}
-              className="hover:bg-accent text-foreground/80 hover:text-foreground rounded-md px-2 py-1 text-xs"
-              aria-label="Quote"
-            >
-              Quote
-            </button>
-            <div className="relative ml-auto">
+          </div>
+          {formatterOpen && (
+            <div className="border-border/60 bg-background/70 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-inner shadow-black/5 sm:mb-2">
               <button
                 type="button"
-                onClick={() => setEmojiOpen((current) => !current)}
-                className="hover:bg-accent/70 text-foreground/70 hover:text-foreground flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm transition"
-                aria-label="Insert emoji"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat("bold")}
+                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-bold transition"
+                aria-label="Bold"
               >
-                <span>😊</span>
+                B
               </button>
-              {emojiOpen && (
-                <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={() => setEmojiOpen(false)}
-                    className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
-                    aria-label="Close emoji picker"
-                  >
-                    <Icons.close className="size-3" />
-                  </button>
-                  <input
-                    value={emojiSearch}
-                    onChange={(event) => setEmojiSearch(event.target.value)}
-                    placeholder="Search emoji"
-                    aria-label="Search emoji"
-                    className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 pr-7 text-xs outline-none"
-                  />
-                  <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
-                    {emojiOptions
-                      .filter(
-                        (emoji) =>
-                          !emojiSearch ||
-                          `${emoji} ${emojiAliases[emoji] || ""}`
-                            .toLowerCase()
-                            .includes(emojiSearch.toLowerCase()),
-                      )
-                      .map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => insertEmoji(emoji)}
-                          className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
-                          aria-label={`Insert ${emoji}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat("italic")}
+                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] italic transition"
+                aria-label="Italic"
+              >
+                I
+              </button>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat("underline")}
+                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] underline transition"
+                aria-label="Underline"
+              >
+                U
+              </button>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat("strikeThrough")}
+                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] line-through transition"
+                aria-label="Strikethrough"
+              >
+                S
+              </button>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat("formatBlock", "pre")}
+                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-mono transition"
+                aria-label="Inline code"
+              >
+                {"</>"}
+              </button>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => applyFormat("formatBlock", "blockquote")}
+                className="hover:bg-accent text-foreground/80 hover:text-foreground rounded-md px-2 py-1 text-xs"
+                aria-label="Quote"
+              >
+                Quote
+              </button>
+              <div className="relative ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setEmojiOpen((current) => !current)}
+                  className="hover:bg-accent/70 text-foreground/70 hover:text-foreground flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm transition"
+                  aria-label="Insert emoji"
+                >
+                  <span>😊</span>
+                </button>
+                {emojiOpen && (
+                  <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
+                    <button
+                      type="button"
+                      onClick={() => setEmojiOpen(false)}
+                      className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
+                      aria-label="Close emoji picker"
+                    >
+                      <Icons.close className="size-3" />
+                    </button>
+                    <input
+                      value={emojiSearch}
+                      onChange={(event) => setEmojiSearch(event.target.value)}
+                      placeholder="Search emoji"
+                      aria-label="Search emoji"
+                      className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 pr-7 text-xs outline-none"
+                    />
+                    <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+                      {emojiOptions
+                        .filter(
+                          (emoji) =>
+                            !emojiSearch ||
+                            `${emoji} ${emojiAliases[emoji] || ""}`
+                              .toLowerCase()
+                              .includes(emojiSearch.toLowerCase()),
+                        )
+                        .map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => insertEmoji(emoji)}
+                            className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
+                            aria-label={`Insert ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
+          )}
           <div className="relative">
             <div
               ref={editorRef}
@@ -498,6 +541,7 @@ export function MessageComposer({
               type="button"
               className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-r-none rounded-l-xl border-r-0 transition focus-visible:ring-1 focus-visible:ring-offset-1"
               aria-label="Attach content"
+              title="Attach content"
               aria-expanded={attachOpen}
               onClick={() => setAttachOpen((open) => !open)}
             >
@@ -507,6 +551,7 @@ export function MessageComposer({
               type="button"
               className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-l-none rounded-r-xl border transition focus-visible:ring-1 focus-visible:ring-offset-1"
               aria-label="More composer options"
+              title="More composer options"
               aria-expanded={moreOpen}
               onClick={() => setMoreOpen((open) => !open)}
             >
@@ -558,7 +603,9 @@ export function MessageComposer({
             <Button
               type="submit"
               className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0 rounded-r-none rounded-l-2xl shadow-[0_8px_16px_rgba(99,102,241,0.25)] sm:h-11 sm:w-11"
-              disabled={!draft.trim() && attachments.length === 0}
+              disabled={
+                isUploading || (!draft.trim() && attachments.length === 0)
+              }
               aria-label="Send message"
             >
               <Icons.send className="size-4" />
@@ -607,6 +654,17 @@ export function MessageComposer({
               </Button>
             </div>
           )}
+        </div>
+        <div className="pointer-events-none absolute right-3 top-0 flex -translate-y-1/2 gap-1 opacity-0 transition-opacity group-hover/composer:pointer-events-auto group-hover/composer:opacity-100">
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="border-border bg-background text-muted-foreground hover:text-foreground rounded-md border px-1.5 py-0.5 text-xs"
+            aria-label={expanded ? "Collapse composer" : "Expand composer"}
+            title={expanded ? "Collapse composer" : "Expand composer"}
+          >
+            {expanded ? "⇅" : "↕"}
+          </button>
         </div>
       </div>
     </form>

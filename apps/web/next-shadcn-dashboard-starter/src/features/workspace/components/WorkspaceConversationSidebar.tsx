@@ -20,8 +20,8 @@ export function WorkspaceConversationSidebar() {
     selectConversation(id);
     router.push(
       id.startsWith("dm:")
-        ? `/workspace/${params.workspaceId}/dms/${id.slice(3)}`
-        : `/workspace/${params.workspaceId}/channels/${id}`,
+        ? `/home/${params.workspaceId}/dms/${id.slice(3)}`
+        : `/home/${params.workspaceId}/channels/${id}`,
     );
   }
 

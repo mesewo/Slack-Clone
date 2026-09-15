@@ -9,7 +9,6 @@ import type { Attachment, Message } from "@/features/chat/utils/types";
 import { messageService } from "@/features/workspace/services/messageService";
 import { productivityService } from "@/features/workspace/services/productivityService";
 import { workspaceService } from "@/features/workspace/services/workspaceService";
-import { ConversationSelect } from "@/features/chat/components/conversation-select";
 import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 
@@ -28,6 +27,7 @@ export function WorkspaceChatView() {
       ? `dm:${params.dmId || params.conversationId}`
       : "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [workspaceRole, setWorkspaceRole] = useState<string | null>(null);
   const {
     conversations,
@@ -77,16 +77,29 @@ export function WorkspaceChatView() {
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!draft.trim() && attachments.length === 0) return;
-      const uploaded = await Promise.all(
-        attachments
-          .filter((item) => item.file)
-          .map((item) => messageService.upload(item.file!)),
+      setIsUploading(true);
+      setAttachments((current) =>
+        current.map((item) => ({ ...item, isUploading: Boolean(item.file) })),
       );
-      await sendMessage(
-        draft,
-        uploaded.map((item) => item.id),
-      );
-      setAttachments([]);
+      try {
+        const uploaded = await Promise.all(
+          attachments
+            .filter((item) => item.file)
+            .map((item) => messageService.upload(item.file!)),
+        );
+        await sendMessage(
+          draft,
+          uploaded.map((item) => item.id),
+        );
+        setAttachments([]);
+      } catch {
+        setAttachments((current) =>
+          current.map((item) => ({ ...item, isUploading: false })),
+        );
+        toast.error("Upload failed. Check the file type and 100MB size limit.");
+      } finally {
+        setIsUploading(false);
+      }
     },
     [attachments, draft, sendMessage],
   );
@@ -109,15 +122,34 @@ export function WorkspaceChatView() {
     selectConversation(id);
     router.push(
       id.startsWith("dm:")
-        ? `/workspace/${params.workspaceId}/dms/${id.slice(3)}`
-        : `/workspace/${params.workspaceId}/channels/${id}`,
+        ? `/home/${params.workspaceId}/dms/${id.slice(3)}`
+        : `/home/${params.workspaceId}/channels/${id}`,
     );
   };
 
-  if (!user || !activeConversation) {
+  if (!user) {
     return (
       <div className="flex h-full min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
         Loading conversation...
+      </div>
+    );
+  }
+
+  if (!activeConversation) {
+    return (
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black text-white">
+        <div className="relative flex flex-col items-center gap-5 text-center">
+          <div className="absolute inset-0 -z-0 animate-pulse rounded-full bg-purple-700/20 blur-3xl" />
+          <div className="z-10 flex size-20 items-center justify-center rounded-3xl border border-purple-400/30 bg-purple-950/70 shadow-[0_0_60px_rgba(97,31,105,0.45)]">
+            <span className="size-3 animate-ping rounded-full bg-purple-300" />
+          </div>
+          <div className="z-10">
+            <h1 className="text-xl font-semibold">Open to chat</h1>
+            <p className="mt-1 text-sm text-white/60">
+              Choose a channel or direct message from the sidebar.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -128,20 +160,7 @@ export function WorkspaceChatView() {
       )
     : undefined;
   return (
-    <div className="flex min-h-0 h-full flex-1 flex-col gap-2 p-2 lg:grid lg:grid-cols-[280px_minmax(0,1fr)_auto]">
-      <ConversationSelect
-        conversations={conversations}
-        selectedId={selectedConversationId}
-        onSelect={openConversation}
-        onCreateChannel={async (name, type) => {
-          await createChannel(name, type);
-          toast.success(`Channel #${name.replace(/^#/, "").trim()} created`);
-        }}
-        onCreateDM={async (userId) => {
-          await createDM(userId);
-          toast.success("Direct message opened");
-        }}
-      />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2">
       <ChatArea
         conversation={activeConversation}
         draft={draft}
@@ -153,6 +172,7 @@ export function WorkspaceChatView() {
         onRemoveAttachment={(id) =>
           setAttachments((current) => current.filter((item) => item.id !== id))
         }
+        isUploading={isUploading}
         onOpenThread={(message) => void openThreadPanel(message.id)}
         reactions={messageReactions}
         currentUserId={currentUserId ?? ""}

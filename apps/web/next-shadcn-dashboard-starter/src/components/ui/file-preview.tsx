@@ -32,6 +32,7 @@ export interface FilePreviewProps {
   onRemove?: (id: string) => void;
   className?: string;
   variant?: "default" | "inverted";
+  mode?: "compose" | "message";
   maxAutoPreviewSize?: number;
 }
 
@@ -188,9 +189,11 @@ export const FilePreview: FC<FilePreviewProps> = ({
   onRemove,
   className,
   variant = "default",
+  mode = "message",
   maxAutoPreviewSize,
 }) => {
   const isInverted = variant === "inverted";
+  const isComposeMode = mode === "compose";
   const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
   const [lightboxBlob, setLightboxBlob] = useState<Blob | null>(null);
   const [lightboxFilename, setLightboxFilename] = useState<string>("");
@@ -235,6 +238,93 @@ export const FilePreview: FC<FilePreviewProps> = ({
     <div className={cn("flex w-full flex-col gap-2 rounded-xl p-2", className)}>
       <div className="flex w-full flex-wrap gap-2">
         {files.map((file) => {
+          // COMPOSE MODE: Simple thumbnail + remove button only
+          if (isComposeMode) {
+            return (
+              <div
+                key={file.id}
+                className={cn(
+                  "group/file relative flex items-center rounded-xl transition-all",
+                  isInverted
+                    ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
+                    : "bg-muted hover:bg-muted/80",
+                  "max-w-[260px] min-w-[180px] p-2 pr-8",
+                )}
+              >
+                {file.isUploading && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30">
+                    <Icons.spinner
+                      size={20}
+                      className="animate-spin text-white"
+                    />
+                  </div>
+                )}
+
+                {onRemove && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(file.id)}
+                    className={cn(
+                      "absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full",
+                      "scale-75 opacity-0 transition-all duration-150 group-hover/file:scale-100 group-hover/file:opacity-100",
+                      "bg-muted-foreground/60 hover:bg-muted-foreground/80 cursor-pointer",
+                    )}
+                    aria-label={`Remove ${file.name}`}
+                  >
+                    <Icons.close size={10} className="text-white" />
+                  </button>
+                )}
+
+                {file.type.startsWith("image/") && file.url ? (
+                  <Image
+                    src={file.url}
+                    alt=""
+                    width={40}
+                    height={40}
+                    unoptimized
+                    className="mr-3 size-10 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div
+                    className={cn(
+                      "mr-3 flex h-10 w-10 items-center justify-center rounded-lg",
+                      isInverted
+                        ? "bg-primary-foreground/10"
+                        : "bg-muted-foreground/10",
+                    )}
+                  >
+                    {getFileIcon(file.type, file.name)}
+                  </div>
+                )}
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <p
+                    className={cn(
+                      "truncate text-sm font-medium",
+                      isInverted
+                        ? "text-primary-foreground"
+                        : "text-foreground",
+                    )}
+                  >
+                    {file.name.length > 18
+                      ? `${file.name.substring(0, 15)}...`
+                      : file.name}
+                  </p>
+                  <span
+                    className={cn(
+                      "text-xs",
+                      isInverted
+                        ? "text-primary-foreground/70"
+                        : "text-muted-foreground",
+                    )}
+                  >
+                    {getFormattedFileType(file.type, file.name)}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
+          // MESSAGE MODE: Full lightbox + gating + download logic
           const autoPreview = shouldAutoPreview(file);
           const isImage = file.type.startsWith("image/");
           const isVideo = file.type.startsWith("video/");

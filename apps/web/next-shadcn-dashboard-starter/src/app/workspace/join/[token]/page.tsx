@@ -12,7 +12,7 @@ export default function AcceptWorkspaceInvitePage() {
   useEffect(() => {
     void workspaceService
       .acceptInvite(token)
-      .then(({ workspace_id }) => router.replace(`/workspace/${workspace_id}`))
+      .then(({ workspace_id }) => router.replace(`/home/${workspace_id}`))
       .catch(() =>
         setError("This invite is invalid, expired, or already used."),
       );

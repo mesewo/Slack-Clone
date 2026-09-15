@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useState } from "react";
-import { IconMenu2, IconSettings } from "@tabler/icons-react";
+import { useRouter } from "next/navigation";
+import { IconMenu2 } from "@tabler/icons-react";
+import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,23 +16,13 @@ import { WorkspaceConversationSidebar } from "./WorkspaceConversationSidebar";
 import { WorkspacePanelSystem } from "./WorkspacePanelSystem";
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
-  const params = useParams<{ workspaceId: string }>();
-  const workspaceId = params.workspaceId;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const router = useRouter();
 
   return (
-    <div className="bg-background relative flex min-h-full min-w-0 flex-1">
-      <aside className="bg-sidebar text-sidebar-foreground hidden w-72 shrink-0 flex-col border-r lg:flex">
+    <div className="bg-background relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+      <aside className="bg-sidebar text-sidebar-foreground hidden h-full w-72 shrink-0 flex-col border-r lg:flex">
         <WorkspaceConversationSidebar />
-        <div className="border-sidebar-border border-t p-3">
-          <Link
-            href={`/workspace/${workspaceId}/admin`}
-            className="text-sidebar-foreground/80 hover:bg-sidebar-accent/60 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors duration-150"
-          >
-            <IconSettings className="size-4" />
-            <span>Workspace settings</span>
-          </Link>
-        </div>
       </aside>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
@@ -46,7 +36,18 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           <WorkspaceConversationSidebar />
         </SheetContent>
       </Sheet>
-      <main className="relative min-w-0 flex-1 overflow-auto">
+      <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground"
+          aria-label="Close workspace"
+          title="Close workspace"
+          onClick={() => router.push("/home")}
+        >
+          <Icons.close className="size-4" />
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -57,7 +58,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         >
           <IconMenu2 className="size-5" />
         </Button>
-        {children}
+        <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
       </main>
       <WorkspacePanelSystem />
     </div>

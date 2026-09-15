@@ -10,11 +10,11 @@ import { useNotificationStore } from "../utils/store";
 import { useEffect } from "react";
 
 const actionRoutes: Record<string, string> = {
-  view: "/dashboard/workspaces",
+  view: "/home",
   "view-product": "/dashboard/product",
   billing: "/dashboard/billing",
   open: "/dashboard/kanban",
-  "open-chat": "/dashboard/workspaces",
+  "open-chat": "/home",
 };
 
 export default function NotificationsPage() {

@@ -6,6 +6,7 @@ export type Attachment = {
   file?: File;
   url?: string;
   thumbnailUrl?: string;
+  isUploading?: boolean;
 };
 
 export type Message = {

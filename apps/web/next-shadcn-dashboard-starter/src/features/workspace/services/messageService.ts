@@ -73,6 +73,10 @@ export const messageService = {
     const res = await apiClient.get<DirectConversation[]>("/api/dms");
     return res.data ?? [];
   },
+  async createSelfDM(): Promise<{ id: string }> {
+    const res = await apiClient.post<{ id: string }>("/api/dms/self");
+    return res.data;
+  },
 
   async listDMUsers(): Promise<DirectUser[]> {
     const res = await apiClient.get<DirectUser[]>("/api/dms/users");

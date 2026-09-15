@@ -1,5 +1,6 @@
 import {
   IconAdjustmentsHorizontal,
+  IconActivity,
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowRight,
@@ -43,6 +44,7 @@ import {
   IconFileZip,
   IconFolder,
   IconGripVertical,
+  IconHome,
   IconHelpCircle,
   IconInfoCircle,
   IconItalic,
@@ -95,6 +97,7 @@ export type Icon = React.ComponentType<IconProps>;
 
 export const Icons = {
   // General
+  activity: IconActivity,
   alertCircle: IconAlertCircle,
   warning: IconAlertTriangle,
   arrowRight: IconArrowRight,
@@ -108,6 +111,8 @@ export const Icons = {
   ellipsis: IconDotsVertical,
   externalLink: IconExternalLink,
   help: IconHelpCircle,
+  home: IconHome,
+  star: IconStar,
   info: IconInfoCircle,
   spinner: IconLoader2,
   search: IconSearch,
