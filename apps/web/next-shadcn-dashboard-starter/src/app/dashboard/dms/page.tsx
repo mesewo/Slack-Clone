@@ -29,15 +29,22 @@ export default function DMsPage() {
       .catch(() => setDMs([]));
   }, []);
 
-  const filtered = useMemo(
-    () =>
-      dms.filter((dm) =>
-        `${dm.other_display_name} ${dm.other_email}`
-          .toLowerCase()
-          .includes(query.toLowerCase()),
-      ),
-    [dms, query],
-  );
+  const filtered = useMemo(() => {
+    const uniqueDMs = new Map<string, DirectConversation>();
+
+    for (const dm of dms) {
+      if (!dm?.id) continue;
+      if (!uniqueDMs.has(dm.id)) {
+        uniqueDMs.set(dm.id, dm);
+      }
+    }
+
+    return [...uniqueDMs.values()].filter((dm) =>
+      `${dm.other_display_name} ${dm.other_email}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+    );
+  }, [dms, query]);
   const openDM = (id: string) => {
     const workspaceId = window.localStorage.getItem("active_workspace_id");
     if (workspaceId) router.push(`/home/${workspaceId}/dms/${id}`);

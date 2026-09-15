@@ -114,7 +114,34 @@ export default function WorkspacesPage() {
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-background">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(99,102,241,0.08),_transparent_35%)] bg-background">
+      <header className="border-border/70 bg-background/80 sticky top-0 z-10 border-b backdrop-blur-sm">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-10">
+          <div className="flex items-center gap-3">
+            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-9 items-center justify-center rounded-lg text-sm font-bold">
+              S
+            </div>
+            <div>
+              <p className="text-sm font-semibold tracking-[0.18em] uppercase text-sidebar-primary">
+                Slack clone
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={() => {
+              setName("");
+              setSlug("");
+              toast.info("Create workspace flow is ready in the form below.");
+            }}
+            className="h-10 rounded-full px-4 text-sm font-medium"
+          >
+            <Icons.add className="mr-2 size-4" />
+            Create new workspace
+          </Button>
+        </div>
+      </header>
+
       <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
         <div className="mb-10 max-w-2xl">
           <p className="mb-3 text-xs font-semibold tracking-[0.2em] text-sidebar-primary uppercase">
@@ -334,6 +361,14 @@ export default function WorkspacesPage() {
               rel="noreferrer"
             >
               GitHub
+            </a>
+            <a
+              className="hover:text-foreground"
+              href="https://x.com"
+              target="_blank"
+              rel="noreferrer"
+            >
+              X
             </a>
             <button
               type="button"

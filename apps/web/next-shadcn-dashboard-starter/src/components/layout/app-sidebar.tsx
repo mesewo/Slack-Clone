@@ -81,9 +81,9 @@ export default function AppSidebar() {
       <SidebarHeader className="border-sidebar-border/70 bg-sidebar/90 px-2 py-3">
         <OrgSwitcher />
       </SidebarHeader>
-      <SidebarContent className="overflow-x-hidden bg-sidebar px-1 pb-2 pt-2">
+      <SidebarContent className="flex-1 overflow-x-hidden bg-sidebar px-1 pb-2 pt-2">
         <SidebarGroup className="py-0">
-          <SidebarMenu>
+          <SidebarMenu className="gap-1">
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Home"
@@ -270,8 +270,8 @@ export default function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="border-sidebar-border/70 border-t bg-sidebar/90 p-1">
-        <SidebarMenu>
+      <SidebarFooter className="border-sidebar-border/70 mt-auto border-t bg-sidebar/90 p-1">
+        <SidebarMenu className="gap-1">
           <SidebarMenuItem className="flex items-center justify-center px-1">
             <ThemeModeToggle />
           </SidebarMenuItem>

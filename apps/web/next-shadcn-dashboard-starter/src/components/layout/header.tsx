@@ -49,7 +49,7 @@ export default function Header() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                className="ml-auto size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                 aria-label="Open help"
                 title="Help"
               />

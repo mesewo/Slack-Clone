@@ -283,17 +283,25 @@ export function ConversationList({
         </div>
         {directMessagesOpen && dmOpen && (
           <div className="border-border/40 bg-muted/30 my-1 rounded-lg border p-2">
+            <label className="mb-2 block text-[0.65rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              To:
+            </label>
             <select
-              defaultValue=""
+              defaultValue={[]}
+              multiple
+              size={Math.min(dmUsers.length || 1, 6)}
               onChange={async (event) => {
-                if (event.target.value) {
-                  await onCreateDM(event.target.value);
-                  setDmOpen(false);
+                const selected = Array.from(event.target.selectedOptions).map(
+                  (option) => option.value,
+                );
+                if (selected.length === 0) return;
+                for (const userId of selected) {
+                  await onCreateDM(userId);
                 }
+                setDmOpen(false);
               }}
-              className="bg-background text-foreground border-border/40 h-8 w-full rounded border px-2 text-xs"
+              className="bg-background text-foreground border-border/40 h-24 w-full rounded border px-2 py-1 text-xs"
             >
-              <option value="">Select a person...</option>
               {dmUsers.map((user) => (
                 <option key={user.id} value={user.id}>
                   {user.display_name || user.email}

@@ -227,7 +227,7 @@ export function MessageComposer({
   const [moreOpen, setMoreOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
-  const [formatterOpen, setFormatterOpen] = useState(true);
+  const [formatterOpen, setFormatterOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   const mentionMatch = draft.match(/(^|\s)@([\w-]*)$/);
@@ -293,7 +293,7 @@ export function MessageComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className={`group/composer relative space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 sm:space-y-3 sm:px-4 ${expanded ? "min-h-[18rem]" : ""}`}
+      className={`group/composer relative space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 transition-[height] duration-200 ease-out sm:space-y-3 sm:px-4 ${expanded ? "h-[60%] min-h-[12rem] max-h-[60vh]" : "h-auto"}`}
       aria-label="Reply composer"
     >
       <label htmlFor="messenger-editor" className="sr-only">
@@ -327,6 +327,17 @@ export function MessageComposer({
             </div>
           )}
           <div className="mb-1 flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setAttachOpen((open) => !open)}
+              className="text-muted-foreground hover:bg-accent h-7 min-w-7 rounded-md px-1.5"
+              aria-label="Attach a file"
+              title="Attach a file"
+            >
+              <Icons.add className="size-3.5" />
+            </Button>
             <button
               type="button"
               onClick={() => setFormatterOpen((open) => !open)}
@@ -335,6 +346,15 @@ export function MessageComposer({
               title="Show or hide formatting tools"
             >
               Aa
+            </button>
+            <button
+              type="button"
+              onClick={() => setEmojiOpen((current) => !current)}
+              className="text-muted-foreground hover:bg-accent rounded-md px-2 py-1 text-xs font-semibold"
+              aria-label="Insert emoji"
+              title="Insert emoji"
+            >
+              😊
             </button>
             <button
               type="button"
@@ -545,7 +565,7 @@ export function MessageComposer({
               aria-expanded={attachOpen}
               onClick={() => setAttachOpen((open) => !open)}
             >
-              <Icons.paperclip className="size-4" />
+              <Icons.add className="size-4" />
             </Button>
             <Button
               type="button"
