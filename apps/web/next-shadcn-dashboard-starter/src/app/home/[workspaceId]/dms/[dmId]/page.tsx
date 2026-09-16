@@ -1,1 +1,5 @@
-export { default } from "@/app/workspace/[workspaceId]/dms/[dmId]/page";
+import { WorkspaceChatView } from "@/features/workspace/components/WorkspaceChatView";
+
+export default function DirectMessageRoute() {
+  return <WorkspaceChatView />;
+}

@@ -44,8 +44,12 @@ export function AttachmentDownloadButton({
       }
       const blob = new Blob(chunks as BlobPart[], { type: contentType });
 
-      // For images with lightbox callback, open lightbox instead of downloading
-      if (contentType?.startsWith("image/") && onImagePreview) {
+      // Media opens in the in-app viewer after the streamed download completes.
+      if (
+        (contentType?.startsWith("image/") ||
+          contentType?.startsWith("video/")) &&
+        onImagePreview
+      ) {
         onImagePreview(blob);
         setProgress(100);
         setState("complete");
@@ -53,7 +57,7 @@ export function AttachmentDownloadButton({
         return;
       }
 
-      // For video/other files or no lightbox callback, save to disk
+      // Non-media files retain the direct download behavior.
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;

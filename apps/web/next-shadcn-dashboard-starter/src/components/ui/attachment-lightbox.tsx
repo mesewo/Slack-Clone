@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { IconX } from "@tabler/icons-react";
+import { IconDownload, IconX } from "@tabler/icons-react";
 
 interface AttachmentLightboxProps {
   isOpen: boolean;
@@ -33,6 +33,41 @@ export function AttachmentLightbox({
 
   const isImage = contentType.startsWith("image/");
   const isVideo = contentType.startsWith("video/");
+
+  async function saveFile() {
+    if (!objectUrl) return;
+    const savePicker = (
+      window as Window & {
+        showSaveFilePicker?: (options?: unknown) => Promise<{
+          createWritable: () => Promise<{
+            write: (data: Blob) => Promise<void>;
+            close: () => Promise<void>;
+          }>;
+        }>;
+      }
+    ).showSaveFilePicker;
+
+    if (savePicker) {
+      const handle = await savePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: contentType,
+            accept: { [contentType]: ["." + filename.split(".").pop()] },
+          },
+        ],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    }
+
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = filename;
+    anchor.click();
+  }
 
   return (
     <div
@@ -78,6 +113,15 @@ export function AttachmentLightbox({
           )}
           <div className="flex items-center justify-between gap-2 text-sm">
             <span className="truncate text-muted-foreground">{filename}</span>
+            <button
+              type="button"
+              onClick={() => void saveFile()}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground hover:bg-muted"
+              aria-label={`Save ${filename}`}
+            >
+              <IconDownload className="size-3.5" />
+              Save
+            </button>
           </div>
         </div>
       </div>

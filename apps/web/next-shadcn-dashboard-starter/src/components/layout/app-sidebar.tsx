@@ -270,12 +270,12 @@ export default function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="border-sidebar-border/70 mt-auto border-t bg-sidebar/90 p-1">
-        <SidebarMenu className="gap-1">
+      <SidebarFooter className="border-sidebar-border/70 mt-auto border-t bg-sidebar/90 p-0">
+        <SidebarMenu className="gap-0">
           <SidebarMenuItem className="flex items-center justify-center px-1">
             <ThemeModeToggle />
           </SidebarMenuItem>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="p-0">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={

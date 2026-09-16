@@ -15,6 +15,11 @@ import {
   messageService,
   type DirectUser,
 } from "@/features/workspace/services/messageService";
+import {
+  workspaceService,
+  type WorkspaceMember,
+} from "@/features/workspace/services/workspaceService";
+import { useParams } from "next/navigation";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -36,6 +41,7 @@ export function ConversationList({
   onCreateChannel,
   onCreateDM,
 }: ConversationListProps) {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
   const userPresence = useChatStore((state) => state.userPresence);
   const [channelsOpen, setChannelsOpen] = useState(true);
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
@@ -51,6 +57,10 @@ export function ConversationList({
   );
   const [dmOpen, setDmOpen] = useState(false);
   const [dmUsers, setDmUsers] = useState<DirectUser[]>([]);
+  const [directoryMembers, setDirectoryMembers] = useState<WorkspaceMember[]>(
+    [],
+  );
+  const [directorySearch, setDirectorySearch] = useState("");
 
   useEffect(() => {
     if (!dmOpen) return;
@@ -59,6 +69,14 @@ export function ConversationList({
       .then(setDmUsers)
       .catch(() => setDmUsers([]));
   }, [dmOpen]);
+
+  useEffect(() => {
+    if (!directoriesOpen || !workspaceId) return;
+    void workspaceService
+      .listMembers(workspaceId)
+      .then((result) => setDirectoryMembers(result.members))
+      .catch(() => setDirectoryMembers([]));
+  }, [directoriesOpen, workspaceId]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
@@ -413,9 +431,84 @@ export function ConversationList({
                 </button>
               ))}
             </div>
-            <p className="text-muted-foreground text-xs">
-              {directoryTab} directory search is coming soon.
-            </p>
+            {directoryTab === "People" && (
+              <>
+                <Input
+                  value={directorySearch}
+                  onChange={(event) => setDirectorySearch(event.target.value)}
+                  placeholder="Search people"
+                  aria-label="Search people"
+                  className="h-8 text-xs"
+                />
+                <div className="max-h-40 space-y-1 overflow-y-auto">
+                  {directoryMembers
+                    .filter((member) =>
+                      `${member.display_name} ${member.email}`
+                        .toLowerCase()
+                        .includes(directorySearch.toLowerCase()),
+                    )
+                    .map((member) => (
+                      <button
+                        key={member.user_id}
+                        type="button"
+                        onClick={() => {
+                          onCreateDM(member.user_id).catch(() => undefined);
+                          setDirectoriesOpen(false);
+                        }}
+                        className="hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left"
+                      >
+                        <Avatar className="size-6 rounded-md">
+                          <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.55rem] font-semibold">
+                            {member.display_name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="min-w-0 flex-1 truncate text-xs">
+                          {member.display_name || member.email}
+                        </span>
+                        <PresenceIndicator
+                          state={
+                            member.presence_status === "active"
+                              ? "active"
+                              : "offline"
+                          }
+                        />
+                      </button>
+                    ))}
+                  {directoryMembers.length === 0 && (
+                    <p className="text-muted-foreground px-2 py-2 text-xs">
+                      No people found.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+            {directoryTab === "Channels" && (
+              <div className="max-h-40 space-y-1 overflow-y-auto">
+                {channels.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(conversation.id);
+                      setDirectoriesOpen(false);
+                    }}
+                    className="hover:bg-accent flex w-full items-center rounded px-2 py-1.5 text-left text-xs"
+                  >
+                    {conversation.name}
+                  </button>
+                ))}
+                {channels.length === 0 && (
+                  <p className="text-muted-foreground px-2 py-2 text-xs">
+                    No channels found.
+                  </p>
+                )}
+              </div>
+            )}
+            {!["People", "Channels"].includes(directoryTab) && (
+              <p className="text-muted-foreground px-2 py-2 text-xs">
+                This directory is not available in this workspace yet.
+              </p>
+            )}
           </div>
         )}
       </div>

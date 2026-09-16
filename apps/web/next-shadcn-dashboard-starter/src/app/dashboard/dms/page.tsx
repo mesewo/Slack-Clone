@@ -158,25 +158,6 @@ export default function DMsPage() {
             )}
           </div>
         </div>
-        <div className="border-border/70 mt-6 rounded-xl border border-dashed p-5">
-          <div className="flex items-center gap-3">
-            <Icons.user className="text-sidebar-primary size-5" />
-            <div>
-              <p className="text-sm font-medium">Your space (self-DM)</p>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Draft messages, list your to-dos, or keep links and files handy.
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() => router.push("/dashboard/profile")}
-          >
-            Edit Profile
-          </Button>
-        </div>
       </div>
     </div>
   );

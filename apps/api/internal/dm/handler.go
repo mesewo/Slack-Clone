@@ -90,17 +90,28 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 401, "not authenticated")
 		return
 	}
+	selfID, err := h.Queries.CreateSelfDirectConversation(r.Context(), userID)
+	if err != nil {
+		writeError(w, 500, "failed to ensure self direct message")
+		return
+	}
 	items, err := h.Queries.ListDirectConversationsForUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, 500, "failed to list direct messages")
 		return
 	}
-	result := make([]ConversationResponse, 0, len(items))
+	seen := make(map[uuid.UUID]struct{}, len(items)+1)
+	result := make([]ConversationResponse, 0, len(items)+1)
 	for _, item := range items {
+		if _, exists := seen[item.ID]; exists {
+			continue
+		}
+		seen[item.ID] = struct{}{}
 		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus})
 	}
-	if selfID, selfErr := h.Queries.FindSelfDirectConversation(r.Context(), userID); selfErr == nil {
+	if _, exists := seen[selfID]; !exists {
 		if self, userErr := h.Queries.GetUserByID(r.Context(), userID); userErr == nil {
+			seen[selfID] = struct{}{}
 			result = append(result, ConversationResponse{ID: selfID, OtherUserID: userID, OtherDisplayName: self.DisplayName, OtherEmail: self.Email, OtherPresenceStatus: self.PresenceStatus})
 		}
 	}

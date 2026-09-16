@@ -246,6 +246,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       }
     }
 
+    await messageService.createSelfDM().catch(() => undefined);
     const conversations = channels.map((c) =>
       toConversation(c, workspace.name),
     );

@@ -47,7 +47,7 @@ export const navGroups: NavGroup[] = [
       },
       {
         title: "Workspaces",
-        url: "/home",
+        url: "/workspaces",
         icon: "workspace",
         isActive: false,
         items: [],
