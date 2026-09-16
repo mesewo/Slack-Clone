@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth";
 import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ type WorkspaceWithMemberCount = Workspace & { memberCount: number | null };
 
 export default function WorkspacesPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<WorkspaceWithMemberCount[]>([]);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -27,6 +29,8 @@ export default function WorkspacesPage() {
   );
   const [error, setError] = useState("");
   const [showUpgradeCard, setShowUpgradeCard] = useState(true);
+  const firstName =
+    user?.name?.split(" ")[0] || user?.email?.split("@")[0] || "there";
 
   const load = async () => {
     setLoading(true);
@@ -148,7 +152,7 @@ export default function WorkspacesPage() {
             Your workspace hub
           </p>
           <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Where do you want to work?
+            {user ? `Welcome back, ${firstName}` : "Where do you want to work?"}
           </h1>
           <p className="text-muted-foreground mt-3 text-sm sm:text-base">
             Pick a workspace to jump back into the conversation, or create a new
@@ -209,9 +213,28 @@ export default function WorkspacesPage() {
                   </button>
                 ))
               ) : (
-                <p className="text-muted-foreground p-6 text-sm">
-                  No workspaces yet.
-                </p>
+                <>
+                  <p className="text-muted-foreground p-6 text-sm">
+                    No workspaces yet. Try one of these examples while you get
+                    oriented.
+                  </p>
+                  {["Design team", "Product launches"].map((name) => (
+                    <div
+                      key={name}
+                      className="flex items-center gap-4 px-5 py-4 opacity-70"
+                    >
+                      <span className="bg-sidebar-primary/20 text-sidebar-primary flex size-11 items-center justify-center rounded-xl text-lg font-semibold">
+                        {name[0]}
+                      </span>
+                      <span>
+                        <span className="block font-medium">{name}</span>
+                        <span className="text-muted-foreground text-xs">
+                          Demo workspace · example
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </>
               )}
             </div>
 

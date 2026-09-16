@@ -73,12 +73,15 @@ type DirectMessageReaction struct {
 }
 
 type EventOutbox struct {
-	ID          uuid.UUID  `json:"id"`
-	Topic       string     `json:"topic"`
-	EventKey    string     `json:"event_key"`
-	Payload     []byte     `json:"payload"`
-	CreatedAt   time.Time  `json:"created_at"`
-	PublishedAt *time.Time `json:"published_at"`
+	ID          uuid.UUID     `json:"id"`
+	Topic       string        `json:"topic"`
+	EventKey    string        `json:"event_key"`
+	Payload     []byte        `json:"payload"`
+	CreatedAt   time.Time     `json:"created_at"`
+	PublishedAt *time.Time    `json:"published_at"`
+	ClaimedAt   *time.Time    `json:"claimed_at"`
+	ClaimToken  uuid.NullUUID `json:"claim_token"`
+	Attempts    int32         `json:"attempts"`
 }
 
 type Message struct {

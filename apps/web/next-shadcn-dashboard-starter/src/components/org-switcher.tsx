@@ -81,7 +81,7 @@ export function OrgSwitcher() {
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/home")}>
+            <DropdownMenuItem onClick={() => router.push("/workspaces")}>
               <Icons.add className="mr-2 size-4" /> Create workspace
             </DropdownMenuItem>
           </DropdownMenuContent>

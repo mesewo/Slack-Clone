@@ -7,6 +7,8 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Server implements chatpb.CoreServiceServer. Gateway calls this on every
@@ -21,9 +23,7 @@ type Server struct {
 func (s *Server) GetUserChannels(ctx context.Context, req *chatpb.GetUserChannelsRequest) (*chatpb.GetUserChannelsResponse, error) {
 	userID, err := uuid.Parse(req.GetUserId())
 	if err != nil {
-		// Malformed ID - respond with no channels rather than an RPC error;
-		// the caller (Gateway) just won't subscribe this connection to anything.
-		return &chatpb.GetUserChannelsResponse{}, nil
+		return nil, status.Error(codes.InvalidArgument, "user_id must be a valid UUID")
 	}
 
 	rows, err := s.Queries.ListWorkspaceChannelsForUser(ctx, userID)

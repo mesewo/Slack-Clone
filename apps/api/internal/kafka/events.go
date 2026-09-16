@@ -3,6 +3,9 @@ package kafka
 import "time"
 
 type MessageCreatedEvent struct {
+	EventID   string    `json:"event_id"`
+	Version   int       `json:"version"`
+	Source    string    `json:"source"`
 	MessageID string    `json:"message_id"`
 	ChannelID string    `json:"channel_id"`
 	UserID    string    `json:"user_id"`
@@ -11,6 +14,9 @@ type MessageCreatedEvent struct {
 }
 
 type MessageEditedEvent struct {
+	EventID   string    `json:"event_id"`
+	Version   int       `json:"version"`
+	Source    string    `json:"source"`
 	MessageID string    `json:"message_id"`
 	ChannelID string    `json:"channel_id"`
 	UserID    string    `json:"user_id"`
@@ -19,6 +25,9 @@ type MessageEditedEvent struct {
 }
 
 type MessageDeletedEvent struct {
+	EventID   string    `json:"event_id"`
+	Version   int       `json:"version"`
+	Source    string    `json:"source"`
 	MessageID string    `json:"message_id"`
 	ChannelID string    `json:"channel_id"`
 	UserID    string    `json:"user_id"`
@@ -26,6 +35,9 @@ type MessageDeletedEvent struct {
 }
 
 type UserRegisteredEvent struct {
+	EventID      string    `json:"event_id"`
+	Version      int       `json:"version"`
+	Source       string    `json:"source"`
 	UserID       string    `json:"user_id"`
 	Email        string    `json:"email"`
 	DisplayName  string    `json:"display_name"`
@@ -33,19 +45,25 @@ type UserRegisteredEvent struct {
 }
 
 type ReactionAddedEvent struct {
-	ReactionID string `json:"reaction_id"`
-	MessageID  string `json:"message_id"`
-	ChannelID  string `json:"channel_id"`
-	UserID     string `json:"user_id"`
-	Emoji      string `json:"emoji"`
+	EventID    string    `json:"event_id"`
+	Version    int       `json:"version"`
+	Source     string    `json:"source"`
+	ReactionID string    `json:"reaction_id"`
+	MessageID  string    `json:"message_id"`
+	ChannelID  string    `json:"channel_id"`
+	UserID     string    `json:"user_id"`
+	Emoji      string    `json:"emoji"`
 	CreatedAt  time.Time `json:"created_at"`
 }
 
 type ReactionRemovedEvent struct {
-	ReactionID string `json:"reaction_id"`
-	MessageID  string `json:"message_id"`
-	ChannelID  string `json:"channel_id"`
-	UserID     string `json:"user_id"`
-	Emoji      string `json:"emoji"`
+	EventID    string    `json:"event_id"`
+	Version    int       `json:"version"`
+	Source     string    `json:"source"`
+	ReactionID string    `json:"reaction_id"`
+	MessageID  string    `json:"message_id"`
+	ChannelID  string    `json:"channel_id"`
+	UserID     string    `json:"user_id"`
+	Emoji      string    `json:"emoji"`
 	RemovedAt  time.Time `json:"removed_at"`
 }

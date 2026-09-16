@@ -14,6 +14,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
+	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 )
 
@@ -239,11 +240,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "content is required")
 		return
 	}
-	message, err := h.Queries.CreateDirectMessage(r.Context(), database.CreateDirectMessageParams{ConversationID: conversationID, UserID: uuid.NullUUID{UUID: userID, Valid: true}, Content: req.Content})
-	if err != nil {
-		writeError(w, 500, "failed to send direct message")
-		return
-	}
 	attachmentIDs := make([]uuid.UUID, 0, len(req.AttachmentIDs))
 	for _, rawID := range req.AttachmentIDs {
 		id, parseErr := uuid.Parse(rawID)
@@ -253,11 +249,26 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		attachmentIDs = append(attachmentIDs, id)
 	}
-	if len(attachmentIDs) > 0 {
-		if err := h.Queries.AttachFilesToDirectMessage(r.Context(), message.ID, attachmentIDs, userID); err != nil {
-			writeError(w, 500, "failed to attach files")
-			return
+	var message database.DirectMessage
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		message, err = txQueries.CreateDirectMessage(r.Context(), database.CreateDirectMessageParams{ConversationID: conversationID, UserID: uuid.NullUUID{UUID: userID, Valid: true}, Content: req.Content})
+		if err != nil {
+			return err
 		}
+		if len(attachmentIDs) > 0 {
+			if err := txQueries.AttachFilesToDirectMessage(r.Context(), message.ID, attachmentIDs, userID); err != nil {
+				return err
+			}
+		}
+		payload, err := json.Marshal(kafka.MessageCreatedEvent{EventID: message.ID.String(), Version: 1, Source: "core", MessageID: message.ID.String(), ChannelID: "dm:" + conversationID.String(), UserID: userID.String(), Content: message.Content, CreatedAt: message.CreatedAt})
+		if err != nil {
+			return err
+		}
+		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicMessageCreated, message.ID.String(), payload)
+	}); err != nil {
+		writeError(w, 500, "failed to send direct message")
+		return
 	}
 	author, _ := h.Queries.GetUserDisplayName(r.Context(), userID)
 	response := MessageResponse{ID: message.ID, ConversationID: message.ConversationID, UserID: message.UserID, Content: message.Content, CreatedAt: message.CreatedAt.Format("2006-01-02T15:04:05.000Z07:00"), AuthorName: author, Attachments: directAttachments(r.Context(), h.Queries, message.ID)}
@@ -345,8 +356,19 @@ func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "content is required")
 		return
 	}
-	reply, err := h.Queries.CreateDirectThreadReply(r.Context(), conversationID, userID, parentID, strings.TrimSpace(req.Content))
-	if err != nil {
+	var reply database.DirectMessage
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		reply, err = txQueries.CreateDirectThreadReply(r.Context(), conversationID, userID, parentID, strings.TrimSpace(req.Content))
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(kafka.MessageCreatedEvent{EventID: reply.ID.String(), Version: 1, Source: "core", MessageID: reply.ID.String(), ChannelID: "dm:" + conversationID.String(), UserID: userID.String(), Content: reply.Content, CreatedAt: reply.CreatedAt})
+		if err != nil {
+			return err
+		}
+		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicMessageSent, reply.ID.String(), payload)
+	}); err != nil {
 		writeError(w, 500, "failed to create thread reply")
 		return
 	}

@@ -190,14 +190,69 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	if size <= 0 {
 		size = info.Size
 	}
+	start, end, partial := parseRange(r.Header.Get("Range"), size)
 	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Accept-Ranges", "bytes")
+	if partial {
+		if _, err := object.Seek(start, io.SeekStart); err != nil {
+			writeError(w, http.StatusRequestedRangeNotSatisfiable, "invalid byte range")
+			return
+		}
+		size = end - start + 1
+		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(end, 10)+"/"+strconv.FormatInt(info.Size, 10))
+	}
 	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 	if chi.URLParam(r, "variant") == "thumbnail" {
 		w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+".jpg\"")
 	} else {
 		w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+`"`)
 	}
+	if partial {
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = io.CopyN(w, object, size)
+		return
+	}
 	_, _ = io.Copy(w, object)
+}
+
+func parseRange(value string, size int64) (int64, int64, bool) {
+	if value == "" || size <= 0 || !strings.HasPrefix(value, "bytes=") {
+		return 0, size - 1, false
+	}
+	parts := strings.SplitN(strings.TrimPrefix(value, "bytes="), "-", 2)
+	if len(parts) != 2 {
+		return 0, 0, false
+	}
+	start := int64(0)
+	end := size - 1
+	if parts[0] == "" {
+		suffix, err := strconv.ParseInt(parts[1], 10, 64)
+		if err != nil || suffix <= 0 {
+			return 0, 0, false
+		}
+		start = size - suffix
+	} else {
+		parsed, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil || parsed < 0 || parsed >= size {
+			return 0, 0, false
+		}
+		start = parsed
+		if parts[1] != "" {
+			parsedEnd, err := strconv.ParseInt(parts[1], 10, 64)
+			if err != nil || parsedEnd < start {
+				return 0, 0, false
+			}
+			end = min(parsedEnd, size-1)
+		}
+	}
+	return start, end, true
+}
+
+func min(left, right int64) int64 {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func makeThumbnail(data []byte) ([]byte, error) {

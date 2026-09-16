@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -43,7 +44,7 @@ import (
 func main() {
 	_ = godotenv.Load()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -305,6 +306,10 @@ func main() {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
+	httpAddr := os.Getenv("CORE_HTTP_ADDR")
+	if httpAddr == "" {
+		httpAddr = ":8080"
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -386,7 +391,7 @@ func main() {
 		r.Delete("/api/channels/{channelID}/messages/{messageID}/reactions", messageHandler.RemoveReaction)
 	})
 
-	httpServer := &http.Server{Addr: ":8080", Handler: r}
+	httpServer := &http.Server{Addr: httpAddr, Handler: r}
 
 	// This is the piece that was missing: something has to actually act on
 	// ctx being cancelled. Without this goroutine, capturing the interrupt
@@ -394,16 +399,24 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("shutting down...")
-		grpcServer.GracefulStop()
-
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		grpcStopped := make(chan struct{})
+		go func() {
+			grpcServer.GracefulStop()
+			close(grpcStopped)
+		}()
+		select {
+		case <-grpcStopped:
+		case <-shutdownCtx.Done():
+			grpcServer.Stop()
+		}
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("http shutdown error: %v", err)
 		}
 	}()
 
-	log.Println("core HTTP listening on :8080")
+	log.Printf("core HTTP listening on %s", httpAddr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("http server failed: %v", err)
 	}
@@ -418,7 +431,8 @@ func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapk
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			items, err := queries.ListPendingOutbox(ctx, 100)
+			claimToken := uuid.New()
+			items, err := queries.ClaimPendingOutbox(ctx, 100, claimToken)
 			if err != nil {
 				log.Printf("outbox read failed: %v", err)
 				continue
@@ -426,9 +440,10 @@ func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapk
 			for _, item := range items {
 				if err := producer.PublishRaw(ctx, item.Topic, item.EventKey, item.Payload); err != nil {
 					log.Printf("outbox publish failed for %s: %v", item.ID, err)
+					_ = queries.ReleaseOutboxClaim(ctx, item.ID, item.ClaimToken)
 					continue
 				}
-				if err := queries.MarkOutboxPublished(ctx, item.ID); err != nil {
+				if err := queries.MarkOutboxPublished(ctx, item.ID, item.ClaimToken); err != nil {
 					log.Printf("outbox ack failed for %s: %v", item.ID, err)
 				}
 			}

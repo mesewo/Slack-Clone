@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 )
@@ -19,10 +20,48 @@ import (
 // handling a message but before its offset commit lands. The Redis SetNX
 // check below is what actually makes reprocessing safe.
 type Consumer struct {
-	reader *kafka.Reader
-	redis  *redis.Client
+	reader consumerReader
+	store  dedupStore
 	topic  string
 }
+
+type consumerReader interface {
+	FetchMessage(context.Context) (kafka.Message, error)
+	CommitMessages(context.Context, ...kafka.Message) error
+	Close() error
+}
+
+type dedupStore interface {
+	Exists(context.Context, string) (bool, error)
+	Claim(context.Context, string, string, time.Duration) (bool, error)
+	Complete(context.Context, string, string, time.Duration) error
+	Release(context.Context, string, string) error
+}
+
+type redisDedupStore struct{ client *redis.Client }
+
+func (s redisDedupStore) Exists(ctx context.Context, key string) (bool, error) {
+	count, err := s.client.Exists(ctx, key).Result()
+	return count > 0, err
+}
+
+func (s redisDedupStore) Claim(ctx context.Context, key, token string, ttl time.Duration) (bool, error) {
+	return s.client.SetNX(ctx, key, token, ttl).Result()
+}
+
+func (s redisDedupStore) Complete(ctx context.Context, key, value string, ttl time.Duration) error {
+	return s.client.Set(ctx, key, value, ttl).Err()
+}
+
+func (s redisDedupStore) Release(ctx context.Context, key, token string) error {
+	const script = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0`
+	return s.client.Eval(ctx, script, []string{key}, token).Err()
+}
+
+const (
+	processingLeaseTTL = 30 * time.Second
+	processedEventTTL  = 24 * time.Hour
+)
 
 func NewConsumer(brokerAddr, topic, groupID string, redisClient *redis.Client) *Consumer {
 	return &Consumer{
@@ -31,7 +70,7 @@ func NewConsumer(brokerAddr, topic, groupID string, redisClient *redis.Client) *
 			Topic:   topic,
 			GroupID: groupID,
 		}),
-		redis: redisClient,
+		store: redisDedupStore{client: redisClient},
 		topic: topic,
 	}
 }
@@ -59,23 +98,41 @@ func (c *Consumer) Run(ctx context.Context, dedupPrefix string, dedupKeyFunc fun
 			continue
 		}
 
-		// First delivery of this key actually processes. A redelivered
-		// duplicate finds the key already set and skips straight to
-		// committing the offset - that's the idempotency guarantee.
-		firstTime, err := c.redis.SetNX(ctx, dedupPrefix+dedupKey, "1", 24*time.Hour).Result()
+		processedKey := dedupPrefix + "processed:" + dedupKey
+		leaseKey := dedupPrefix + "processing:" + dedupKey
+		processed, err := c.store.Exists(ctx, processedKey)
 		if err != nil {
-			log.Printf("kafka[%s]: redis dedup check failed, processing anyway: %v", c.topic, err)
-			firstTime = true
+			log.Printf("kafka[%s]: redis dedup check failed, not committing: %v", c.topic, err)
+			continue
+		}
+		if processed {
+			log.Printf("kafka[%s]: duplicate delivery of %s, skipped", c.topic, dedupKey)
+			c.commit(ctx, msg)
+			continue
 		}
 
-		if firstTime {
-			if err := handle(msg.Value); err != nil {
-				log.Printf("kafka[%s]: handler error, not committing (will retry): %v", c.topic, err)
-				continue
-			}
-		} else {
-			log.Printf("kafka[%s]: duplicate delivery of %s, skipped", c.topic, dedupKey)
+		leaseToken := uuid.NewString()
+		claimed, err := c.store.Claim(ctx, leaseKey, leaseToken, processingLeaseTTL)
+		if err != nil {
+			log.Printf("kafka[%s]: redis lease failed, not committing: %v", c.topic, err)
+			continue
 		}
+		if !claimed {
+			log.Printf("kafka[%s]: event %s is being processed by another worker, retrying", c.topic, dedupKey)
+			continue
+		}
+
+		if err := handle(msg.Value); err != nil {
+			_ = c.releaseLease(ctx, leaseKey, leaseToken)
+			log.Printf("kafka[%s]: handler error, not committing (will retry): %v", c.topic, err)
+			continue
+		}
+		if err := c.store.Complete(ctx, processedKey, "1", processedEventTTL); err != nil {
+			_ = c.releaseLease(ctx, leaseKey, leaseToken)
+			log.Printf("kafka[%s]: failed to record successful processing, not committing: %v", c.topic, err)
+			continue
+		}
+		_ = c.releaseLease(ctx, leaseKey, leaseToken)
 
 		c.commit(ctx, msg)
 	}
@@ -89,4 +146,8 @@ func (c *Consumer) commit(ctx context.Context, msg kafka.Message) {
 
 func (c *Consumer) Close() error {
 	return c.reader.Close()
+}
+
+func (c *Consumer) releaseLease(ctx context.Context, key, token string) error {
+	return c.store.Release(ctx, key, token)
 }

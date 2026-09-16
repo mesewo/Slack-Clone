@@ -58,12 +58,21 @@ function toUIMessage(m: ChatMessage, currentUserId: string): Message {
 }
 
 function sortMessages(messages: Message[]): Message[] {
-  return messages.slice().sort((left, right) => {
+  return uniqueMessages(messages).sort((left, right) => {
     if (!left.createdAt || !right.createdAt) return 0;
     return (
       new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
     );
   });
+}
+
+function uniqueMessages(messages: Message[]): Message[] {
+  return Array.from(
+    messages.reduce((byId, message) => {
+      if (!byId.has(message.id)) byId.set(message.id, message);
+      return byId;
+    }, new Map<string, Message>()),
+  ).map(([, message]) => message);
 }
 
 function uniqueConversations(conversations: Conversation[]): Conversation[] {
@@ -142,6 +151,7 @@ type ChatState = {
 
   init: (userId: string, workspaceId?: string) => Promise<void>;
   selectConversation: (id: string) => void;
+  syncConversation: () => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   markConversationRead: (id: string) => Promise<void>;
   setDraft: (text: string) => void;
@@ -329,10 +339,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         const currentUserId = get().currentUserId ?? "";
         // REST returns newest-first for pagination; reverse for display order.
         const uiMessages = sortMessages(
-          messages
-            .slice()
-            .reverse()
-            .map((m) => toUIMessage(m, currentUserId)),
+          uniqueMessages(
+            messages
+              .slice()
+              .reverse()
+              .map((m) => toUIMessage(m, currentUserId)),
+          ),
         );
         set((s) => ({
           conversations: s.conversations.map((c) =>
@@ -367,6 +379,32 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       .catch(() => set({ loadingMessages: false }));
   },
 
+  syncConversation: async () => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (item) => item.id === state.selectedConversationId,
+    );
+    if (!conversation) return;
+    const messages =
+      conversation.kind === "dm"
+        ? await messageService.listDMMessages(conversation.dmId!)
+        : await messageService.list(conversation.id);
+    const currentUserId = get().currentUserId ?? "";
+    const uiMessages = sortMessages(
+      uniqueMessages(
+        messages
+          .slice()
+          .reverse()
+          .map((message) => toUIMessage(message, currentUserId)),
+      ),
+    );
+    set((current) => ({
+      conversations: current.conversations.map((item) =>
+        item.id === conversation.id ? { ...item, messages: uiMessages } : item,
+      ),
+    }));
+  },
+
   loadOlderMessages: async () => {
     const state = get();
     const conversation = state.conversations.find(
@@ -398,7 +436,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       set((current) => ({
         conversations: current.conversations.map((item) =>
           item.id === conversation.id
-            ? { ...item, messages: sortMessages([...older, ...item.messages]) }
+            ? {
+                ...item,
+                messages: sortMessages(
+                  uniqueMessages([...older, ...item.messages]),
+                ),
+              }
             : item,
         ),
         hasOlderMessages: {
@@ -610,7 +653,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           item.id === channelId
             ? {
                 ...item,
-                messages: sortMessages([...item.messages, message]),
+                messages: sortMessages(
+                  uniqueMessages([...item.messages, message]),
+                ),
               }
             : item,
         ),

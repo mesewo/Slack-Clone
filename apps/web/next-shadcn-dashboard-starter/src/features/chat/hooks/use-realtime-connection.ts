@@ -34,6 +34,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
   const selectedThreadParentId = useChatStore((s) => s.selectedThreadParentId);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const refreshDMs = useChatStore((s) => s.refreshDMs);
+  const syncConversation = useChatStore((s) => s.syncConversation);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,6 +68,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
 
       ws.onopen = () => {
         reconnectAttemptRef.current = 0;
+        void syncConversation().catch(() => undefined);
       };
 
       ws.onmessage = (event) => {
@@ -270,9 +272,10 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
       };
 
       ws.onclose = () => {
-        if (disposed) return;
+        if (disposed || wsRef.current !== ws) return;
         const attempt = reconnectAttemptRef.current++;
-        const delay = Math.min(30_000, 1_000 * 2 ** attempt);
+        const baseDelay = Math.min(30_000, 1_000 * 2 ** attempt);
+        const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
         reconnectTimerRef.current = setTimeout(connect, delay);
       };
       ws.onerror = () => ws.close();
@@ -297,6 +300,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
     updateReactionUI,
     addNotification,
     refreshDMs,
+    syncConversation,
   ]);
 
   return { sendTyping };

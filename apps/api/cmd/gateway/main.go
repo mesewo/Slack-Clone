@@ -6,6 +6,9 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -24,6 +27,8 @@ import (
 
 func main() {
 	_ = godotenv.Load()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -41,9 +46,18 @@ func main() {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = frontendURL
+	}
+	gateway.ConfigureAllowedOrigins(strings.Split(allowedOrigins, ","))
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
+	}
+	httpAddr := os.Getenv("GATEWAY_HTTP_ADDR")
+	if httpAddr == "" {
+		httpAddr = ":8081"
 	}
 
 	// Same signing secret as Core - JWT validation stays local to Gateway
@@ -56,8 +70,8 @@ func main() {
 	defer redisClient.Close()
 
 	// Ping Redis to verify connectivity
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := redisClient.Ping(ctx).Err(); err != nil {
+	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := redisClient.Ping(pingCtx).Err(); err != nil {
 		log.Printf("warning: Redis not available at %s: %v - falling back to in-memory state", redisAddr, err)
 		redisClient = nil
 	}
@@ -130,6 +144,28 @@ func main() {
 		defer redisPresence.Close()
 	}
 
-	log.Println("gateway HTTP listening on :8081")
-	log.Fatal(http.ListenAndServe(":8081", r))
+	httpServer := &http.Server{Addr: httpAddr, Handler: r}
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("gateway HTTP shutdown error: %v", err)
+		}
+		stopped := make(chan struct{})
+		go func() {
+			grpcServer.GracefulStop()
+			close(stopped)
+		}()
+		select {
+		case <-stopped:
+		case <-shutdownCtx.Done():
+			grpcServer.Stop()
+		}
+	}()
+
+	log.Printf("gateway HTTP listening on %s", httpAddr)
+	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Printf("gateway HTTP server failed: %v", err)
+	}
 }

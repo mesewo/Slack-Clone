@@ -20,6 +20,11 @@ export default function DMsPage() {
   const [query, setQuery] = useState("");
   const [unreadsOnly, setUnreadsOnly] = useState(false);
   const [showBanner, setShowBanner] = useState(true);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [dmUsers, setDmUsers] = useState<
+    { id: string; email: string; display_name: string }[]
+  >([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 
   useEffect(() => {
     void messageService
@@ -28,6 +33,14 @@ export default function DMsPage() {
       .then(setDMs)
       .catch(() => setDMs([]));
   }, []);
+
+  useEffect(() => {
+    if (!composeOpen) return;
+    void messageService
+      .listDMUsers()
+      .then(setDmUsers)
+      .catch(() => setDmUsers([]));
+  }, [composeOpen]);
 
   const filtered = useMemo(() => {
     const uniqueDMs = new Map<string, DirectConversation>();
@@ -65,13 +78,52 @@ export default function DMsPage() {
             size="icon"
             variant="ghost"
             aria-label="Compose direct message"
-            onClick={() =>
-              toast.info("Choose a person from a workspace to start a DM.")
-            }
+            onClick={() => setComposeOpen((open) => !open)}
           >
             <Icons.edit className="size-4" />
           </Button>
         </div>
+        {composeOpen && (
+          <div className="border-border mt-4 rounded-xl border bg-card p-4">
+            <label className="text-sm font-medium" htmlFor="dashboard-dm-users">
+              To:
+            </label>
+            <select
+              id="dashboard-dm-users"
+              multiple
+              value={selectedUsers}
+              onChange={(event) =>
+                setSelectedUsers(
+                  Array.from(
+                    event.target.selectedOptions,
+                    (option) => option.value,
+                  ),
+                )
+              }
+              className="border-input bg-background mt-2 h-28 w-full rounded-md border px-2 py-1 text-sm"
+            >
+              {dmUsers.map((dmUser) => (
+                <option key={dmUser.id} value={dmUser.id}>
+                  {dmUser.display_name || dmUser.email}
+                </option>
+              ))}
+            </select>
+            <Button
+              className="mt-3"
+              disabled={selectedUsers.length === 0}
+              onClick={async () => {
+                for (const userId of selectedUsers) {
+                  await messageService.createDM(userId);
+                }
+                setComposeOpen(false);
+                setSelectedUsers([]);
+                toast.success("Direct message opened");
+              }}
+            >
+              Start conversation
+            </Button>
+          </div>
+        )}
         <div className="mt-6 flex items-center gap-2">
           <Input
             value={query}

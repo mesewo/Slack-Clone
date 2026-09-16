@@ -44,7 +44,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground"
           aria-label="Close workspace"
           title="Close workspace"
-          onClick={() => router.push("/home")}
+          onClick={() => router.push("/workspaces")}
         >
           <Icons.close className="size-4" />
         </Button>

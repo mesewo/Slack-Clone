@@ -13,10 +13,12 @@ import {
   type Notification,
 } from "@/features/notifications/utils/store";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 type Tab = "all" | "dms" | "mentions" | "threads";
 
 export default function ActivityPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("all");
   const [selected, setSelected] = useState<Notification | null>(null);
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
@@ -51,6 +53,7 @@ export default function ActivityPage() {
   }, [notifications, query, tab, unreadOnly]);
 
   const isThreads = tab === "threads";
+  const allCount = notifications.length + threads.length;
   const hasItems = isThreads
     ? threads.length > 0
     : filteredNotifications.length > 0;
@@ -78,7 +81,7 @@ export default function ActivityPage() {
               className={`rounded-full px-3 py-1.5 text-sm capitalize transition-colors ${tab === value ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-accent"}`}
             >
               {value === "all"
-                ? `All (${notifications.length})`
+                ? `All (${allCount})`
                 : value === "threads"
                   ? `Threads (${threads.length})`
                   : value}
@@ -147,9 +150,20 @@ export default function ActivityPage() {
                 <button
                   key={`${thread.kind}-${thread.id}`}
                   type="button"
-                  onClick={() =>
-                    toast.info("Opening thread from Activity is coming soon.")
-                  }
+                  onClick={() => {
+                    const workspaceId = window.localStorage.getItem(
+                      "active_workspace_id",
+                    );
+                    if (!workspaceId) {
+                      toast.info("Open a workspace first.");
+                      return;
+                    }
+                    router.push(
+                      thread.kind === "dm"
+                        ? `/home/${workspaceId}/dms/${thread.conversation_id}`
+                        : `/home/${workspaceId}/channels/${thread.channel_id}`,
+                    );
+                  }}
                   className="hover:bg-accent/40 w-full p-4 text-left"
                 >
                   <p className="text-sm font-medium">{thread.title}</p>

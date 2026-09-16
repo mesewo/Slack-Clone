@@ -9,5 +9,5 @@ export default async function Page() {
     return redirect("/auth/sign-in");
   }
 
-  redirect("/home");
+  redirect("/workspaces");
 }

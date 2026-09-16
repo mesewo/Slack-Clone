@@ -76,14 +76,14 @@ export default function AppSidebar() {
   return (
     <Sidebar
       collapsible="none"
-      className="w-16 border-sidebar-border/80 bg-sidebar text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]"
+      className="w-[4.5rem] border-sidebar-border/80 bg-sidebar text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]"
     >
       <SidebarHeader className="border-sidebar-border/70 bg-sidebar/90 px-2 py-3">
         <OrgSwitcher />
       </SidebarHeader>
-      <SidebarContent className="flex-1 overflow-x-hidden bg-sidebar px-1 pb-2 pt-2">
+      <SidebarContent className="flex-1 overflow-x-hidden bg-sidebar px-1 pb-0 pt-1">
         <SidebarGroup className="py-0">
-          <SidebarMenu className="gap-1">
+          <SidebarMenu className="gap-0.5">
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Home"
@@ -98,12 +98,12 @@ export default function AppSidebar() {
                       ? last.startsWith("dm:")
                         ? `/home/${activeWorkspaceId}/dms/${last.slice(3)}`
                         : `/home/${activeWorkspaceId}/channels/${last}`
-                      : "/home",
+                      : "/workspaces",
                   );
                 }}
               >
-                <Icons.home />
-                <span className="sr-only">Home</span>
+                <Icons.home className="size-5" />
+                <span className="text-[0.58rem] font-medium">Home</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -111,8 +111,8 @@ export default function AppSidebar() {
                 tooltip="Direct messages"
                 render={<Link href="/dms" aria-label="Direct messages" />}
               >
-                <Icons.chat />
-                <span className="sr-only">Direct messages</span>
+                <Icons.chat className="size-5" />
+                <span className="text-[0.58rem] font-medium">DMs</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -120,8 +120,8 @@ export default function AppSidebar() {
                 tooltip="Activity"
                 render={<Link href="/activity" aria-label="Activity" />}
               >
-                <Icons.activity />
-                <span className="sr-only">Activity</span>
+                <Icons.activity className="size-5" />
+                <span className="text-[0.58rem] font-medium">Activity</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -131,8 +131,8 @@ export default function AppSidebar() {
                   toast.info("More workspace tools are coming soon.")
                 }
               >
-                <Icons.dots />
-                <span className="sr-only">More</span>
+                <Icons.dots className="size-5" />
+                <span className="text-[0.58rem] font-medium">More</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -144,15 +144,15 @@ export default function AppSidebar() {
                     : toast.info("Open a workspace first.")
                 }
               >
-                <Icons.settings />
-                <span className="sr-only">Admin</span>
+                <Icons.settings className="size-5" />
+                <span className="text-[0.58rem] font-medium">Admin</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <Popover>
                 <PopoverTrigger render={<SidebarMenuButton tooltip="Create" />}>
-                  <Icons.add />
-                  <span className="sr-only">Create</span>
+                  <Icons.add className="size-5" />
+                  <span className="text-[0.58rem] font-medium">Create</span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
                   {[
