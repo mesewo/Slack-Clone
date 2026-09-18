@@ -75,6 +75,14 @@ function uniqueMessages(messages: Message[]): Message[] {
   ).map(([, message]) => message);
 }
 
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const byId = new Map(existing.map((message) => [message.id, message]));
+  for (const message of incoming) {
+    byId.set(message.id, message);
+  }
+  return sortMessages(Array.from(byId.values()));
+}
+
 function uniqueConversations(conversations: Conversation[]): Conversation[] {
   return Array.from(
     conversations.reduce((byId, conversation) => {
@@ -400,7 +408,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     );
     set((current) => ({
       conversations: current.conversations.map((item) =>
-        item.id === conversation.id ? { ...item, messages: uiMessages } : item,
+        item.id === conversation.id
+          ? {
+              ...item,
+              messages: mergeMessages(item.messages, uiMessages),
+            }
+          : item,
       ),
     }));
   },
@@ -671,11 +684,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     set((state) => ({
       conversations: state.conversations.map((c) => {
         if (c.id !== channelId) return c;
-        if (c.messages.some((existing) => existing.id === message.id)) return c;
         const isOwnMessage = message.user_id === currentUserId;
         return {
           ...c,
-          messages: sortMessages([...c.messages, uiMessage]),
+          messages: mergeMessages(c.messages, [uiMessage]),
           unread: isOwnMessage ? c.unread : c.unread + 1,
         };
       }),

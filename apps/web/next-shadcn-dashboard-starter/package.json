@@ -18,7 +18,8 @@
     "lint:strict": "oxlint --deny-warnings",
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:e2e:realtime": "playwright test e2e/realtime-reconnect.spec.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^4.0.47",
@@ -73,6 +74,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.9.0",
+    "@playwright/test": "^1.63.0",
     "@types/node": "22.10.2",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
