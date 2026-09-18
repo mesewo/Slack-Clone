@@ -156,7 +156,12 @@ func main() {
 			log.Fatalf("failed to initialize object store bucket: %v", err)
 		}
 	}
-	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: ""}
+	thumbnailWorker := upload.NewThumbnailWorker(queries, objectStore, s3Bucket, 64, 2)
+	thumbnailWorker.Start(ctx)
+	if err := thumbnailWorker.RequeueStale(context.Background()); err != nil {
+		log.Printf("warning: failed to requeue stale thumbnail jobs: %v", err)
+	}
+	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", ThumbnailWorker: thumbnailWorker}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer redisClient.Close()

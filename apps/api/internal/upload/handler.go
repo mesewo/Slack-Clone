@@ -12,6 +12,7 @@ import (
 	"image/jpeg"
 	_ "image/png"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -30,10 +31,11 @@ import (
 const maxUploadSize = 100 << 20 // 100MB
 
 type Handler struct {
-	Queries *database.Queries
-	Store   *minio.Client
-	Bucket  string
-	BaseURL string
+	Queries        *database.Queries
+	Store          *minio.Client
+	Bucket         string
+	BaseURL        string
+	ThumbnailWorker *ThumbnailWorker
 }
 
 type Response struct {
@@ -52,24 +54,48 @@ type PresignRequest struct {
 
 type PresignResponse struct {
 	ID          string    `json:"id"`
-	Key         string    `json:"key"`
+	SessionID   string    `json:"session_id"`
+	ObjectKey   string    `json:"object_key,omitempty"`
 	Filename    string    `json:"filename"`
 	ContentType string    `json:"content_type"`
 	SizeBytes   int64     `json:"size_bytes"`
 	UploadURL   string    `json:"upload_url"`
+	Expiry      time.Time `json:"expiry"`
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 type CompleteUploadRequest struct {
 	SessionID   string `json:"session_id,omitempty"`
-	Key         string `json:"key"`
-	Filename    string `json:"filename"`
-	ContentType string `json:"content_type"`
-	SizeBytes   int64  `json:"size_bytes"`
+	Key         string `json:"key,omitempty"`
+	Filename    string `json:"filename,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
 }
 
 func NewStore(endpoint, accessKey, secretKey string, useSSL bool) (*minio.Client, error) {
 	return minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL})
+}
+
+func validatePresignRequest(filename, contentType string, size int64) (string, string, int64, error) {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
+		return "", "", 0, fmt.Errorf("file is required")
+	}
+	filename = filepath.Base(filename)
+	if filename == "" || filename == "." || filename == "/" {
+		return "", "", 0, fmt.Errorf("invalid filename")
+	}
+	if size <= 0 || size > maxUploadSize {
+		return "", "", 0, fmt.Errorf("file size is invalid")
+	}
+	contentType = strings.TrimSpace(contentType)
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if !allowedType(contentType) {
+		return "", "", 0, fmt.Errorf("unsupported file type")
+	}
+	return filename, contentType, size, nil
 }
 
 func (h *Handler) CreatePresignedUpload(w http.ResponseWriter, r *http.Request) {
@@ -88,38 +114,51 @@ func (h *Handler) CreatePresignedUpload(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid upload request")
 		return
 	}
-	if req.Filename == "" {
-		writeError(w, http.StatusBadRequest, "file is required")
+	filename, contentType, size, err := validatePresignRequest(req.Filename, req.ContentType, req.SizeBytes)
+	if err != nil {
+		if err.Error() == "unsupported file type" {
+			writeError(w, http.StatusUnsupportedMediaType, err.Error())
+			return
+		}
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	contentType := req.ContentType
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	if req.SizeBytes <= 0 || req.SizeBytes > maxUploadSize {
-		writeError(w, http.StatusBadRequest, "file size is invalid")
-		return
-	}
-	if !allowedType(contentType) {
-		writeError(w, http.StatusUnsupportedMediaType, "unsupported file type")
-		return
-	}
-	key := safeUploadKey(userID.String(), req.Filename)
-	sessionID := uuid.New().String()
+	key := safeUploadKey(userID.String(), filename)
+	sessionID := uuid.New()
 	expiresAt := time.Now().Add(15 * time.Minute)
+	now := time.Now()
+	session := database.UploadSession{
+		ID:               sessionID,
+		UserID:           userID,
+		ObjectKey:        key,
+		OriginalFilename: filename,
+		ContentType:      contentType,
+		DeclaredSize:     size,
+		Status:           "PENDING",
+		ExpiresAt:        expiresAt,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	if _, err := h.Queries.CreateUploadSession(r.Context(), session); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create upload session")
+		return
+	}
 	uploadURL, err := h.Store.PresignedPutObject(r.Context(), h.Bucket, key, 15*time.Minute)
 	if err != nil {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, 0)
 		writeError(w, http.StatusInternalServerError, "failed to generate upload URL")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(PresignResponse{
-		ID:          sessionID,
-		Key:         key,
-		Filename:    filepath.Base(req.Filename),
+		ID:          sessionID.String(),
+		SessionID:   sessionID.String(),
+		ObjectKey:   key,
+		Filename:    filename,
 		ContentType: contentType,
-		SizeBytes:   req.SizeBytes,
+		SizeBytes:   size,
 		UploadURL:   uploadURL.String(),
+		Expiry:      expiresAt,
 		ExpiresAt:   expiresAt,
 	})
 }
@@ -140,51 +179,88 @@ func (h *Handler) CompletePresignedUpload(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid upload completion")
 		return
 	}
-	if req.Key == "" || req.Filename == "" {
-		writeError(w, http.StatusBadRequest, "upload key and filename are required")
+	if req.SessionID == "" {
+		writeError(w, http.StatusBadRequest, "session_id is required")
 		return
 	}
-	contentType := req.ContentType
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	if !allowedType(contentType) {
-		writeError(w, http.StatusUnsupportedMediaType, "unsupported file type")
-		return
-	}
-	info, err := h.Store.StatObject(r.Context(), h.Bucket, req.Key, minio.StatObjectOptions{})
+	sessionID, err := uuid.Parse(req.SessionID)
 	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid session_id")
+		return
+	}
+	session, err := h.Queries.GetUploadSessionByID(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "upload session not found")
+		return
+	}
+	if session.UserID != userID {
+		writeError(w, http.StatusForbidden, "upload session does not belong to this user")
+		return
+	}
+	if time.Now().After(session.ExpiresAt) {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "EXPIRED", nil, session.AttemptCount)
+		writeError(w, http.StatusGone, "upload session expired")
+		return
+	}
+	if session.Status == "READY" && session.ConfirmedAt != nil {
+		attachment, attachmentErr := h.Queries.GetAttachmentByStoragePath(r.Context(), userID, session.ObjectKey)
+		if attachmentErr == nil {
+			response := Response{ID: attachment.ID, Filename: attachment.Filename, ContentType: attachment.ContentType, SizeBytes: attachment.SizeBytes, URL: h.BaseURL + "/api/uploads/" + attachment.ID.String()}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(response)
+			return
+		}
+	}
+	info, err := h.Store.StatObject(r.Context(), h.Bucket, session.ObjectKey, minio.StatObjectOptions{})
+	if err != nil {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, session.AttemptCount)
 		writeError(w, http.StatusNotFound, "uploaded object was not found")
 		return
 	}
-	if req.SizeBytes > 0 && info.Size != req.SizeBytes {
-		writeError(w, http.StatusBadRequest, "uploaded file size does not match metadata")
+	if info.Size != session.DeclaredSize {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, session.AttemptCount)
+		writeError(w, http.StatusBadRequest, "uploaded file size does not match session metadata")
+		return
+	}
+	if !allowedType(session.ContentType) {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, session.AttemptCount)
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported file type")
+		return
+	}
+	if info.ContentType != "" && info.ContentType != session.ContentType && info.ContentType != "application/octet-stream" {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, session.AttemptCount)
+		writeError(w, http.StatusBadRequest, "uploaded object metadata does not match the session")
+		return
+	}
+	now := time.Now()
+	if err := h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "UPLOADED", &now, session.AttemptCount); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update upload session")
+		return
+	}
+	attachment, err := h.Queries.GetAttachmentByStoragePath(r.Context(), userID, session.ObjectKey)
+	if err == nil && attachment.ID != uuid.Nil {
+		response := Response{ID: attachment.ID, Filename: attachment.Filename, ContentType: attachment.ContentType, SizeBytes: attachment.SizeBytes, URL: h.BaseURL + "/api/uploads/" + attachment.ID.String()}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(response)
 		return
 	}
 	id := uuid.New()
-	thumbnailPath := ""
-	if strings.HasPrefix(contentType, "image/") {
-		if object, objErr := h.Store.GetObject(r.Context(), h.Bucket, req.Key, minio.GetObjectOptions{}); objErr == nil {
-			defer object.Close()
-			data, readErr := io.ReadAll(object)
-			if readErr == nil {
-				if thumbnail, thumbnailErr := makeThumbnail(data); thumbnailErr == nil {
-					thumbnailPath = req.Key + ".thumbnail.jpg"
-					if _, putErr := h.Store.PutObject(r.Context(), h.Bucket, thumbnailPath, bytes.NewReader(thumbnail), int64(len(thumbnail)), minio.PutObjectOptions{ContentType: "image/jpeg"}); putErr != nil {
-						thumbnailPath = ""
-					}
-				}
-			}
-		}
-	}
-	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: filepath.Base(req.Filename), ContentType: contentType, SizeBytes: info.Size, StoragePath: req.Key, Column7: thumbnailPath}); err != nil {
-		if thumbnailPath != "" {
-			_ = h.Store.RemoveObject(r.Context(), h.Bucket, thumbnailPath, minio.RemoveObjectOptions{})
-		}
+	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: session.OriginalFilename, ContentType: session.ContentType, SizeBytes: info.Size, StoragePath: session.ObjectKey, Column7: ""}); err != nil {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, session.AttemptCount)
 		writeError(w, http.StatusInternalServerError, "failed to save attachment metadata")
 		return
 	}
-	response := Response{ID: id, Filename: filepath.Base(req.Filename), ContentType: contentType, SizeBytes: info.Size, URL: h.BaseURL + "/api/uploads/" + id.String()}
+	if h.ThumbnailWorker != nil && strings.HasPrefix(session.ContentType, "image/") {
+		if err := h.ThumbnailWorker.Enqueue(r.Context(), sessionID, session.ObjectKey, session.ContentType); err != nil {
+			log.Printf("upload complete: enqueue thumbnail job failed for %s: %v", sessionID, err)
+		}
+	}
+	if err := h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "UPLOADED", &now, session.AttemptCount); err != nil {
+		_ = h.Queries.UpdateUploadSessionStatus(r.Context(), sessionID, "FAILED", nil, session.AttemptCount)
+		writeError(w, http.StatusInternalServerError, "failed to finalize upload session")
+		return
+	}
+	response := Response{ID: id, Filename: session.OriginalFilename, ContentType: session.ContentType, SizeBytes: info.Size, URL: h.BaseURL + "/api/uploads/" + id.String()}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
 }
@@ -294,6 +370,32 @@ func (h *Handler) generateThumbnailAsync(ctx context.Context, key, contentType s
 	}()
 }
 
+func (h *Handler) attachmentAccessAllowed(ctx context.Context, userID uuid.UUID, attachment database.Attachment) (bool, error) {
+	if attachment.MessageID.Valid {
+		message, err := h.Queries.GetMessageByID(ctx, attachment.MessageID.UUID)
+		if err != nil {
+			return false, err
+		}
+		member, err := h.Queries.IsChannelMember(ctx, database.IsChannelMemberParams{ChannelID: message.ChannelID, UserID: userID})
+		if err != nil || !member {
+			return false, err
+		}
+		return true, nil
+	}
+	if directMessageID, err := h.Queries.GetAttachmentDirectMessageID(ctx, attachment.ID); err == nil && directMessageID.Valid {
+		conversationID, conversationErr := h.Queries.GetDirectMessageConversationID(ctx, directMessageID.UUID)
+		if conversationErr != nil {
+			return false, conversationErr
+		}
+		member, err := h.Queries.IsDirectConversationMember(ctx, database.IsDirectConversationMemberParams{ConversationID: conversationID, UserID: userID})
+		if err != nil || !member {
+			return false, err
+		}
+		return true, nil
+	}
+	return attachment.UserID == userID, nil
+}
+
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
 	if !ok {
@@ -315,34 +417,10 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid user")
 		return
 	}
-	if attachment.MessageID.Valid {
-		message, messageErr := h.Queries.GetMessageByID(r.Context(), attachment.MessageID.UUID)
-		if messageErr != nil {
-			writeError(w, http.StatusNotFound, "attachment message not found")
-			return
-		}
-		member, memberErr := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: message.ChannelID, UserID: userID})
-		if memberErr != nil || !member {
-			writeError(w, http.StatusForbidden, "not allowed to download this file")
-			return
-		}
-	} else {
-		directMessageID, directErr := h.Queries.GetAttachmentDirectMessageID(r.Context(), id)
-		if directErr == nil && directMessageID.Valid {
-			conversationID, conversationErr := h.Queries.GetDirectMessageConversationID(r.Context(), directMessageID.UUID)
-			if conversationErr != nil {
-				writeError(w, http.StatusNotFound, "attachment conversation not found")
-				return
-			}
-			member, memberErr := h.Queries.IsDirectConversationMember(r.Context(), database.IsDirectConversationMemberParams{ConversationID: conversationID, UserID: userID})
-			if memberErr != nil || !member {
-				writeError(w, http.StatusForbidden, "not allowed to download this file")
-				return
-			}
-		} else if attachment.UserID != userID {
-			writeError(w, http.StatusForbidden, "not allowed to download this file")
-			return
-		}
+	allowed, err := h.attachmentAccessAllowed(r.Context(), userID, attachment)
+	if err != nil || !allowed {
+		writeError(w, http.StatusForbidden, "not allowed to download this file")
+		return
 	}
 	key, contentType, size := attachment.StoragePath, attachment.ContentType, attachment.SizeBytes
 	if chi.URLParam(r, "variant") == "thumbnail" {
@@ -368,33 +446,12 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	if size <= 0 {
 		size = info.Size
 	}
-	start, end, partial, valid := parseRange(r.Header.Get("Range"), size)
-	if partial && !valid {
-		writeError(w, http.StatusRequestedRangeNotSatisfiable, "invalid byte range")
-		return
-	}
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Accept-Ranges", "bytes")
-	if partial {
-		if _, err := object.Seek(start, io.SeekStart); err != nil {
+	if err := prepareRangeResponse(w, object, contentType, size, attachment.Filename, chi.URLParam(r, "variant"), r.Header.Get("Range")); err != nil {
+		if w.Header().Get("Content-Range") == "" {
 			writeError(w, http.StatusRequestedRangeNotSatisfiable, "invalid byte range")
-			return
 		}
-		size = end - start + 1
-		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(end, 10)+"/"+strconv.FormatInt(info.Size, 10))
-	}
-	w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
-	if chi.URLParam(r, "variant") == "thumbnail" {
-		w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+".jpg\"")
-	} else {
-		w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filepath.Base(attachment.Filename), `"`, "")+`"`)
-	}
-	if partial {
-		w.WriteHeader(http.StatusPartialContent)
-		_, _ = io.CopyN(w, object, size)
 		return
 	}
-	_, _ = io.Copy(w, object)
 }
 
 func parseRange(value string, size int64) (int64, int64, bool, bool) {
@@ -431,6 +488,50 @@ func parseRange(value string, size int64) (int64, int64, bool, bool) {
 		}
 	}
 	return start, end, true, true
+}
+
+func prepareRangeResponse(w http.ResponseWriter, object io.Reader, contentType string, size int64, filename, variant, rangeHeader string) error {
+	start, end, partial, valid := parseRange(rangeHeader, size)
+	if partial && !valid {
+		w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(size, 10))
+		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+		return fmt.Errorf("invalid byte range")
+	}
+	if variant == "thumbnail" {
+		contentType = "image/jpeg"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Accept-Ranges", "bytes")
+	if partial {
+		if _, err := io.CopyN(io.Discard, object, start); err != nil && err != io.EOF {
+			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(size, 10))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return fmt.Errorf("invalid byte range")
+		}
+		body := make([]byte, end-start+1)
+		if _, err := io.ReadFull(object, body); err != nil {
+			w.Header().Set("Content-Range", "bytes */"+strconv.FormatInt(size, 10))
+			w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+			return fmt.Errorf("invalid byte range")
+		}
+		w.Header().Set("Content-Range", "bytes "+strconv.FormatInt(start, 10)+"-"+strconv.FormatInt(end, 10)+"/"+strconv.FormatInt(size, 10))
+		w.Header().Set("Content-Length", strconv.FormatInt(end-start+1, 10))
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(body)
+		return nil
+	}
+	data, err := io.ReadAll(object)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Length", strconv.FormatInt(int64(len(data)), 10))
+	if variant == "thumbnail" {
+		w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(filepath.Base(filename), `"`, "")+".jpg\"")
+	} else {
+		w.Header().Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(filepath.Base(filename), `"`, "")+`"`)
+	}
+	_, _ = w.Write(data)
+	return nil
 }
 
 func min(left, right int64) int64 {
