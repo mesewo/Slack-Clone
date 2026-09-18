@@ -191,7 +191,7 @@ func TestLiveGatewayInterruptionProcessOwned(t *testing.T) {
 	if !core.stopGracefully(t, 10*time.Second) {
 		t.Fatalf("core graceful shutdown failed: %s", core.logs())
 	}
-	t.Log("process lifecycle verified; client-side automatic reconnect/history synchronization requires the browser frontend harness")
+	t.Log("process-owned lifecycle verified; browser reconnect and history synchronization are covered by the separate frontend/browser harness")
 	_ = workspaceID
 	_ = wsA
 }

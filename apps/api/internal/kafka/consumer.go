@@ -76,8 +76,9 @@ func NewConsumer(brokerAddr, topic, groupID string, redisClient *redis.Client) *
 }
 
 // Run blocks, processing messages until ctx is cancelled.
-//   - dedupKeyFunc extracts the idempotency key (e.g. message_id) from the
-//     raw message bytes.
+//   - dedupKeyFunc extracts the event identity / event idempotency key from the
+//     raw message bytes. For current events this should be the event_id; legacy
+//     payloads may fall back to a deterministic hash of the original event payload.
 //   - handle does the actual work. If it returns an error, the offset is
 //     NOT committed, so this message will be redelivered and retried.
 func (c *Consumer) Run(ctx context.Context, dedupPrefix string, dedupKeyFunc func([]byte) (string, error), handle func([]byte) error) {

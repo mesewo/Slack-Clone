@@ -1,6 +1,32 @@
 package kafka
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+// EventDedupKey returns the event-specific idempotency key.
+//
+// For current events, event_id is the canonical deduplication identity.
+// Legacy payloads may not have event_id; in those cases we fall back to a
+// deterministic hash of the topic + raw payload so redelivery of the same legacy
+// event still maps to the same key without inventing a random identity.
+func EventDedupKey(topic string, raw []byte) (string, error) {
+	var base map[string]any
+	if err := json.Unmarshal(raw, &base); err != nil {
+		return "", err
+	}
+	if eventID, ok := base["event_id"].(string); ok && eventID != "" {
+		return eventID, nil
+	}
+
+	legacySeed := fmt.Sprintf("%s:%s", topic, string(raw))
+	sum := sha256.Sum256([]byte(legacySeed))
+	return hex.EncodeToString(sum[:]), nil
+}
 
 type MessageCreatedEvent struct {
 	EventID   string    `json:"event_id"`

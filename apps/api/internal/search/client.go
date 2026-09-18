@@ -72,6 +72,25 @@ func (c *Client) IndexMessage(ctx context.Context, message MessageDocument) erro
 	return nil
 }
 
+func (c *Client) Reindex(ctx context.Context, rows []database.ListMessagesForSearchRow) error {
+	for _, row := range rows {
+		author := ""
+		if row.AuthorName.Valid {
+			author = row.AuthorName.String
+		}
+		if err := c.IndexMessage(ctx, ToDocument(database.Message{
+			ID:        row.ID,
+			ChannelID: row.ChannelID,
+			UserID:    row.UserID,
+			Content:   row.Content,
+			CreatedAt: row.CreatedAt,
+		}, author)); err != nil {
+			return fmt.Errorf("reindex message %s: %w", row.ID, err)
+		}
+	}
+	return nil
+}
+
 func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
 	status, response, err := c.request(ctx, http.MethodDelete, "/"+indexName+"/_doc/"+messageID, nil, "")
 	if err != nil {

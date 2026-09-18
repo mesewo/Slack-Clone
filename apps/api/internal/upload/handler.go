@@ -2,6 +2,7 @@ package upload
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -42,8 +44,149 @@ type Response struct {
 	URL         string    `json:"url"`
 }
 
+type PresignRequest struct {
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
+type PresignResponse struct {
+	ID          string    `json:"id"`
+	Key         string    `json:"key"`
+	Filename    string    `json:"filename"`
+	ContentType string    `json:"content_type"`
+	SizeBytes   int64     `json:"size_bytes"`
+	UploadURL   string    `json:"upload_url"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type CompleteUploadRequest struct {
+	SessionID   string `json:"session_id,omitempty"`
+	Key         string `json:"key"`
+	Filename    string `json:"filename"`
+	ContentType string `json:"content_type"`
+	SizeBytes   int64  `json:"size_bytes"`
+}
+
 func NewStore(endpoint, accessKey, secretKey string, useSSL bool) (*minio.Client, error) {
 	return minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL})
+}
+
+func (h *Handler) CreatePresignedUpload(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid user")
+		return
+	}
+	var req PresignRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid upload request")
+		return
+	}
+	if req.Filename == "" {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	contentType := req.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if req.SizeBytes <= 0 || req.SizeBytes > maxUploadSize {
+		writeError(w, http.StatusBadRequest, "file size is invalid")
+		return
+	}
+	if !allowedType(contentType) {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported file type")
+		return
+	}
+	key := safeUploadKey(userID.String(), req.Filename)
+	sessionID := uuid.New().String()
+	expiresAt := time.Now().Add(15 * time.Minute)
+	uploadURL, err := h.Store.PresignedPutObject(r.Context(), h.Bucket, key, 15*time.Minute)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate upload URL")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(PresignResponse{
+		ID:          sessionID,
+		Key:         key,
+		Filename:    filepath.Base(req.Filename),
+		ContentType: contentType,
+		SizeBytes:   req.SizeBytes,
+		UploadURL:   uploadURL.String(),
+		ExpiresAt:   expiresAt,
+	})
+}
+
+func (h *Handler) CompletePresignedUpload(w http.ResponseWriter, r *http.Request) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid user")
+		return
+	}
+	var req CompleteUploadRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid upload completion")
+		return
+	}
+	if req.Key == "" || req.Filename == "" {
+		writeError(w, http.StatusBadRequest, "upload key and filename are required")
+		return
+	}
+	contentType := req.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if !allowedType(contentType) {
+		writeError(w, http.StatusUnsupportedMediaType, "unsupported file type")
+		return
+	}
+	info, err := h.Store.StatObject(r.Context(), h.Bucket, req.Key, minio.StatObjectOptions{})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "uploaded object was not found")
+		return
+	}
+	if req.SizeBytes > 0 && info.Size != req.SizeBytes {
+		writeError(w, http.StatusBadRequest, "uploaded file size does not match metadata")
+		return
+	}
+	id := uuid.New()
+	thumbnailPath := ""
+	if strings.HasPrefix(contentType, "image/") {
+		if object, objErr := h.Store.GetObject(r.Context(), h.Bucket, req.Key, minio.GetObjectOptions{}); objErr == nil {
+			defer object.Close()
+			data, readErr := io.ReadAll(object)
+			if readErr == nil {
+				if thumbnail, thumbnailErr := makeThumbnail(data); thumbnailErr == nil {
+					thumbnailPath = req.Key + ".thumbnail.jpg"
+					if _, putErr := h.Store.PutObject(r.Context(), h.Bucket, thumbnailPath, bytes.NewReader(thumbnail), int64(len(thumbnail)), minio.PutObjectOptions{ContentType: "image/jpeg"}); putErr != nil {
+						thumbnailPath = ""
+					}
+				}
+			}
+		}
+	}
+	if _, err := h.Queries.CreateAttachment(r.Context(), database.CreateAttachmentParams{ID: id, UserID: userID, Filename: filepath.Base(req.Filename), ContentType: contentType, SizeBytes: info.Size, StoragePath: req.Key, Column7: thumbnailPath}); err != nil {
+		if thumbnailPath != "" {
+			_ = h.Store.RemoveObject(r.Context(), h.Bucket, thumbnailPath, minio.RemoveObjectOptions{})
+		}
+		writeError(w, http.StatusInternalServerError, "failed to save attachment metadata")
+		return
+	}
+	response := Response{ID: id, Filename: filepath.Base(req.Filename), ContentType: contentType, SizeBytes: info.Size, URL: h.BaseURL + "/api/uploads/" + id.String()}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +257,41 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	response := Response{ID: id, Filename: filepath.Base(header.Filename), ContentType: contentType, SizeBytes: int64(len(data)), URL: h.BaseURL + "/api/uploads/" + id.String()}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func safeUploadKey(userID, filename string) string {
+	base := strings.TrimSpace(filepath.Base(filename))
+	if base == "" || base == "." || base == "/" {
+		base = "upload.bin"
+	}
+	base = strings.TrimSuffix(base, ".")
+	base = strings.ReplaceAll(base, "..", "_")
+	base = strings.ReplaceAll(base, "/", "_")
+	base = strings.ReplaceAll(base, "\\", "_")
+	if base == "" {
+		base = "upload.bin"
+	}
+	keyToken := make([]byte, 12)
+	if _, err := rand.Read(keyToken); err == nil {
+		return userID + "/" + hex.EncodeToString(keyToken) + "/" + base
+	}
+	return userID + "/upload/" + base
+}
+
+func (h *Handler) generateThumbnailAsync(ctx context.Context, key, contentType string, data []byte) {
+	if !strings.HasPrefix(contentType, "image/") || len(data) == 0 {
+		return
+	}
+	go func() {
+		thumbnail, err := makeThumbnail(data)
+		if err != nil || len(thumbnail) == 0 {
+			return
+		}
+		thumbnailPath := key + ".thumbnail.jpg"
+		if _, err := h.Store.PutObject(ctx, h.Bucket, thumbnailPath, bytes.NewReader(thumbnail), int64(len(thumbnail)), minio.PutObjectOptions{ContentType: "image/jpeg"}); err != nil {
+			return
+		}
+	}()
 }
 
 func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +368,11 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	if size <= 0 {
 		size = info.Size
 	}
-	start, end, partial := parseRange(r.Header.Get("Range"), size)
+	start, end, partial, valid := parseRange(r.Header.Get("Range"), size)
+	if partial && !valid {
+		writeError(w, http.StatusRequestedRangeNotSatisfiable, "invalid byte range")
+		return
+	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Accept-Ranges", "bytes")
 	if partial {
@@ -215,37 +397,40 @@ func (h *Handler) Serve(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.Copy(w, object)
 }
 
-func parseRange(value string, size int64) (int64, int64, bool) {
+func parseRange(value string, size int64) (int64, int64, bool, bool) {
 	if value == "" || size <= 0 || !strings.HasPrefix(value, "bytes=") {
-		return 0, size - 1, false
+		return 0, size - 1, false, true
 	}
 	parts := strings.SplitN(strings.TrimPrefix(value, "bytes="), "-", 2)
 	if len(parts) != 2 {
-		return 0, 0, false
+		return 0, 0, true, false
 	}
 	start := int64(0)
 	end := size - 1
 	if parts[0] == "" {
 		suffix, err := strconv.ParseInt(parts[1], 10, 64)
 		if err != nil || suffix <= 0 {
-			return 0, 0, false
+			return 0, 0, true, false
 		}
 		start = size - suffix
+		if start < 0 {
+			start = 0
+		}
 	} else {
 		parsed, err := strconv.ParseInt(parts[0], 10, 64)
 		if err != nil || parsed < 0 || parsed >= size {
-			return 0, 0, false
+			return 0, 0, true, false
 		}
 		start = parsed
 		if parts[1] != "" {
 			parsedEnd, err := strconv.ParseInt(parts[1], 10, 64)
 			if err != nil || parsedEnd < start {
-				return 0, 0, false
+				return 0, 0, true, false
 			}
 			end = min(parsedEnd, size-1)
 		}
 	}
-	return start, end, true
+	return start, end, true, true
 }
 
 func min(left, right int64) int64 {

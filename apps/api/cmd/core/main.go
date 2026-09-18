@@ -41,6 +41,20 @@ import (
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 )
 
+func syncSearchDocument(ctx context.Context, queries *database.Queries, searchClient *searchpkg.Client, messageID uuid.UUID) error {
+	message, err := queries.GetMessageByID(ctx, messageID)
+	if err != nil {
+		return err
+	}
+	author := ""
+	if message.UserID.Valid {
+		if name, lookupErr := queries.GetUserDisplayName(ctx, message.UserID.UUID); lookupErr == nil {
+			author = name
+		}
+	}
+	return searchClient.IndexMessage(ctx, searchpkg.ToDocument(message, author))
+}
+
 func main() {
 	_ = godotenv.Load()
 
@@ -119,19 +133,8 @@ func main() {
 		log.Printf("warning: Elasticsearch unavailable at startup: %v", err)
 	} else if messages, err := queries.ListMessagesForSearch(context.Background()); err != nil {
 		log.Printf("warning: failed to load messages for search backfill: %v", err)
-	} else {
-		for _, message := range messages {
-			author := ""
-			if message.AuthorName.Valid {
-				author = message.AuthorName.String
-			}
-			if err := searchClient.IndexMessage(context.Background(), searchpkg.ToDocument(database.Message{
-				ID: message.ID, ChannelID: message.ChannelID, UserID: message.UserID,
-				Content: message.Content, CreatedAt: message.CreatedAt,
-			}, author)); err != nil {
-				log.Printf("warning: failed to backfill message %s: %v", message.ID, err)
-			}
-		}
+	} else if err := searchClient.Reindex(context.Background(), messages); err != nil {
+		log.Printf("warning: failed to backfill search index: %v", err)
 	}
 	s3Endpoint := os.Getenv("S3_ENDPOINT")
 	if s3Endpoint == "" {
@@ -172,19 +175,19 @@ func main() {
 	defer messageConsumer.Close()
 	go messageConsumer.Run(ctx, "dedup:message_created:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.MessageCreatedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.MessageID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageCreated, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.MessageCreatedEvent
 			if err := json.Unmarshal(raw, &evt); err != nil {
 				return err
 			}
+			msgID, err := uuid.Parse(evt.MessageID)
+			if err != nil {
+				return err
+			}
 			log.Printf("[kafka] message.created: %s in channel %s by %s", evt.MessageID, evt.ChannelID, evt.UserID)
-			return nil
+			return syncSearchDocument(ctx, queries, searchClient, msgID)
 		},
 	)
 
@@ -192,19 +195,19 @@ func main() {
 	defer messageEditedConsumer.Close()
 	go messageEditedConsumer.Run(ctx, "dedup:message_edited:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.MessageEditedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.MessageID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageEdited, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.MessageEditedEvent
 			if err := json.Unmarshal(raw, &evt); err != nil {
 				return err
 			}
+			msgID, err := uuid.Parse(evt.MessageID)
+			if err != nil {
+				return err
+			}
 			log.Printf("[kafka] message.edited: %s in channel %s by %s", evt.MessageID, evt.ChannelID, evt.UserID)
-			return nil
+			return syncSearchDocument(ctx, queries, searchClient, msgID)
 		},
 	)
 
@@ -212,11 +215,7 @@ func main() {
 	defer userConsumer.Close()
 	go userConsumer.Run(ctx, "dedup:user_registered:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.UserRegisteredEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.UserID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicUserRegistered, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.UserRegisteredEvent
@@ -232,11 +231,7 @@ func main() {
 	defer messageDeletedConsumer.Close()
 	go messageDeletedConsumer.Run(ctx, "dedup:message_deleted:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.MessageDeletedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.MessageID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageDeleted, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.MessageDeletedEvent
@@ -244,7 +239,10 @@ func main() {
 				return err
 			}
 			log.Printf("[kafka] message.deleted: %s in channel %s", evt.MessageID, evt.ChannelID)
-			return nil
+			if searchClient == nil {
+				return nil
+			}
+			return searchClient.DeleteMessage(ctx, evt.MessageID)
 		},
 	)
 
@@ -252,11 +250,7 @@ func main() {
 	defer reactionAddedConsumer.Close()
 	go reactionAddedConsumer.Run(ctx, "dedup:reaction_added:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.ReactionAddedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.ReactionID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionAdded, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.ReactionAddedEvent
@@ -272,11 +266,7 @@ func main() {
 	defer reactionRemovedConsumer.Close()
 	go reactionRemovedConsumer.Run(ctx, "dedup:reaction_removed:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.ReactionRemovedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.ReactionID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionRemoved, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.ReactionRemovedEvent
@@ -379,6 +369,8 @@ func main() {
 		r.Post("/api/channels/{channelID}/messages", messageHandler.SendMessage)
 		r.Get("/api/channels/{channelID}/messages", messageHandler.ListMessages)
 		r.Get("/api/search/messages", messageHandler.SearchMessages)
+		r.Post("/api/uploads/presign", uploadHandler.CreatePresignedUpload)
+		r.Post("/api/uploads/complete", uploadHandler.CompletePresignedUpload)
 		r.Post("/api/uploads", uploadHandler.Create)
 		r.Get("/api/uploads/{id}", uploadHandler.Serve)
 		r.Get("/api/uploads/{id}/{variant}", uploadHandler.Serve)

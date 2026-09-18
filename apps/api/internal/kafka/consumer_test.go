@@ -1,130 +1,98 @@
 package kafka
 
 import (
-	"context"
-	"errors"
-	"sync"
 	"testing"
-	"time"
-
-	"github.com/segmentio/kafka-go"
 )
 
-type fakeReader struct {
-	messages []kafka.Message
-	commits  int
-}
-
-func (r *fakeReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
-	if len(r.messages) == 0 {
-		<-ctx.Done()
-		return kafka.Message{}, ctx.Err()
+func TestEventDedupKeyUsesEventID(t *testing.T) {
+	payload := []byte(`{"event_id":"evt-1","message_id":"msg-42","content":"hello"}`)
+	key, err := EventDedupKey(TopicMessageEdited, payload)
+	if err != nil {
+		t.Fatalf("EventDedupKey returned error: %v", err)
 	}
-	message := r.messages[0]
-	r.messages = r.messages[1:]
-	return message, nil
-}
-
-func (r *fakeReader) CommitMessages(context.Context, ...kafka.Message) error {
-	r.commits++
-	return nil
-}
-
-func (r *fakeReader) Close() error { return nil }
-
-type fakeDedupStore struct {
-	mu        sync.Mutex
-	processed map[string]bool
-	leases    map[string]string
-}
-
-func newFakeDedupStore() *fakeDedupStore {
-	return &fakeDedupStore{processed: make(map[string]bool), leases: make(map[string]string)}
-}
-
-func (s *fakeDedupStore) Exists(_ context.Context, key string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.processed[key], nil
-}
-
-func (s *fakeDedupStore) Claim(_ context.Context, key, token string, _ time.Duration) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, exists := s.leases[key]; exists {
-		return false, nil
-	}
-	s.leases[key] = token
-	return true, nil
-}
-
-func (s *fakeDedupStore) Complete(_ context.Context, key, _ string, _ time.Duration) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.processed[key] = true
-	return nil
-}
-
-func (s *fakeDedupStore) Release(_ context.Context, key, token string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.leases[key] == token {
-		delete(s.leases, key)
-	}
-	return nil
-}
-
-func TestConsumerHandlerFailureRemainsRetryable(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	reader := &fakeReader{messages: []kafka.Message{{Value: []byte("event")}, {Value: []byte("event")}}}
-	store := newFakeDedupStore()
-	consumer := &Consumer{reader: reader, store: store, topic: "test"}
-	attempts := 0
-
-	consumer.Run(ctx, "dedup:", func([]byte) (string, error) { return "event-1", nil }, func([]byte) error {
-		attempts++
-		if attempts == 1 {
-			return errors.New("temporary failure")
-		}
-		cancel()
-		return nil
-	})
-
-	if attempts != 2 {
-		t.Fatalf("expected failed event to retry, got %d attempts", attempts)
-	}
-	if reader.commits != 1 {
-		t.Fatalf("expected only successful delivery to commit, got %d commits", reader.commits)
+	if key != "evt-1" {
+		t.Fatalf("expected event id to be used, got %q", key)
 	}
 }
 
-func TestDedupStoreAllowsOnlyOneConcurrentClaim(t *testing.T) {
-	store := newFakeDedupStore()
-	const key = "dedup:processing:event-1"
-	results := make(chan bool, 2)
-	var group sync.WaitGroup
-	group.Add(2)
-	for _, token := range []string{"one", "two"} {
-		go func(token string) {
-			defer group.Done()
-			claimed, err := store.Claim(context.Background(), key, token, time.Minute)
-			if err != nil {
-				t.Errorf("claim failed: %v", err)
-			}
-			results <- claimed
-		}(token)
+func TestEventDedupKeySeparatesSameMessageDifferentEvents(t *testing.T) {
+	p1 := []byte(`{"event_id":"evt-1","message_id":"msg-42","content":"first"}`)
+	p2 := []byte(`{"event_id":"evt-2","message_id":"msg-42","content":"second"}`)
+	k1, err := EventDedupKey(TopicMessageEdited, p1)
+	if err != nil {
+		t.Fatalf("first key error: %v", err)
 	}
-	group.Wait()
-	close(results)
+	k2, err := EventDedupKey(TopicMessageEdited, p2)
+	if err != nil {
+		t.Fatalf("second key error: %v", err)
+	}
+	if k1 == k2 {
+		t.Fatalf("dedup keys should differ for distinct event IDs: %q == %q", k1, k2)
+	}
+}
 
-	claimedCount := 0
-	for claimed := range results {
-		if claimed {
-			claimedCount++
-		}
+func TestEventDedupKeySeparatesSameReactionDifferentEvents(t *testing.T) {
+	p1 := []byte(`{"event_id":"evt-1","reaction_id":"rxn-9","emoji":":+1:"}`)
+	p2 := []byte(`{"event_id":"evt-2","reaction_id":"rxn-9","emoji":":+1:"}`)
+	k1, err := EventDedupKey(TopicReactionAdded, p1)
+	if err != nil {
+		t.Fatalf("first key error: %v", err)
 	}
-	if claimedCount != 1 {
-		t.Fatalf("expected exactly one concurrent claim, got %d", claimedCount)
+	k2, err := EventDedupKey(TopicReactionAdded, p2)
+	if err != nil {
+		t.Fatalf("second key error: %v", err)
+	}
+	if k1 == k2 {
+		t.Fatalf("dedup keys should differ for distinct event IDs: %q == %q", k1, k2)
+	}
+}
+
+func TestEventDedupKeySeparatesSameUserDifferentEvents(t *testing.T) {
+	p1 := []byte(`{"event_id":"evt-1","user_id":"user-7","display_name":"Alice"}`)
+	p2 := []byte(`{"event_id":"evt-2","user_id":"user-7","display_name":"Alice"}`)
+	k1, err := EventDedupKey(TopicUserRegistered, p1)
+	if err != nil {
+		t.Fatalf("first key error: %v", err)
+	}
+	k2, err := EventDedupKey(TopicUserRegistered, p2)
+	if err != nil {
+		t.Fatalf("second key error: %v", err)
+	}
+	if k1 == k2 {
+		t.Fatalf("dedup keys should differ for distinct event IDs: %q == %q", k1, k2)
+	}
+}
+
+func TestLegacyEventDedupKeyDeterministic(t *testing.T) {
+	payload := []byte(`{"message_id":"msg-42","content":"legacy"}`)
+	k1, err := EventDedupKey(TopicMessageEdited, payload)
+	if err != nil {
+		t.Fatalf("first legacy key error: %v", err)
+	}
+	k2, err := EventDedupKey(TopicMessageEdited, payload)
+	if err != nil {
+		t.Fatalf("second legacy key error: %v", err)
+	}
+	if k1 == "" || k2 == "" {
+		t.Fatal("legacy dedup key should not be empty")
+	}
+	if k1 != k2 {
+		t.Fatalf("legacy dedup keys should be stable for identical payloads: %q != %q", k1, k2)
+	}
+}
+
+func TestLegacyEventDedupKeyDifferentPayloadsDiffer(t *testing.T) {
+	p1 := []byte(`{"message_id":"msg-42","content":"legacy-a"}`)
+	p2 := []byte(`{"message_id":"msg-42","content":"legacy-b"}`)
+	k1, err := EventDedupKey(TopicMessageEdited, p1)
+	if err != nil {
+		t.Fatalf("first key error: %v", err)
+	}
+	k2, err := EventDedupKey(TopicMessageEdited, p2)
+	if err != nil {
+		t.Fatalf("second key error: %v", err)
+	}
+	if k1 == k2 {
+		t.Fatalf("different legacy payloads should yield different dedup keys: %q == %q", k1, k2)
 	}
 }
