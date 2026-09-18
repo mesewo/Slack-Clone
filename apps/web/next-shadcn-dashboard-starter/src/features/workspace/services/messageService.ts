@@ -205,10 +205,45 @@ export const messageService = {
   },
 
   async upload(file: File): Promise<UploadedAttachment> {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await apiClient.post<UploadedAttachment>("/api/uploads", form);
-    return res.data;
+    try {
+      const presign = await apiClient.post<{
+        session_id: string;
+        upload_url: string;
+        filename: string;
+        content_type: string;
+        size_bytes: number;
+      }>("/api/uploads/presign", {
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+      });
+
+      const uploadURL = presign.data.upload_url;
+      const putResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+      if (!putResponse.ok) {
+        throw new Error(`upload PUT failed: ${putResponse.status}`);
+      }
+
+      const complete = await apiClient.post<UploadedAttachment>(
+        "/api/uploads/complete",
+        { session_id: presign.data.session_id },
+      );
+      return complete.data;
+    } catch (error) {
+      const form = new FormData();
+      form.append("file", file);
+      const fallback = await apiClient.post<UploadedAttachment>(
+        "/api/uploads",
+        form,
+      );
+      return fallback.data;
+    }
   },
 
   async send(

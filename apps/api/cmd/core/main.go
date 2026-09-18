@@ -158,6 +158,11 @@ func main() {
 	}
 	thumbnailWorker := upload.NewThumbnailWorker(queries, objectStore, s3Bucket, 64, 2)
 	thumbnailWorker.Start(ctx)
+	if removed, err := queries.CleanupExpiredUploadSessions(context.Background(), time.Now()); err != nil {
+		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
+	} else if removed > 0 {
+		log.Printf("cleaned %d orphaned upload sessions", removed)
+	}
 	if err := thumbnailWorker.RequeueStale(context.Background()); err != nil {
 		log.Printf("warning: failed to requeue stale thumbnail jobs: %v", err)
 	}

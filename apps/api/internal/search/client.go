@@ -102,8 +102,8 @@ func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
 	return nil
 }
 
-func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []string, limit int) ([]Result, error) {
-	body, err := json.Marshal(map[string]any{
+func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []string, limit int, cursor ...string) ([]Result, error) {
+	searchBody := map[string]any{
 		"size": limit,
 		"query": map[string]any{
 			"bool": map[string]any{
@@ -111,8 +111,12 @@ func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []
 				"filter": []any{map[string]any{"terms": map[string]any{"channel_id": channelIDs}}},
 			},
 		},
-		"sort": []any{map[string]any{"created_at": "desc"}},
-	})
+		"sort": []any{map[string]any{"created_at": "desc"}, map[string]any{"_id": "desc"}},
+	}
+	if len(cursor) > 0 && cursor[0] != "" {
+		searchBody["search_after"] = []any{cursor[0]}
+	}
+	body, err := json.Marshal(searchBody)
 	if err != nil {
 		return nil, err
 	}

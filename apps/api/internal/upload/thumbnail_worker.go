@@ -95,6 +95,10 @@ func (w *ThumbnailWorker) RequeueStale(ctx context.Context) error {
 			}
 			continue
 		}
+		if err := w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "PROCESSING", nil, session.AttemptCount); err != nil {
+			log.Printf("thumbnail requeue: failed to restore processing state for %s: %v", session.ID, err)
+			continue
+		}
 		if err := w.Enqueue(ctx, session.ID, session.ObjectKey, session.ContentType); err != nil {
 			log.Printf("thumbnail requeue: enqueue failed for %s: %v", session.ID, err)
 		}
@@ -111,7 +115,8 @@ func (w *ThumbnailWorker) process(ctx context.Context, job ThumbnailJob) error {
 		return err
 	}
 	if !strings.HasPrefix(session.ContentType, "image/") {
-		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "READY", &[]time.Time{time.Now()}[0], session.AttemptCount)
+		now := time.Now()
+		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "READY", &now, session.AttemptCount)
 	}
 	attempt := session.AttemptCount + 1
 	if err := w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "PROCESSING", nil, attempt); err != nil {
@@ -119,52 +124,59 @@ func (w *ThumbnailWorker) process(ctx context.Context, job ThumbnailJob) error {
 	}
 	object, err := w.Store.GetObject(ctx, w.Bucket, session.ObjectKey, minio.GetObjectOptions{})
 	if err != nil {
-		return w.handleResult(ctx, session, false)
+		return w.handleResult(ctx, session, false, attempt)
 	}
 	defer object.Close()
 	data, err := io.ReadAll(object)
 	if err != nil {
-		return w.handleResult(ctx, session, false)
+		return w.handleResult(ctx, session, false, attempt)
 	}
 	thumbnail, err := makeThumbnail(data)
 	if err != nil || len(thumbnail) == 0 {
-		return w.handleResult(ctx, session, false)
+		return w.handleResult(ctx, session, false, attempt)
 	}
 	thumbnailPath := session.ObjectKey + ".thumbnail.jpg"
 	if _, err := w.Store.PutObject(ctx, w.Bucket, thumbnailPath, bytes.NewReader(thumbnail), int64(len(thumbnail)), minio.PutObjectOptions{ContentType: "image/jpeg"}); err != nil {
-		return w.handleResult(ctx, session, false)
+		return w.handleResult(ctx, session, false, attempt)
 	}
 	if err := w.Queries.UpdateAttachmentThumbnailByStoragePath(ctx, session.ObjectKey, session.UserID, thumbnailPath); err != nil {
 		log.Printf("thumbnail worker: failed to persist thumbnail path for %s: %v", session.ID, err)
 	}
-	return w.handleResult(ctx, session, true)
+	return w.handleResult(ctx, session, true, attempt)
 }
 
-func (w *ThumbnailWorker) handleResult(ctx context.Context, session database.UploadSession, succeeded bool) error {
-	next, retry := thumbnailResultState(session.Status, int(session.AttemptCount), succeeded)
+func (w *ThumbnailWorker) handleResult(ctx context.Context, session database.UploadSession, succeeded bool, attempts int32) error {
+	next, retry := thumbnailResultState(session.Status, int(attempts), succeeded)
 	if next == "READY" {
 		now := time.Now()
-		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "READY", &now, session.AttemptCount)
+		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "READY", &now, attempts)
 	}
 	if next == "FAILED" {
 		now := time.Now()
-		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "FAILED", &now, session.AttemptCount)
+		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "FAILED", &now, attempts)
 	}
 	if retry {
-		return w.requeueRetry(ctx, session)
+		return w.requeueRetry(ctx, session, attempts)
 	}
 	return nil
 }
 
-func (w *ThumbnailWorker) requeueRetry(ctx context.Context, session database.UploadSession) error {
-	if session.AttemptCount >= 3 {
-		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "FAILED", nil, session.AttemptCount)
+func (w *ThumbnailWorker) requeueRetry(ctx context.Context, session database.UploadSession, attempts int32) error {
+	if attempts >= 3 {
+		return w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "FAILED", nil, attempts)
 	}
-	if err := w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "PROCESSING", nil, session.AttemptCount+1); err != nil {
+	backoff := time.Duration(attempts+1) * 2 * time.Second
+	if err := w.Queries.UpdateUploadSessionStatus(ctx, session.ID, "PROCESSING", nil, attempts); err != nil {
 		return err
 	}
-	time.Sleep(time.Duration(session.AttemptCount+1) * 2 * time.Second)
-	return w.Enqueue(ctx, session.ID, session.ObjectKey, session.ContentType)
+	timer := time.NewTimer(backoff)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return w.Enqueue(ctx, session.ID, session.ObjectKey, session.ContentType)
+	}
 }
 
 func thumbnailResultState(current string, attempts int, success bool) (string, bool) {

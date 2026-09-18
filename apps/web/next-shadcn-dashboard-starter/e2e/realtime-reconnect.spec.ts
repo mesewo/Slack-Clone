@@ -273,6 +273,13 @@ test.describe("realtime reconnect", () => {
         new RegExp(`/home/${workspaceId}/channels/${channelId}`),
       );
 
+      await pageA.locator('input[type="file"]').setInputFiles({
+        name: "realtime-upload.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("browser upload proof"),
+      });
+      await expect(pageA.locator("text=realtime-upload.txt")).toBeVisible();
+
       const baselineMessage = `baseline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const baselineStatus = await apiRequest(
         "POST",

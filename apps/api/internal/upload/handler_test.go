@@ -145,6 +145,20 @@ func TestPrepareRangeResponse(t *testing.T) {
 		}
 	})
 
+	t.Run("video range", func(t *testing.T) {
+		payload := []byte("0123456789")
+		rec := httptest.NewRecorder()
+		if err := prepareRangeResponse(rec, bytes.NewReader(payload), "video/mp4", int64(len(payload)), "demo.mp4", "", "bytes=3-7"); err != nil {
+			t.Fatalf("unexpected valid video range failure: %v", err)
+		}
+		if rec.Code != http.StatusPartialContent {
+			t.Fatalf("expected 206 for video range, got %d", rec.Code)
+		}
+		if got := rec.Body.String(); got != "34567" {
+			t.Fatalf("unexpected video partial body: %q", got)
+		}
+	})
+
 	t.Run("invalid range", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		if err := prepareRangeResponse(rec, bytes.NewReader(payload), "text/plain", int64(len(payload)), "demo.txt", "", "bytes=100-200"); err == nil {

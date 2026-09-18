@@ -171,3 +171,14 @@ func (q *Queries) RequeueUploadSessions(ctx context.Context, statuses []string, 
 	}
 	return items, rows.Err()
 }
+
+func (q *Queries) CleanupExpiredUploadSessions(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, `
+		DELETE FROM upload_sessions
+		WHERE expires_at < $1 AND status NOT IN ('READY', 'FAILED', 'EXPIRED')
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

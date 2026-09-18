@@ -381,9 +381,23 @@ func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
 		return
 	}
-	results, err := h.Search.SearchMessages(r.Context(), query, []string{channelID.String()}, 50)
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 || parsed > 200 {
+			writeJSONError(w, http.StatusBadRequest, "limit must be between 1 and 200")
+			return
+		}
+		limit = parsed
+	}
+	cursor := r.URL.Query().Get("cursor")
+	results, err := h.Search.SearchMessages(r.Context(), query, []string{channelID.String()}, limit, cursor)
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
+		return
+	}
+	if cursor != "" {
+		json.NewEncoder(w).Encode(map[string]any{"results": results, "next_cursor": cursor, "has_more": len(results) == limit})
 		return
 	}
 	json.NewEncoder(w).Encode(results)
