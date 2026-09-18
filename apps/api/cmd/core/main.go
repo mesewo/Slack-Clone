@@ -166,6 +166,28 @@ func main() {
 	if err := thumbnailWorker.RequeueStale(context.Background()); err != nil {
 		log.Printf("warning: failed to requeue stale thumbnail jobs: %v", err)
 	}
+	if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
+		log.Printf("warning: failed to process due thumbnail retries: %v", err)
+	}
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
+					log.Printf("warning: failed to process due thumbnail retries: %v", err)
+				}
+				if removed, err := queries.CleanupExpiredUploadSessions(context.Background(), time.Now()); err != nil {
+					log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
+				} else if removed > 0 {
+					log.Printf("cleaned %d orphaned upload sessions", removed)
+				}
+			}
+		}
+	}()
 	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", ThumbnailWorker: thumbnailWorker}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})

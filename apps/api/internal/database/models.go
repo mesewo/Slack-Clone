@@ -147,6 +147,25 @@ type ThreadSubscription struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type UploadSession struct {
+	ID                   uuid.UUID     `json:"id"`
+	UserID               uuid.UUID     `json:"user_id"`
+	WorkspaceID          uuid.NullUUID `json:"workspace_id"`
+	ChannelID            uuid.NullUUID `json:"channel_id"`
+	DirectConversationID uuid.NullUUID `json:"direct_conversation_id"`
+	ObjectKey            string        `json:"object_key"`
+	OriginalFilename     string        `json:"original_filename"`
+	ContentType          string        `json:"content_type"`
+	DeclaredSize         int64         `json:"declared_size"`
+	Status               string        `json:"status"`
+	AttemptCount         int32         `json:"attempt_count"`
+	ExpiresAt            time.Time     `json:"expires_at"`
+	CreatedAt            time.Time     `json:"created_at"`
+	ConfirmedAt          *time.Time    `json:"confirmed_at"`
+	UpdatedAt            time.Time     `json:"updated_at"`
+	NextAttemptAt        *time.Time    `json:"next_attempt_at"`
+}
+
 type User struct {
 	ID             uuid.UUID `json:"id"`
 	Email          string    `json:"email"`
@@ -180,22 +199,4 @@ type WorkspaceMember struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Role        string    `json:"role"`
 	JoinedAt    time.Time `json:"joined_at"`
-}
-
-type UploadSession struct {
-	ID                  uuid.UUID     `json:"id"`
-	UserID              uuid.UUID     `json:"user_id"`
-	WorkspaceID         uuid.NullUUID `json:"workspace_id"`
-	ChannelID           uuid.NullUUID `json:"channel_id"`
-	DirectConversationID uuid.NullUUID `json:"direct_conversation_id"`
-	ObjectKey           string        `json:"object_key"`
-	OriginalFilename    string        `json:"original_filename"`
-	ContentType         string        `json:"content_type"`
-	DeclaredSize        int64         `json:"declared_size"`
-	Status              string        `json:"status"`
-	AttemptCount        int32         `json:"attempt_count"`
-	ExpiresAt           time.Time     `json:"expires_at"`
-	CreatedAt           time.Time     `json:"created_at"`
-	ConfirmedAt         *time.Time    `json:"confirmed_at"`
-	UpdatedAt           time.Time     `json:"updated_at"`
 }

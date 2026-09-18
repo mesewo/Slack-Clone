@@ -2,10 +2,21 @@ package upload
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/mesewo/slack-clone/apps/api/internal/auth"
+	"github.com/mesewo/slack-clone/apps/api/internal/database"
 )
 
 func TestAllowedType(t *testing.T) {
@@ -105,6 +116,133 @@ func TestThumbnailResultState(t *testing.T) {
 	}
 	if next, retry := thumbnailResultState("PROCESSING", 3, false); next != "FAILED" || retry {
 		t.Fatalf("final retry failure should mark FAILED: next=%s retry=%v", next, retry)
+	}
+}
+
+type stubQueryRow struct {
+	fun func(dest ...any) error
+}
+
+func (s stubQueryRow) Scan(dest ...any) error {
+	return s.fun(dest...)
+}
+
+type stubDB struct {
+	queryRow func(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func (s *stubDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) { return pgconn.CommandTag{}, nil }
+func (s *stubDB) Query(context.Context, string, ...any) (pgx.Rows, error)        { return nil, nil }
+func (s *stubDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if s.queryRow == nil {
+		return stubQueryRow{fun: func(dest ...any) error { return nil }}
+	}
+	return s.queryRow(ctx, sql, args...)
+}
+
+func TestAttachmentAccessAllowed(t *testing.T) {
+	userID := uuid.New()
+	channelID := uuid.New()
+	db := &stubDB{queryRow: func(ctx context.Context, sql string, args ...any) pgx.Row {
+		switch {
+		case strings.Contains(sql, "FROM messages WHERE id = $1"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*database.Message)) = database.Message{ChannelID: channelID}
+				return nil
+			}}
+		case strings.Contains(sql, "SELECT EXISTS"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*bool)) = true
+				return nil
+			}}
+		default:
+			return stubQueryRow{fun: func(dest ...any) error { return nil }}
+		}
+	}}
+	h := &Handler{Queries: database.New(db)}
+	attachment := database.Attachment{ID: uuid.New(), UserID: uuid.New(), MessageID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	allowed, err := h.attachmentAccessAllowed(context.Background(), userID, attachment)
+	if err != nil {
+		t.Fatalf("unexpected auth lookup error: %v", err)
+	}
+	if !allowed {
+		t.Fatal("expected channel member to be allowed access")
+	}
+
+	deniedDB := &stubDB{queryRow: func(ctx context.Context, sql string, args ...any) pgx.Row {
+		return stubQueryRow{fun: func(dest ...any) error {
+			if len(dest) > 0 {
+				if b, ok := dest[0].(*bool); ok {
+					*b = false
+					return nil
+				}
+			}
+			return nil
+		}}
+	}}
+	h2 := &Handler{Queries: database.New(deniedDB)}
+	attachment2 := database.Attachment{ID: uuid.New(), UserID: uuid.New(), MessageID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	allowed, err = h2.attachmentAccessAllowed(context.Background(), userID, attachment2)
+	if err != nil {
+		t.Fatalf("unexpected deny path error: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected non-member to be denied access")
+	}
+}
+
+func TestServeRejectsUnauthorizedAttachment(t *testing.T) {
+	userID := uuid.New()
+	attachmentID := uuid.New()
+	attachment := database.Attachment{ID: attachmentID, UserID: uuid.New(), MessageID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	db := &stubDB{queryRow: func(ctx context.Context, sql string, args ...any) pgx.Row {
+		switch {
+		case strings.Contains(sql, "FROM attachments WHERE id = $1"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*uuid.UUID)) = attachment.ID
+				*(dest[1].(*uuid.NullUUID)) = attachment.MessageID
+				*(dest[2].(*uuid.UUID)) = attachment.UserID
+				*(dest[3].(*string)) = attachment.Filename
+				*(dest[4].(*string)) = attachment.ContentType
+				*(dest[5].(*int64)) = attachment.SizeBytes
+				*(dest[6].(*string)) = attachment.StoragePath
+				*(dest[7].(*pgtype.Text)) = attachment.ThumbnailPath
+				*(dest[8].(*time.Time)) = attachment.CreatedAt
+				*(dest[9].(*uuid.NullUUID)) = attachment.DirectMessageID
+				return nil
+			}}
+		case strings.Contains(sql, "FROM messages WHERE id = $1"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*uuid.UUID)) = uuid.New()
+				*(dest[1].(*uuid.UUID)) = uuid.New()
+				*(dest[2].(*uuid.NullUUID)) = uuid.NullUUID{Valid: true, UUID: userID}
+				*(dest[3].(*string)) = "body"
+				*(dest[4].(*time.Time)) = time.Now()
+				*(dest[5].(**time.Time)) = nil
+				*(dest[6].(**time.Time)) = nil
+				*(dest[7].(*uuid.NullUUID)) = uuid.NullUUID{}
+				*(dest[8].(*int32)) = 0
+				return nil
+			}}
+		case strings.Contains(sql, "SELECT EXISTS"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*bool)) = false
+				return nil
+			}}
+		default:
+			return stubQueryRow{fun: func(dest ...any) error { return nil }}
+		}
+	}}
+	h := &Handler{Queries: database.New(db)}
+	r := chi.NewRouter()
+	r.Get("/uploads/{id}", h.Serve)
+	req := httptest.NewRequest(http.MethodGet, "/uploads/"+attachmentID.String(), nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, &auth.Claims{UserID: userID.String()})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 forbidden for unauthorized download, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

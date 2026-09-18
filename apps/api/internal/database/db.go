@@ -25,14 +25,14 @@ type Queries struct {
 	db DBTX
 }
 
-type txBeginner interface {
-	Begin(context.Context) (pgx.Tx, error)
-}
-
 func (q *Queries) WithTx(tx pgx.Tx) *Queries {
 	return &Queries{
 		db: tx,
 	}
+}
+
+type txBeginner interface {
+	Begin(context.Context) (pgx.Tx, error)
 }
 
 func (q *Queries) InTx(ctx context.Context, fn func(*Queries) error) error {
