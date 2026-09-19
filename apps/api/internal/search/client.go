@@ -46,7 +46,7 @@ func NewClient(baseURL string) *Client {
 }
 
 func (c *Client) EnsureIndex(ctx context.Context) error {
-	body := strings.NewReader(`{"mappings":{"properties":{"channel_id":{"type":"keyword"},"user_id":{"type":"keyword"},"author":{"type":"text"},"content":{"type":"text"},"created_at":{"type":"date"}}}}`)
+	body := strings.NewReader(`{"mappings":{"properties":{"id":{"type":"keyword"},"channel_id":{"type":"keyword"},"user_id":{"type":"keyword"},"author":{"type":"text"},"content":{"type":"text"},"created_at":{"type":"date"}}}}`)
 	status, response, err := c.request(ctx, http.MethodPut, "/"+indexName, body, "application/json")
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []
 				"filter": []any{map[string]any{"terms": map[string]any{"channel_id": channelIDs}}},
 			},
 		},
-		"sort": []any{map[string]any{"created_at": "desc"}, map[string]any{"_id": "desc"}},
+		"sort": []any{map[string]any{"created_at": "desc"}, map[string]any{"id": "desc"}},
 	}
 	if len(cursor) > 0 && cursor[0] != "" {
 		searchBody["search_after"] = []any{cursor[0]}

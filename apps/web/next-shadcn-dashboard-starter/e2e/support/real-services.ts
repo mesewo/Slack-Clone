@@ -155,8 +155,25 @@ async function waitForApiReady() {
   throw new Error("Core API did not pass the registration readiness probe");
 }
 
+async function resetSearchIndex() {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch("http://127.0.0.1:9200/messages", {
+        method: "DELETE",
+      });
+      if (response.status === 200 || response.status === 404) return;
+    } catch {
+      // Elasticsearch is still starting.
+    }
+    await delay(500);
+  }
+  throw new Error("Elasticsearch did not become ready to reset messages index");
+}
+
 export async function startRealBackend() {
   stopBackendProcesses();
+  await resetSearchIndex();
   buildServices();
   startCoreService();
   await waitForApiReady();
