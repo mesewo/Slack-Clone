@@ -228,11 +228,16 @@ export function ConversationList({
                   </Avatar>
                   <PresenceIndicator
                     state={
-                      conversation.otherUserId
-                        ? userPresence[conversation.otherUserId] || "offline"
-                        : "offline"
+                      conversation.kind === "channel"
+                        ? conversation.status === "online"
+                          ? "active"
+                          : "offline"
+                        : conversation.otherUserId
+                          ? userPresence[conversation.otherUserId] || "offline"
+                          : "offline"
                     }
                     customStatus={conversation.customStatus}
+                    testId={`presence-dot-${conversation.id}`}
                     className="absolute right-0 bottom-0"
                   />
                 </div>
@@ -268,7 +273,10 @@ export function ConversationList({
                   )}
                 </div>
                 {conversation.unread > 0 && (
-                  <span className="bg-primary text-primary-foreground ml-2 inline-flex min-h-[1.5rem] min-w-[1.5rem] items-center justify-center rounded-full text-[0.7rem] font-semibold shadow-lg">
+                  <span
+                    data-testid={`unread-badge-${conversation.id}`}
+                    className="bg-primary text-primary-foreground ml-2 inline-flex min-h-[1.5rem] min-w-[1.5rem] items-center justify-center rounded-full text-[0.7rem] font-semibold shadow-lg"
+                  >
                     {conversation.unread}
                   </span>
                 )}
@@ -351,10 +359,14 @@ export function ConversationList({
                     : "offline"
                 }
                 customStatus={conversation.customStatus}
+                testId={`presence-dot-${conversation.id}`}
               />
               <span className="truncate">{conversation.name}</span>
               {conversation.unread > 0 && (
-                <span className="bg-primary text-primary-foreground ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1 text-[0.65rem] font-semibold">
+                <span
+                  data-testid={`unread-badge-${conversation.id}`}
+                  className="bg-primary text-primary-foreground ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1 text-[0.65rem] font-semibold"
+                >
                   {conversation.unread}
                 </span>
               )}

@@ -226,6 +226,11 @@ test.describe("phase 1 unread and presence wiring", () => {
         "password123",
         "Beta User",
       );
+      const userC = await registerUser(
+        `phase1-c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`,
+        "password123",
+        "Offline User",
+      );
 
       const workspace = await apiRequest(
         "POST",
@@ -253,6 +258,24 @@ test.describe("phase 1 unread and presence wiring", () => {
       expect(channel.status).toBe(201);
       const channelId = channel.body.id;
 
+      const quietChannel = await apiRequest(
+        "POST",
+        "/api/channels",
+        userA.cookie,
+        {
+          workspace_id: workspaceId,
+          name: `phase1-quiet-${Date.now()}`,
+          type: "PUBLIC",
+        },
+      );
+      expect(quietChannel.status).toBe(201);
+      const quietChannelId = quietChannel.body.id;
+
+      const offlineDM = await apiRequest("POST", "/api/dms", userB.cookie, {
+        user_id: userC.id,
+      });
+      expect(offlineDM.status).toBe(200);
+
       const joinChannelResponse = await apiRequest(
         "POST",
         `/api/channels/${channelId}/join`,
@@ -260,6 +283,14 @@ test.describe("phase 1 unread and presence wiring", () => {
         {},
       );
       expect([200, 201, 204, 409]).toContain(joinChannelResponse.status);
+
+      const joinQuietChannelResponse = await apiRequest(
+        "POST",
+        `/api/channels/${quietChannelId}/join`,
+        userB.cookie,
+        {},
+      );
+      expect([200, 201, 204, 409]).toContain(joinQuietChannelResponse.status);
 
       const contextA = await browser.newContext();
       const contextB = await browser.newContext();
@@ -297,28 +328,73 @@ test.describe("phase 1 unread and presence wiring", () => {
         })
         .toContain(unreadMessage);
 
+      await pageB.reload();
+      await expect(pageB.locator("body")).toContainText(unreadMessage);
+
       await pageB.goto(`http://localhost:3000/home/${workspaceId}`);
+      await expect(
+        pageB.locator(`[data-testid="presence-dot-${channelId}"]`),
+      ).toBeVisible();
+      await pageB.goto(
+        `http://localhost:3000/home/${workspaceId}/channels/${quietChannelId}`,
+      );
+      await expect(pageB).toHaveURL(
+        new RegExp(`/home/${workspaceId}/channels/${quietChannelId}`),
+      );
+      const markReadBeforeUnread = await apiRequest(
+        "POST",
+        `/api/channels/${channelId}/read`,
+        userB.cookie,
+        {},
+      );
+      expect([200, 204]).toContain(markReadBeforeUnread.status);
+      const secondMessage = `phase1-unread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const createUnreadMessage = await apiRequest(
+        "POST",
+        `/api/channels/${channelId}/messages`,
+        userA.cookie,
+        { content: secondMessage },
+      );
+      expect(createUnreadMessage.status).toBe(201);
       await expect
         .poll(
-          async () => {
-            const text = (await pageB.locator("body").textContent()) ?? "";
-            return (
-              text.includes("#") &&
-              text.includes("phase1-") &&
-              text.includes("1")
-            );
-          },
+          async () =>
+            (
+              await apiRequest(
+                "GET",
+                `/api/channels/${channelId}/unread`,
+                userB.cookie,
+              )
+            ).body?.unread,
           { timeout: 20000 },
         )
-        .toBeTruthy();
+        .toBe(1);
 
-      const presenceCount = await pageA
-        .locator('[aria-label="active"]')
-        .count();
-      const presenceCountB = await pageB
-        .locator('[aria-label="active"]')
-        .count();
-      expect(presenceCount + presenceCountB).toBeGreaterThan(0);
+      const unreadBadge = pageB.locator(
+        `[data-testid="unread-badge-${channelId}"]`,
+      );
+      await expect(unreadBadge).toHaveText("1");
+
+      const positivePresence = pageB.locator(
+        `[data-testid="presence-dot-${channelId}"]`,
+      );
+      await expect(positivePresence).toHaveAttribute("aria-label", "active");
+
+      const offlineDMRow = pageB.getByRole("button", {
+        name: /Offline User/i,
+      });
+      await expect(offlineDMRow).toBeVisible();
+      const offlinePresence = offlineDMRow.locator(
+        '[data-testid^="presence-dot-dm:"]',
+      );
+      await expect(offlinePresence).toHaveAttribute("aria-label", "offline");
+
+      await pageB.goto(
+        `http://localhost:3000/home/${workspaceId}/channels/${channelId}`,
+      );
+      await expect(
+        pageB.locator(`[data-testid="unread-badge-${channelId}"]`),
+      ).toHaveCount(0);
 
       await contextA.close();
       await contextB.close();

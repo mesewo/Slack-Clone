@@ -8,10 +8,12 @@ export function PresenceIndicator({
   state,
   customStatus,
   className = "",
+  testId,
 }: {
   state: ConnectionPresence;
   customStatus?: string | null;
   className?: string;
+  testId?: string;
 }) {
   const isDnd = state === "dnd";
   const dotClass =
@@ -24,6 +26,7 @@ export function PresenceIndicator({
   return (
     <span className={`inline-flex min-w-0 items-center gap-1.5 ${className}`}>
       <span
+        data-testid={testId}
         className={`relative inline-flex size-2.5 shrink-0 rounded-full ${dotClass} ${state === "away" ? "border-2 bg-transparent" : ""}`}
         title={isDnd ? "Online, do not disturb" : state}
         aria-label={isDnd ? "Online, do not disturb" : state}
