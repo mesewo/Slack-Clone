@@ -16,8 +16,9 @@ export function PresenceIndicator({
   testId?: string;
 }) {
   const isDnd = state === "dnd";
-  const dotClass =
-    isDnd || state === "active"
+  const dotClass = isDnd
+    ? "bg-rose-500"
+    : state === "active"
       ? "bg-emerald-500"
       : state === "away"
         ? "border-amber-500"

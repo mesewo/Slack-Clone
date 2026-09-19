@@ -71,6 +71,9 @@ export function ChatArea({
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
+  const [searchCursor, setSearchCursor] = useState<string | undefined>();
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const isAtBottomRef = useRef(true);
@@ -87,24 +90,36 @@ export function ChatArea({
     const query = search.trim();
     if (!query) {
       setSearchResults([]);
+      setSearchCursor(undefined);
+      setSearchHasMore(false);
       setSearchError(false);
       return;
     }
     let cancelled = false;
     const searchRequest =
       conversation.kind === "dm"
-        ? messageService.searchDM(conversation.dmId!, query)
+        ? messageService
+            .searchDM(conversation.dmId!, query)
+            .then((results) => ({
+              results,
+              nextCursor: undefined,
+              hasMore: false,
+            }))
         : messageService.search(conversation.id, query);
     void searchRequest
-      .then((results) => {
+      .then((page) => {
         if (!cancelled) {
-          setSearchResults(results);
+          setSearchResults(page.results);
+          setSearchCursor(page.nextCursor);
+          setSearchHasMore(page.hasMore);
           setSearchError(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSearchResults([]);
+          setSearchCursor(undefined);
+          setSearchHasMore(false);
           setSearchError(true);
         }
       });
@@ -112,6 +127,32 @@ export function ChatArea({
       cancelled = true;
     };
   }, [conversation.id, search]);
+
+  const loadMoreSearchResults = async () => {
+    if (
+      conversation.kind === "dm" ||
+      !searchCursor ||
+      searchLoadingMore ||
+      !search.trim()
+    ) {
+      return;
+    }
+    setSearchLoadingMore(true);
+    try {
+      const page = await messageService.search(
+        conversation.id,
+        search.trim(),
+        searchCursor,
+      );
+      setSearchResults((current) => [...current, ...page.results]);
+      setSearchCursor(page.nextCursor);
+      setSearchHasMore(page.hasMore);
+    } catch {
+      setSearchError(true);
+    } finally {
+      setSearchLoadingMore(false);
+    }
+  };
 
   const jumpToMessage = (messageId: string) => {
     const target = messagesContainerRef.current?.querySelector<HTMLElement>(
@@ -255,21 +296,38 @@ export function ChatArea({
                     No messages found
                   </p>
                 ) : (
-                  searchResults.map((result) => (
-                    <button
-                      key={result.id}
-                      type="button"
-                      onClick={() => jumpToMessage(result.id)}
-                      className="hover:bg-accent block w-full rounded p-2 text-left text-xs"
-                    >
-                      <span className="text-foreground font-medium">
-                        {result.author || "Unknown"}
-                      </span>
-                      <span className="text-muted-foreground mt-0.5 block line-clamp-2">
-                        {result.content}
-                      </span>
-                    </button>
-                  ))
+                  <>
+                    {searchResults.map((result) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        data-testid={`search-result-${result.id}`}
+                        onClick={() => jumpToMessage(result.id)}
+                        className="hover:bg-accent block w-full rounded p-2 text-left text-xs"
+                      >
+                        <span className="text-foreground block font-medium">
+                          {result.author || "Unknown"}
+                        </span>
+                        <span className="text-muted-foreground block text-[0.68rem]">
+                          {conversation.name} ·{" "}
+                          {new Date(result.created_at).toLocaleString()}
+                        </span>
+                        <span className="text-muted-foreground mt-0.5 block line-clamp-2">
+                          {result.content}
+                        </span>
+                      </button>
+                    ))}
+                    {searchHasMore && (
+                      <button
+                        type="button"
+                        onClick={() => void loadMoreSearchResults()}
+                        disabled={searchLoadingMore}
+                        className="text-primary hover:bg-accent w-full rounded p-2 text-center text-xs font-medium disabled:opacity-60"
+                      >
+                        {searchLoadingMore ? "Loading..." : "Load more"}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}

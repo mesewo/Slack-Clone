@@ -14,6 +14,7 @@ export default function ProfileViewPage() {
   const [signingOut, setSigningOut] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [presenceStatus, setPresenceStatus] = useState("active");
   const [editingName, setEditingName] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -24,6 +25,7 @@ export default function ProfileViewPage() {
       .then((profile) => {
         setAvatarUrl(profile.avatar_url);
         setDisplayName(profile.display_name || user.name || "");
+        setPresenceStatus(profile.presence_status || "active");
       })
       .catch(() => {
         setAvatarUrl(window.localStorage.getItem("slack_profile_avatar") || "");
@@ -56,6 +58,14 @@ export default function ProfileViewPage() {
     setDisplayName(nextName);
     setEditingName(false);
     toast.success("Profile name updated");
+  };
+
+  const savePresenceStatus = (nextStatus: string) => {
+    setPresenceStatus(nextStatus);
+    void productivityService.updateProfile({ presence_status: nextStatus });
+    toast.success(
+      `Presence set to ${nextStatus === "dnd" ? "Do not disturb" : nextStatus}`,
+    );
   };
 
   const handleSignOut = async () => {
@@ -150,6 +160,19 @@ export default function ProfileViewPage() {
             <p className="text-muted-foreground truncate text-sm">
               {user.email}
             </p>
+            <label className="text-muted-foreground mt-3 flex items-center gap-2 text-xs">
+              Presence
+              <select
+                aria-label="Presence status"
+                value={presenceStatus}
+                onChange={(event) => savePresenceStatus(event.target.value)}
+                className="border-border bg-background text-foreground rounded border px-2 py-1 text-xs"
+              >
+                <option value="active">Active</option>
+                <option value="away">Away</option>
+                <option value="dnd">Do not disturb</option>
+              </select>
+            </label>
           </div>
         </div>
         <div className="border-border mt-5 border-t pt-5">

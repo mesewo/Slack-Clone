@@ -258,6 +258,43 @@ test.describe("phase 1 unread and presence wiring", () => {
       expect(channel.status).toBe(201);
       const channelId = channel.body.id;
 
+      const presign = await apiRequest(
+        "POST",
+        "/api/uploads/presign",
+        userA.cookie,
+        {
+          filename: "phase1-proof.mp4",
+          content_type: "video/mp4",
+          size_bytes: 16,
+        },
+      );
+      expect(presign.status).toBe(200);
+      const putVideo = await fetch(presign.body.upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": "video/mp4" },
+        body: new Uint8Array(16),
+      });
+      expect(putVideo.ok).toBeTruthy();
+      const completeVideo = await apiRequest(
+        "POST",
+        "/api/uploads/complete",
+        userA.cookie,
+        { session_id: presign.body.session_id },
+      );
+      expect(completeVideo.status).toBe(200);
+      const videoAttachmentId = completeVideo.body.id;
+      const videoMessage = `phase1-video-${Date.now()}`;
+      const createVideoMessage = await apiRequest(
+        "POST",
+        `/api/channels/${channelId}/messages`,
+        userA.cookie,
+        {
+          content: videoMessage,
+          attachment_ids: [videoAttachmentId],
+        },
+      );
+      expect(createVideoMessage.status).toBe(201);
+
       const quietChannel = await apiRequest(
         "POST",
         "/api/channels",
@@ -312,6 +349,24 @@ test.describe("phase 1 unread and presence wiring", () => {
       await expect(pageB).toHaveURL(
         new RegExp(`/home/${workspaceId}/channels/${channelId}`),
       );
+      await expect(
+        pageA.locator(`[data-testid="inline-video-${videoAttachmentId}"]`),
+      ).toHaveAttribute("controls", "");
+      await expect(
+        pageA.getByRole("button", { name: "Download phase1-proof.mp4" }),
+      ).toBeVisible();
+
+      const searchInput = pageA.getByRole("searchbox", {
+        name: /Search messages in/i,
+      });
+      await searchInput.fill(videoMessage);
+      const searchResult = pageA.locator(
+        `[data-testid="search-result-${createVideoMessage.body.id}"]`,
+      );
+      await expect(searchResult).toContainText(videoMessage);
+      await expect(searchResult).toContainText("Alpha User");
+      await expect(searchResult).toContainText("# phase1-");
+      await searchResult.click();
 
       const unreadMessage = `phase1-unread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const createMessage = await apiRequest(

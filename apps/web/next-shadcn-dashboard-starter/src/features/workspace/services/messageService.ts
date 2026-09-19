@@ -30,6 +30,12 @@ export interface MessageSearchResult {
   created_at: string;
 }
 
+export interface MessageSearchPage {
+  results: MessageSearchResult[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
 export interface ThreadSummary {
   id: string;
   kind: "channel" | "dm";
@@ -196,12 +202,26 @@ export const messageService = {
   async search(
     channelId: string,
     query: string,
-  ): Promise<MessageSearchResult[]> {
-    const res = await apiClient.get<MessageSearchResult[]>(
-      "/api/search/messages",
-      { params: { q: query, channel_id: channelId } },
-    );
-    return res.data;
+    cursor?: string,
+  ): Promise<MessageSearchPage> {
+    const res = await apiClient.get<
+      | MessageSearchResult[]
+      | {
+          results: MessageSearchResult[];
+          next_cursor?: string;
+          has_more?: boolean;
+        }
+    >("/api/search/messages", {
+      params: { q: query, channel_id: channelId, cursor },
+    });
+    if (Array.isArray(res.data)) {
+      return { results: res.data, hasMore: false };
+    }
+    return {
+      results: res.data.results ?? [],
+      nextCursor: res.data.next_cursor,
+      hasMore: Boolean(res.data.has_more && res.data.next_cursor),
+    };
   },
 
   async upload(file: File): Promise<UploadedAttachment> {

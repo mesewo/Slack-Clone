@@ -387,24 +387,16 @@ export const FilePreview: FC<FilePreviewProps> = ({
                     className="h-auto max-h-72 max-w-full object-contain"
                   />
                 </button>
-              ) : autoPreview &&
-                isVideo &&
-                file.url &&
-                maxAutoPreviewSize === undefined ? (
-                <button
-                  type="button"
-                  className="cursor-zoom-in rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                  onClick={() => setPreviewFile(file)}
-                  aria-label={`Preview ${file.name}`}
+              ) : isVideo && file.url ? (
+                <video
+                  src={file.url}
+                  controls
+                  preload="metadata"
+                  data-testid={`inline-video-${file.id}`}
+                  className="max-h-72 max-w-[320px] rounded-md"
                 >
-                  <video
-                    src={file.url}
-                    preload="metadata"
-                    className="pointer-events-none max-h-72 max-w-[300px] rounded-md"
-                  >
-                    <track kind="captions" />
-                  </video>
-                </button>
+                  <track kind="captions" />
+                </video>
               ) : (
                 <>
                   <div

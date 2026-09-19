@@ -104,10 +104,14 @@ func (pm *RedisPresenceManager) GetStatus(userID string) UserStatus {
 		return StatusAway
 	}
 
-	if status == string(StatusActive) {
+	switch status {
+	case string(StatusActive):
 		return StatusActive
+	case string(StatusDND):
+		return StatusDND
+	default:
+		return StatusAway
 	}
-	return StatusAway
 }
 
 // Snapshot returns all currently known user statuses from Redis.
@@ -128,9 +132,12 @@ func (pm *RedisPresenceManager) Snapshot() map[string]UserStatus {
 			continue
 		}
 
-		if status == string(StatusActive) {
+		switch status {
+		case string(StatusActive):
 			snapshot[userID] = StatusActive
-		} else {
+		case string(StatusDND):
+			snapshot[userID] = StatusDND
+		default:
 			snapshot[userID] = StatusAway
 		}
 	}

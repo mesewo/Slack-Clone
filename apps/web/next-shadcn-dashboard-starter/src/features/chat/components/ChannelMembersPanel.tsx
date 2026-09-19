@@ -121,7 +121,15 @@ export function ChannelMembersPanel({
                 {member.email}
               </p>
               <PresenceIndicator
-                state={userPresence[member.user_id] || "offline"}
+                state={
+                  member.presence_status === "dnd"
+                    ? "dnd"
+                    : userPresence[member.user_id] ||
+                      (member.presence_status === "active" ||
+                      member.presence_status === "away"
+                        ? member.presence_status
+                        : "offline")
+                }
                 customStatus={member.presence_status}
               />
             </div>
