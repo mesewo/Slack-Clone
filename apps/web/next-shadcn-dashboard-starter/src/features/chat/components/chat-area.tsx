@@ -279,6 +279,7 @@ export function ChatArea({
               aria-hidden="true"
             />
             <Input
+              type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={`Search ${conversation.name}`}
