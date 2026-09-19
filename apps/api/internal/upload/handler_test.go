@@ -3,9 +3,11 @@ package upload
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func TestAllowedType(t *testing.T) {
@@ -243,6 +247,117 @@ func TestServeRejectsUnauthorizedAttachment(t *testing.T) {
 	r.ServeHTTP(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 forbidden for unauthorized download, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func TestServeAllowsAuthorizedAttachment(t *testing.T) {
+	userID := uuid.New()
+	attachmentID := uuid.New()
+	payload := []byte("hello from authorized member")
+	attachment := database.Attachment{
+		ID:          attachmentID,
+		UserID:      userID,
+		MessageID:   uuid.NullUUID{UUID: uuid.New(), Valid: true},
+		Filename:    "demo.txt",
+		ContentType: "text/plain",
+		SizeBytes:   int64(len(payload)),
+		StoragePath: "users/authorized/demo.txt",
+		CreatedAt:   time.Now(),
+	}
+
+	db := &stubDB{queryRow: func(ctx context.Context, sql string, args ...any) pgx.Row {
+		switch {
+		case strings.Contains(sql, "FROM attachments WHERE id = $1"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*uuid.UUID)) = attachment.ID
+				*(dest[1].(*uuid.NullUUID)) = attachment.MessageID
+				*(dest[2].(*uuid.UUID)) = attachment.UserID
+				*(dest[3].(*string)) = attachment.Filename
+				*(dest[4].(*string)) = attachment.ContentType
+				*(dest[5].(*int64)) = attachment.SizeBytes
+				*(dest[6].(*string)) = attachment.StoragePath
+				*(dest[7].(*pgtype.Text)) = attachment.ThumbnailPath
+				*(dest[8].(*time.Time)) = attachment.CreatedAt
+				*(dest[9].(*uuid.NullUUID)) = attachment.DirectMessageID
+				return nil
+			}}
+		case strings.Contains(sql, "FROM messages WHERE id = $1"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*uuid.UUID)) = uuid.New()
+				*(dest[1].(*uuid.UUID)) = uuid.New()
+				*(dest[2].(*uuid.NullUUID)) = uuid.NullUUID{Valid: true, UUID: userID}
+				*(dest[3].(*string)) = "body"
+				*(dest[4].(*time.Time)) = time.Now()
+				*(dest[5].(**time.Time)) = nil
+				*(dest[6].(**time.Time)) = nil
+				*(dest[7].(*uuid.NullUUID)) = uuid.NullUUID{}
+				*(dest[8].(*int32)) = 0
+				return nil
+			}}
+		case strings.Contains(sql, "SELECT EXISTS"):
+			return stubQueryRow{fun: func(dest ...any) error {
+				*(dest[0].(*bool)) = true
+				return nil
+			}}
+		default:
+			return stubQueryRow{fun: func(dest ...any) error { return nil }}
+		}
+	}}
+
+	store, err := minio.New("example.com", &minio.Options{
+		Creds:    credentials.NewStaticV4("test", "test", ""),
+		Secure:   false,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			headers := http.Header{}
+			headers.Set("Content-Type", "text/plain")
+			headers.Set("Content-Length", strconv.Itoa(len(payload)))
+			if req.Method == http.MethodHead || req.Method == http.MethodGet {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     headers,
+					Body:       io.NopCloser(bytes.NewReader(payload)),
+					Request:    req,
+				}, nil
+			}
+			return &http.Response{StatusCode: http.StatusNotFound, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("not found")), Request: req}, nil
+		}),
+	})
+	if err != nil {
+		t.Fatalf("create minio client: %v", err)
+	}
+
+	h := &Handler{Queries: database.New(db), Store: store, Bucket: "test-bucket"}
+	r := chi.NewRouter()
+	r.Get("/uploads/{id}", h.Serve)
+	req := httptest.NewRequest(http.MethodGet, "/uploads/"+attachmentID.String(), nil)
+	ctx := context.WithValue(req.Context(), auth.UserContextKey, &auth.Claims{UserID: userID.String()})
+	req = req.WithContext(ctx)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 for authorized download, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Body.String(); got != string(payload) {
+		t.Fatalf("unexpected authorized response body: %q", got)
+	}
+}
+
+func TestServeRejectsMissingAuthClaims(t *testing.T) {
+	attachmentID := uuid.New()
+	h := &Handler{}
+	r := chi.NewRouter()
+	r.Get("/uploads/{id}", h.Serve)
+	req := httptest.NewRequest(http.MethodGet, "/uploads/"+attachmentID.String(), nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for missing auth claims, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

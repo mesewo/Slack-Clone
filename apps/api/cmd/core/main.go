@@ -158,7 +158,7 @@ func main() {
 	}
 	thumbnailWorker := upload.NewThumbnailWorker(queries, objectStore, s3Bucket, 64, 2)
 	thumbnailWorker.Start(ctx)
-	if removed, err := queries.CleanupExpiredUploadSessions(context.Background(), time.Now()); err != nil {
+	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 	} else if removed > 0 {
 		log.Printf("cleaned %d orphaned upload sessions", removed)
@@ -180,7 +180,7 @@ func main() {
 				if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
 					log.Printf("warning: failed to process due thumbnail retries: %v", err)
 				}
-				if removed, err := queries.CleanupExpiredUploadSessions(context.Background(), time.Now()); err != nil {
+				if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 					log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 				} else if removed > 0 {
 					log.Printf("cleaned %d orphaned upload sessions", removed)

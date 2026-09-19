@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -352,6 +353,48 @@ func safeUploadKey(userID, filename string) string {
 		return userID + "/" + hex.EncodeToString(keyToken) + "/" + base
 	}
 	return userID + "/upload/" + base
+}
+
+func CleanupExpiredUploadSessions(ctx context.Context, queries *database.Queries, store *minio.Client, bucket string, cutoff time.Time) (int64, error) {
+	if queries == nil || store == nil {
+		return 0, nil
+	}
+	sessions, err := queries.ListExpiredUploadSessions(ctx, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	removed := int64(0)
+	for _, session := range sessions {
+		if err := removeUploadSessionObjects(ctx, store, bucket, session.ObjectKey); err != nil {
+			var minioErr minio.ErrorResponse
+			if errors.As(err, &minioErr) && minioErr.Code == "NoSuchKey" {
+				// object was already cleaned up or never created; continue to DB cleanup
+			} else {
+				return removed, err
+			}
+		}
+		if err := queries.DeleteUploadSessionByID(ctx, session.ID); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
+}
+
+func removeUploadSessionObjects(ctx context.Context, store *minio.Client, bucket, objectKey string) error {
+	keys := []string{objectKey}
+	if objectKey != "" {
+		keys = append(keys, objectKey+".thumbnail.jpg")
+	}
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		if err := store.RemoveObject(ctx, bucket, key, minio.RemoveObjectOptions{}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (h *Handler) generateThumbnailAsync(ctx context.Context, key, contentType string, data []byte) {
