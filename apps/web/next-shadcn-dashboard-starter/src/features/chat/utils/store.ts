@@ -92,16 +92,28 @@ function uniqueConversations(conversations: Conversation[]): Conversation[] {
   ).map(([, conversation]) => conversation);
 }
 
-function toConversation(channel: Channel, workspaceName: string): Conversation {
+function normalizePresenceStatus(status?: string | null): "online" | "offline" {
+  return status === "active" || status === "away" || status === "dnd"
+    ? "online"
+    : "offline";
+}
+
+function toConversation(
+  channel: Channel,
+  workspaceName: string,
+  members: Array<{ presence_status?: string | null }> = [],
+): Conversation {
+  const status = members.some(
+    (member) => normalizePresenceStatus(member.presence_status) === "online",
+  )
+    ? "online"
+    : "offline";
+
   return {
     id: channel.id,
     name: "# " + channel.name,
     title: workspaceName,
-    // Channels don't have one online/offline state the way a single contact
-    // does - stubbed until per-channel presence rollup is built.
-    status: "online",
-    // Needs a query against channel_members.last_read_at that doesn't exist
-    // yet - stubbed at 0 for now.
+    status,
     unread: 0,
     initials: initials(channel.name),
     messages: [],
@@ -121,7 +133,7 @@ function toDMConversation(
     id: `dm:${dm.id}`,
     name: isSelf ? `${displayName} (you)` : displayName,
     title: isSelf ? "Your space" : "Direct message",
-    status: "online",
+    status: normalizePresenceStatus(dm.other_presence_status),
     unread: 0,
     initials: initials(displayName),
     messages: [],
@@ -265,8 +277,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
 
     await messageService.createSelfDM().catch(() => undefined);
-    const conversations = channels.map((c) =>
-      toConversation(c, workspace.name),
+    const conversations = await Promise.all(
+      channels.map(async (channel) => {
+        try {
+          const members = await channelService.listMembers(channel.id);
+          return toConversation(channel, workspace.name, members);
+        } catch {
+          return toConversation(channel, workspace.name);
+        }
+      }),
     );
     const directMessages = (await messageService.listDMs().catch(() => [])).map(
       (dm) => toDMConversation(dm, userId),
