@@ -12,252 +12,122 @@
 # Error details
 
 ```
-Error: expect(locator).toContainText(expected) failed
+Error: expect(received).toBeGreaterThan(expected)
 
-Locator: locator('[data-testid="search-result-610c8caf-6c97-457e-9f7e-133a2ededad0"]')
-Expected substring: "search-proof-1789845695657"
-Timeout: 20000ms
-Error: element(s) not found
+Expected: > 0
+Received:   0
 
-Call log:
-  - Expect "toContainText" locator('[data-testid="search-result-610c8caf-6c97-457e-9f7e-133a2ededad0"]') with timeout 20000ms
-  - waiting for locator('[data-testid="search-result-610c8caf-6c97-457e-9f7e-133a2ededad0"]')
-
-```
-
-```yaml
-- region "Notifications alt+T"
-- link "Skip to content":
-  - /url: "#main-content"
-- list:
-  - listitem:
-    - button "Search Workspace 1789845695608":
-      - img
-      - text: Search Workspace 1789845695608
-- list:
-  - listitem:
-    - button "Home":
-      - img
-      - text: Home
-  - listitem:
-    - link "Direct messages":
-      - /url: /dms
-      - img
-      - text: DMs
-  - listitem:
-    - link "Activity":
-      - /url: /activity
-      - img
-      - text: Activity
-  - listitem:
-    - button "More":
-      - img
-      - text: More
-  - listitem:
-    - button "Admin":
-      - img
-      - text: Admin
-  - listitem:
-    - button "Create":
-      - img
-      - text: Create
-- list:
-  - listitem:
-    - button "Toggle theme":
-      - img
-      - text: Toggle theme
-  - listitem:
-    - button "SE"
-- button "Toggle Sidebar"
-- main:
-  - button "Search messages, people, settings... ⌘ K":
-    - img
-    - text: Search messages, people, settings... ⌘ K
-  - button "Go back":
-    - img
-  - button "Go forward":
-    - img
-  - button "Open help":
-    - img
-  - complementary:
-    - paragraph: Workspace
-    - paragraph: Your conversations
-    - text: Live
-    - button "Create channel":
-      - img
-    - text: Search conversations
-    - searchbox "Search conversations"
-    - list "Conversation list":
-      - button "Channels" [expanded]:
-        - img
-        - text: Channels
-      - text: "1"
-      - listitem:
-        - text: SE
-        - paragraph: "# search-1789845695639"
-        - paragraph: Search Workspace 1789845695608
-        - text: 10:21 PM
-        - paragraph: "You: search-proof-1789845695657"
-      - button "Direct messages" [expanded]:
-        - img
-        - text: Direct messages
-      - button "Start direct message":
-        - img
-      - button "SE offline active Search User (you)": SE active Search User (you)
-      - button "Starred" [expanded]:
-        - img
-        - text: Starred
-      - text: Drag and drop important stuff here
-      - button "Hide starred hint": ▾
-      - button "Huddles":
-        - img
-        - text: Huddles
-      - button "Directories":
-        - img
-        - text: Directories
-  - main:
-    - button "Close workspace":
-      - img
-    - text: SE
-    - paragraph: "# search-1789845695639"
-    - paragraph: Search Workspace 1789845695608
-    - button "Star conversation":
-      - img
-    - button "Invite teammates"
-    - button "Mute conversation":
-      - img
-    - button "Start audio call":
-      - img
-    - button "Huddle"
-    - button "Start video call":
-      - img
-    - button "Open conversation menu":
-      - img
-    - button "Messages"
-    - button "Add canvas"
-    - button "+"
-    - 'searchbox "Search messages in # search-1789845695639"': search-proof-1789845695657
-    - paragraph: Search is temporarily unavailable
-    - text: September 19, 2026
-    - group "You at 10:21 PM":
-      - text: YO
-      - button "Reply in thread":
-        - img
-      - button "Add reaction": 😊
-      - button "More message actions":
-        - img
-      - paragraph: You 10:21 PM
-      - text: search-proof-1789845695657
-    - form "Reply composer":
-      - text: Write a message
-      - button "Attach a file":
-        - img
-      - button "Toggle formatting toolbar": Aa
-      - button "Insert emoji": 😊
-      - button "Mention a user": "@"
-      - 'textbox "Message # search-1789845695639"': "Message # search-1789845695639 (Enter to send, Shift+Enter for newline)"
-      - button "Attach content":
-        - img
-      - button "More composer options":
-        - img
-      - button "Send message" [disabled]:
-        - img
-      - button "Schedule message":
-        - img
-      - button "Expand composer": ↕
-    - text: "You at 10:21 PM: search-proof-1789845695657"
-  - button "Threads":
-    - img
-  - button "Saved items":
-    - img
-  - heading "Documentation" [level=2]
-  - button "Close info panel":
-    - img
-  - heading "Getting Started" [level=3]
-  - paragraph: Learn how to get started with this application.
-  - heading "Learn more" [level=4]
-  - list:
-    - listitem:
-      - link "Installation Guide":
-        - /url: "#"
-        - text: Installation Guide
-        - img
-  - button "Toggle Infobar"
-- button "Open Tanstack query devtools":
-  - img
-- alert
+Call Log:
+- Timeout 20000ms exceeded while waiting on the predicate
 ```
 
 # Test source
 
 ```ts
-  1  | import { test, expect } from "@playwright/test";
-  2  | import {
-  3  |   apiRequest,
-  4  |   registerUser,
-  5  |   signIn,
-  6  |   startRealBackend,
-  7  |   stopBackendProcesses,
-  8  | } from "./support/real-services";
-  9  | 
-  10 | test("searches real channel messages and opens the matching result", async ({
-  11 |   browser,
-  12 | }) => {
-  13 |   test.slow();
-  14 |   await startRealBackend();
-  15 |   try {
-  16 |     const user = await registerUser(
-  17 |       `search-${Date.now()}@example.test`,
-  18 |       "Search User",
-  19 |     );
-  20 |     const workspace = await apiRequest("POST", "/api/workspaces", user.cookie, {
-  21 |       name: `Search Workspace ${Date.now()}`,
-  22 |     });
-  23 |     expect(workspace.status).toBe(201);
-  24 |     const channel = await apiRequest("POST", "/api/channels", user.cookie, {
-  25 |       workspace_id: workspace.body.id,
-  26 |       name: `search-${Date.now()}`,
-  27 |       type: "PUBLIC",
-  28 |     });
-  29 |     expect(channel.status).toBe(201);
-  30 |     const content = `search-proof-${Date.now()}`;
-  31 |     const message = await apiRequest(
-  32 |       "POST",
-  33 |       `/api/channels/${channel.body.id}/messages`,
-  34 |       user.cookie,
-  35 |       { content },
-  36 |     );
-  37 |     expect(message.status).toBe(201);
-  38 | 
-  39 |     const context = await browser.newContext();
-  40 |     const page = await context.newPage();
-  41 |     try {
-  42 |       await signIn(page, user.email);
-  43 |       await page.goto(
-  44 |         `http://localhost:3000/home/${workspace.body.id}/channels/${channel.body.id}`,
-  45 |       );
-  46 |       const search = page.getByRole("searchbox", {
-  47 |         name: /Search messages in/i,
-  48 |       });
-  49 |       await search.fill(content);
-  50 |       const result = page.locator(
-  51 |         `[data-testid="search-result-${message.body.id}"]`,
-  52 |       );
-> 53 |       await expect(result).toContainText(content);
-     |                            ^ Error: expect(locator).toContainText(expected) failed
-  54 |       await expect(result).toContainText("Search User");
-  55 |       await expect(result).toContainText(`# ${channel.body.name}`);
-  56 |       await expect(result).toContainText("/");
-  57 |       await result.click();
-  58 |       await expect(
-  59 |         page.locator(`[data-message-id="${message.body.id}"]`),
-  60 |       ).toBeVisible();
-  61 |     } finally {
-  62 |       await context.close();
-  63 |     }
-  64 |   } finally {
-  65 |     stopBackendProcesses();
-  66 |   }
-  67 | });
-  68 | 
+  1   | import { test, expect } from "@playwright/test";
+  2   | import {
+  3   |   apiRequest,
+  4   |   registerUser,
+  5   |   signIn,
+  6   |   startRealBackend,
+  7   |   stopBackendProcesses,
+  8   | } from "./support/real-services";
+  9   | 
+  10  | test("searches real channel messages and opens the matching result", async ({
+  11  |   browser,
+  12  | }) => {
+  13  |   test.slow();
+  14  |   await startRealBackend();
+  15  |   try {
+  16  |     const user = await registerUser(
+  17  |       `search-${Date.now()}@example.test`,
+  18  |       "Search User",
+  19  |     );
+  20  |     const workspace = await apiRequest("POST", "/api/workspaces", user.cookie, {
+  21  |       name: `Search Workspace ${Date.now()}`,
+  22  |     });
+  23  |     expect(workspace.status).toBe(201);
+  24  |     const channel = await apiRequest("POST", "/api/channels", user.cookie, {
+  25  |       workspace_id: workspace.body.id,
+  26  |       name: `search-${Date.now()}`,
+  27  |       type: "PUBLIC",
+  28  |     });
+  29  |     expect(channel.status).toBe(201);
+  30  |     const content = `search-proof-${Date.now()}`;
+  31  |     const message = await apiRequest(
+  32  |       "POST",
+  33  |       `/api/channels/${channel.body.id}/messages`,
+  34  |       user.cookie,
+  35  |       { content },
+  36  |     );
+  37  |     expect(message.status).toBe(201);
+  38  | 
+  39  |     const context = await browser.newContext();
+  40  |     const page = await context.newPage();
+  41  |     const searchResponses: Array<{ status: number; body: string }> = [];
+  42  |     page.on("response", (response) => {
+  43  |       if (!response.url().includes("/api/search/messages")) return;
+  44  |       void response
+  45  |         .text()
+  46  |         .then((body) =>
+  47  |           searchResponses.push({ status: response.status(), body }),
+  48  |         )
+  49  |         .catch(() => undefined);
+  50  |     });
+  51  |     try {
+  52  |       await signIn(page, user.email);
+  53  |       await page.goto(
+  54  |         `http://localhost:3000/home/${workspace.body.id}/channels/${channel.body.id}`,
+  55  |       );
+  56  |       const search = page.getByRole("searchbox", {
+  57  |         name: /Search messages in/i,
+  58  |       });
+  59  |       const result = page.locator(
+  60  |         `[data-testid="search-result-${message.body.id}"]`,
+  61  |       );
+  62  |       const messageCreatedAt = Date.now();
+  63  |       let indexedAt: number | undefined;
+  64  |       for (let attempt = 0; attempt < 30; attempt += 1) {
+  65  |         const elasticsearchResponse = await fetch(
+  66  |           `http://127.0.0.1:9200/messages/_doc/${message.body.id}`,
+  67  |         );
+  68  |         if (elasticsearchResponse.status === 200) {
+  69  |           indexedAt = Date.now();
+  70  |           break;
+  71  |         }
+  72  |         await new Promise((resolve) => setTimeout(resolve, 500));
+  73  |       }
+  74  |       console.log(
+  75  |         `[search timing] message created -> Elasticsearch indexed: ${indexedAt ? `${indexedAt - messageCreatedAt}ms` : "not indexed within 15s"}`,
+  76  |       );
+  77  | 
+  78  |       await expect
+  79  |         .poll(
+  80  |           async () => {
+  81  |             await search.fill("");
+  82  |             await search.fill(content);
+  83  |             return await result.count();
+  84  |           },
+  85  |           { timeout: 20_000, intervals: [1_000] },
+  86  |         )
+> 87  |         .toBeGreaterThan(0);
+      |          ^ Error: expect(received).toBeGreaterThan(expected)
+  88  |       await expect(result).toContainText(content);
+  89  |       await expect(result).toContainText("Search User");
+  90  |       await expect(result).toContainText(`# ${channel.body.name}`);
+  91  |       await expect(result).toContainText("/");
+  92  |       await result.click();
+  93  |       await expect(
+  94  |         page.locator(`[data-message-id="${message.body.id}"]`),
+  95  |       ).toBeVisible();
+  96  |       console.log(`[search responses] ${JSON.stringify(searchResponses)}`);
+  97  |     } finally {
+  98  |       console.log(`[search responses] ${JSON.stringify(searchResponses)}`);
+  99  |       await context.close();
+  100 |     }
+  101 |   } finally {
+  102 |     stopBackendProcesses();
+  103 |   }
+  104 | });
+  105 | 
 ```
