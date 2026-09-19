@@ -314,10 +314,28 @@ func TestServeAllowsAuthorizedAttachment(t *testing.T) {
 		Creds:    credentials.NewStaticV4("test", "test", ""),
 		Secure:   false,
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Method == http.MethodGet && req.URL.Query().Has("location") {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"application/xml"}},
+					Body:       io.NopCloser(strings.NewReader("<LocationConstraint></LocationConstraint>")),
+					Request:    req,
+				}, nil
+			}
 			headers := http.Header{}
 			headers.Set("Content-Type", "text/plain")
 			headers.Set("Content-Length", strconv.Itoa(len(payload)))
-			if req.Method == http.MethodHead || req.Method == http.MethodGet {
+			headers.Set("ETag", `"authorized-test-object"`)
+			headers.Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
+			if req.Method == http.MethodHead {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     headers,
+					Body:       http.NoBody,
+					Request:    req,
+				}, nil
+			}
+			if req.Method == http.MethodGet {
 				return &http.Response{
 					StatusCode: http.StatusOK,
 					Header:     headers,
