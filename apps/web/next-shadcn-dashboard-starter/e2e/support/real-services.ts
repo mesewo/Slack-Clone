@@ -58,14 +58,20 @@ export function stopBackendProcesses() {
 function buildServices() {
   mkdirSync(binDir, { recursive: true });
   mkdirSync(logDir, { recursive: true });
+  const coreStartedAt = Date.now();
   execFileSync(goBinary, ["build", "-o", coreBinary, "./cmd/core"], {
     cwd: apiDir,
     stdio: "inherit",
   });
+  console.log(`[harness] go build core.exe: ${Date.now() - coreStartedAt}ms`);
+  const gatewayStartedAt = Date.now();
   execFileSync(goBinary, ["build", "-o", gatewayBinary, "./cmd/gateway"], {
     cwd: apiDir,
     stdio: "inherit",
   });
+  console.log(
+    `[harness] go build gateway.exe: ${Date.now() - gatewayStartedAt}ms`,
+  );
 }
 
 function serviceEnv(extra: Record<string, string>) {

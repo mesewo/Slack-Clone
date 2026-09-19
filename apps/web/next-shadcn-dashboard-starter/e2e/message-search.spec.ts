@@ -12,11 +12,13 @@ test("searches real channel messages and opens the matching result", async ({
 }) => {
   test.slow();
   await startRealBackend();
+  console.log("[checkpoint] startRealBackend returned");
   try {
     const user = await registerUser(
       `search-${Date.now()}@example.test`,
       "Search User",
     );
+    console.log("[checkpoint] registerUser returned");
     const workspace = await apiRequest("POST", "/api/workspaces", user.cookie, {
       name: `Search Workspace ${Date.now()}`,
     });
@@ -50,9 +52,11 @@ test("searches real channel messages and opens the matching result", async ({
     });
     try {
       await signIn(page, user.email);
+      console.log("[checkpoint] signIn returned");
       await page.goto(
         `http://localhost:3000/home/${workspace.body.id}/channels/${channel.body.id}`,
       );
+      console.log("[checkpoint] page.goto returned");
       const search = page.getByRole("searchbox", {
         name: /Search messages in/i,
       });
@@ -60,6 +64,7 @@ test("searches real channel messages and opens the matching result", async ({
         `[data-testid="search-result-${message.body.id}"]`,
       );
       const messageCreatedAt = Date.now();
+      console.log("[checkpoint] right before ES-indexing loop");
       let indexedAt: number | undefined;
       for (let attempt = 0; attempt < 30; attempt += 1) {
         const elasticsearchResponse = await fetch(
