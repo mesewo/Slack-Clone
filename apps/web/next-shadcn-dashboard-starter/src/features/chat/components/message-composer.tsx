@@ -293,13 +293,13 @@ export function MessageComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className={`group/composer sticky bottom-0 z-10 relative space-y-2 border-t border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] px-3 pt-3 pb-3 text-slate-100 transition-[height] duration-200 ease-out sm:space-y-3 sm:px-4 ${expanded ? "h-[60%] min-h-[12rem] max-h-[60vh]" : "h-auto"}`}
+      className="group/composer sticky relative bottom-0 z-10 shrink-0 space-y-2 border-t border-border bg-background px-3 pt-3 pb-3 text-foreground sm:space-y-3 sm:px-4"
       aria-label="Reply composer"
     >
       <label htmlFor="messenger-editor" className="sr-only">
         Write a message
       </label>
-      <div className="flex items-end gap-1.5 rounded-[18px] border border-white/10 bg-slate-950/30 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:gap-2 sm:p-3">
+      <div className="border-border bg-background flex items-end gap-1.5 rounded-[18px] border p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:gap-2 sm:p-3">
         <div className="min-w-0 flex-1">
           {attachments.length > 0 && (
             <FilePreview
@@ -327,7 +327,7 @@ export function MessageComposer({
             </div>
           )}
           {formatterOpen && (
-            <div className="border-border/60 bg-background/70 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-inner shadow-black/5 sm:mb-2">
+            <div className="mb-1.5 flex flex-wrap items-center gap-0.5 p-0 sm:mb-2">
               <button
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
@@ -382,56 +382,6 @@ export function MessageComposer({
               >
                 Quote
               </button>
-              <div className="relative ml-auto">
-                <button
-                  type="button"
-                  onClick={() => setEmojiOpen((current) => !current)}
-                  className="hover:bg-accent/70 text-foreground/70 hover:text-foreground flex items-center gap-1 rounded-md px-1.5 py-0.5 text-sm transition"
-                  aria-label="Insert emoji"
-                >
-                  <span>😊</span>
-                </button>
-                {emojiOpen && (
-                  <div className="absolute right-0 z-20 mt-1 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
-                    <button
-                      type="button"
-                      onClick={() => setEmojiOpen(false)}
-                      className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
-                      aria-label="Close emoji picker"
-                    >
-                      <Icons.close className="size-3" />
-                    </button>
-                    <input
-                      value={emojiSearch}
-                      onChange={(event) => setEmojiSearch(event.target.value)}
-                      placeholder="Search emoji"
-                      aria-label="Search emoji"
-                      className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 pr-7 text-xs outline-none"
-                    />
-                    <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
-                      {emojiOptions
-                        .filter(
-                          (emoji) =>
-                            !emojiSearch ||
-                            `${emoji} ${emojiAliases[emoji] || ""}`
-                              .toLowerCase()
-                              .includes(emojiSearch.toLowerCase()),
-                        )
-                        .map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => insertEmoji(emoji)}
-                            className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
-                            aria-label={`Insert ${emoji}`}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                )}
-              </div>
             </div>
           )}
           <div className="relative">
@@ -452,7 +402,7 @@ export function MessageComposer({
                 }
               }}
               data-placeholder={`Message ${contactName} (Enter to send, Shift+Enter for newline)`}
-              className="text-foreground empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)] min-h-[2.5rem] w-full border-none bg-transparent text-sm outline-none sm:min-h-[3rem]"
+              className={`text-foreground empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)] min-h-[2.5rem] w-full ${expanded ? "max-h-[50vh]" : "max-h-[20rem]"} overflow-y-auto border-none bg-transparent text-sm outline-none sm:min-h-[3rem]`}
               aria-label={"Message " + contactName}
             />
             {visibleMentions.length > 0 && (
@@ -476,6 +426,107 @@ export function MessageComposer({
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 sm:gap-1.5">
+            <input
+              ref={fileInputRef}
+              aria-label="Add attachments"
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.length) {
+                  const { valid, errors } = validateFiles(e.target.files);
+                  errors.forEach((error) => toast.error(error));
+                  if (valid.length > 0) onAddAttachments(e.target.files);
+                }
+                e.target.value = "";
+              }}
+            />
+            <div className="relative">
+              <Button
+                type="button"
+                className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white size-8 rounded-xl border transition"
+                aria-label="Attach content"
+                title="Attach content"
+                aria-expanded={attachOpen}
+                onClick={() => setAttachOpen((open) => !open)}
+              >
+                <Icons.add className="size-4" />
+              </Button>
+              {attachOpen && (
+                <div className="border-border bg-popover absolute bottom-10 left-0 z-30 w-48 rounded-xl border p-1 shadow-xl">
+                  {[
+                    ["image/*", "Images", "Choose images"],
+                    ["video/*", "Videos", "Choose videos"],
+                    ["application/pdf", "PDF", "Choose PDF files"],
+                    ["*/*", "Files", "Choose files"],
+                  ].map(([accept, label, ariaLabel]) => (
+                    <button
+                      key={accept}
+                      type="button"
+                      onClick={() => {
+                        fileInputRef.current?.setAttribute("accept", accept);
+                        fileInputRef.current?.click();
+                        setAttachOpen(false);
+                      }}
+                      className="hover:bg-accent flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs"
+                    >
+                      <Icons.paperclip className="size-3.5" />
+                      <span aria-label={ariaLabel}>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setEmojiOpen((current) => !current)}
+                className="text-slate-300 hover:bg-white/10 hover:text-white rounded-md px-2 py-1 text-sm"
+                aria-label="Insert emoji"
+              >
+                😊
+              </button>
+              {emojiOpen && (
+                <div className="absolute bottom-10 left-0 z-20 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => setEmojiOpen(false)}
+                    className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
+                    aria-label="Close emoji picker"
+                  >
+                    <Icons.close className="size-3" />
+                  </button>
+                  <input
+                    value={emojiSearch}
+                    onChange={(event) => setEmojiSearch(event.target.value)}
+                    placeholder="Search emoji"
+                    aria-label="Search emoji"
+                    className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 pr-7 text-xs outline-none"
+                  />
+                  <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+                    {emojiOptions
+                      .filter(
+                        (emoji) =>
+                          !emojiSearch ||
+                          `${emoji} ${emojiAliases[emoji] || ""}`
+                            .toLowerCase()
+                            .includes(emojiSearch.toLowerCase()),
+                      )
+                      .map((emoji) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => insertEmoji(emoji)}
+                          className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
+                          aria-label={`Insert ${emoji}`}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setFormatterOpen((open) => !open)}
@@ -498,6 +549,35 @@ export function MessageComposer({
             >
               @
             </button>
+            <div className="relative">
+              <Button
+                type="button"
+                className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white size-8 rounded-xl border transition"
+                aria-label="More composer options"
+                title="More composer options"
+                aria-expanded={moreOpen}
+                onClick={() => setMoreOpen((open) => !open)}
+              >
+                <Icons.ellipsis className="size-3.5" />
+              </Button>
+              {moreOpen && (
+                <div className="border-border bg-popover absolute bottom-10 left-0 z-30 w-48 rounded-xl border p-1 shadow-xl">
+                  {["Poll", "Canvas", "Location", "Workflow"].map((label) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        toast.info(`${label} is not available yet`);
+                        setMoreOpen(false);
+                      }}
+                      className="text-muted-foreground hover:bg-accent hover:text-foreground w-full rounded-lg px-2 py-2 text-left text-xs"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             {quickReplies.map((reply) => (
               <button
                 key={reply}
@@ -511,92 +591,6 @@ export function MessageComposer({
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5 sm:w-24 sm:gap-2">
-          <input
-            ref={fileInputRef}
-            aria-label="Add attachments"
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files?.length) {
-                const { valid, errors } = validateFiles(e.target.files);
-
-                if (errors.length > 0) {
-                  errors.forEach((error) => {
-                    toast.error(error);
-                  });
-                }
-
-                if (valid.length > 0) {
-                  onAddAttachments(e.target.files);
-                }
-              }
-              e.target.value = "";
-            }}
-          />
-          <div className="relative flex items-center">
-            <Button
-              type="button"
-              className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-r-none rounded-l-xl border-r-0 transition focus-visible:ring-1 focus-visible:ring-offset-1"
-              aria-label="Attach content"
-              title="Attach content"
-              aria-expanded={attachOpen}
-              onClick={() => setAttachOpen((open) => !open)}
-            >
-              <Icons.add className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-l-none rounded-r-xl border transition focus-visible:ring-1 focus-visible:ring-offset-1"
-              aria-label="More composer options"
-              title="More composer options"
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((open) => !open)}
-            >
-              <Icons.ellipsis className="size-3.5" />
-            </Button>
-            {attachOpen && (
-              <div className="border-border bg-popover absolute right-0 bottom-10 z-30 w-48 rounded-xl border p-1 shadow-xl">
-                {[
-                  ["image/*", "Images", "Choose images"],
-                  ["video/*", "Videos", "Choose videos"],
-                  ["application/pdf", "PDF", "Choose PDF files"],
-                  ["*/*", "Files", "Choose files"],
-                ].map(([accept, label, ariaLabel]) => (
-                  <button
-                    key={accept}
-                    type="button"
-                    onClick={() => {
-                      fileInputRef.current?.setAttribute("accept", accept);
-                      fileInputRef.current?.click();
-                      setAttachOpen(false);
-                    }}
-                    className="hover:bg-accent flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs"
-                  >
-                    <Icons.paperclip className="size-3.5" />
-                    <span aria-label={ariaLabel}>{label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {moreOpen && (
-              <div className="border-border bg-popover absolute right-0 bottom-10 z-30 w-48 rounded-xl border p-1 shadow-xl">
-                {["Poll", "Canvas", "Location", "Workflow"].map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    onClick={() => {
-                      toast.info(`${label} is not available yet`);
-                      setMoreOpen(false);
-                    }}
-                    className="text-muted-foreground hover:bg-accent hover:text-foreground w-full rounded-lg px-2 py-2 text-left text-xs"
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <div className="flex items-center">
             <Button
               type="submit"

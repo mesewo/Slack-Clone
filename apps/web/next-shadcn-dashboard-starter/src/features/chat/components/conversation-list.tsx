@@ -63,6 +63,7 @@ export function ConversationList({
     [],
   );
   const [directorySearch, setDirectorySearch] = useState("");
+  const [unreadsOnly, setUnreadsOnly] = useState(false);
 
   useEffect(() => {
     if (!dmOpen) return;
@@ -95,14 +96,19 @@ export function ConversationList({
   const directMessages = filtered.filter(
     (conversation) => conversation.kind === "dm",
   );
+  const visibleDirectMessages = unreadsOnly
+    ? directMessages.filter((conversation) => conversation.unread > 0)
+    : directMessages;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--chat-sidebar-border)] pb-3">
         <div>
-          <p className="text-sm font-semibold tracking-tight">Workspace</p>
+          <p className="text-sm font-semibold tracking-tight">
+            {dmOnly ? "Direct messages" : "Workspace"}
+          </p>
           <p className="text-[var(--chat-sidebar-muted)] text-xs">
-            Your conversations
+            {dmOnly ? "Private conversations" : "Your conversations"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -114,17 +120,21 @@ export function ConversationList({
           </Badge>
           <button
             type="button"
-            onClick={() => setCreateOpen((open) => !open)}
+            onClick={() =>
+              dmOnly
+                ? setDmOpen((open) => !open)
+                : setCreateOpen((open) => !open)
+            }
             className="text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] hover:text-white rounded p-1"
             aria-label="Create channel"
-            title="Create channel"
+            title={dmOnly ? "Start direct message" : "Create channel"}
           >
             <Icons.add className="size-4" />
           </button>
         </div>
       </div>
 
-      {createOpen && (
+      {createOpen && !dmOnly && (
         <form
           onSubmit={async (event) => {
             event.preventDefault();
@@ -176,10 +186,25 @@ export function ConversationList({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search conversations"
+          placeholder={dmOnly ? "Find a DM..." : "Search conversations"}
           className="border-[var(--chat-sidebar-border)] bg-slate-950/25 text-slate-100 placeholder:text-[var(--chat-sidebar-muted)] focus-visible:ring-slate-300/40 w-full rounded-xl pl-10 text-sm focus-visible:ring-2"
         />
       </div>
+      {dmOnly && (
+        <button
+          type="button"
+          onClick={() => setUnreadsOnly((value) => !value)}
+          className={cn(
+            "border-[var(--chat-sidebar-border)] rounded-lg border px-3 py-1.5 text-left text-xs font-medium transition-colors",
+            unreadsOnly
+              ? "bg-[var(--chat-sidebar-active)] text-white"
+              : "text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] hover:text-white",
+          )}
+          aria-pressed={unreadsOnly}
+        >
+          {unreadsOnly ? "Unread only" : "Unreads"}
+        </button>
+      )}
 
       <div
         className="flex-1 space-y-1 overflow-y-auto pr-1"
@@ -292,7 +317,12 @@ export function ConversationList({
               </motion.button>
             );
           })}
-        <div className="mt-4 flex items-center justify-between px-1">
+        <div
+          className={cn(
+            "mt-4 flex items-center justify-between px-1",
+            dmOnly && "mt-0",
+          )}
+        >
           <button
             type="button"
             onClick={() => setDirectMessagesOpen((open) => !open)}
@@ -346,7 +376,7 @@ export function ConversationList({
           </div>
         )}
         {directMessagesOpen &&
-          directMessages.map((conversation) => (
+          visibleDirectMessages.map((conversation) => (
             <button
               key={conversation.id}
               type="button"

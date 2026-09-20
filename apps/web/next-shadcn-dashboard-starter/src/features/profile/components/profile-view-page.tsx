@@ -6,7 +6,10 @@ import { Icons } from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { productivityService } from "@/features/workspace/services/productivityService";
+import {
+  productivityService,
+  type NotificationPreferences,
+} from "@/features/workspace/services/productivityService";
 
 export default function ProfileViewPage() {
   const { user, loading } = useAuth();
@@ -15,6 +18,9 @@ export default function ProfileViewPage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [presenceStatus, setPresenceStatus] = useState("active");
+  const [notificationPreferences, setNotificationPreferences] =
+    useState<NotificationPreferences | null>(null);
+  const [savingNotifications, setSavingNotifications] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -36,6 +42,37 @@ export default function ProfileViewPage() {
         );
       });
   }, [user?.name]);
+
+  useEffect(() => {
+    if (!user) return;
+    void productivityService
+      .getNotificationPreferences()
+      .then(setNotificationPreferences)
+      .catch(() => setNotificationPreferences(null));
+  }, [user]);
+
+  const updateNotificationPreference = async (
+    key: keyof NotificationPreferences,
+    value: boolean,
+  ) => {
+    if (!notificationPreferences) return;
+    const previousPreferences = notificationPreferences;
+    const nextPreferences = { ...previousPreferences, [key]: value };
+    setNotificationPreferences(nextPreferences);
+    setSavingNotifications(true);
+    try {
+      const saved =
+        await productivityService.updateNotificationPreferences(
+          nextPreferences,
+        );
+      setNotificationPreferences(saved);
+    } catch {
+      setNotificationPreferences(previousPreferences);
+      toast.error("Could not update notification preferences");
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
 
   const handleAvatarChange = (file: File | undefined) => {
     if (!file) return;
@@ -184,6 +221,40 @@ export default function ProfileViewPage() {
             <Icons.logout className="mr-2 h-4 w-4" />
             {signingOut ? "Signing out..." : "Sign out"}
           </Button>
+        </div>
+      </div>
+      <div className="border-border bg-card rounded-xl border p-5">
+        <h2 className="text-lg font-semibold">Notification preferences</h2>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Choose which workspace activity reaches you.
+        </p>
+        <div className="mt-4 space-y-3">
+          {notificationPreferences &&
+            (
+              [
+                ["mentions", "Mentions"],
+                ["direct_messages", "Direct messages"],
+                ["thread_replies", "Thread replies"],
+                ["reactions", "Reactions"],
+              ] as const
+            ).map(([key, label]) => (
+              <label
+                key={key}
+                className="flex items-center justify-between gap-3 text-sm"
+              >
+                <span>{label}</span>
+                <input
+                  type="checkbox"
+                  checked={notificationPreferences[key]}
+                  disabled={savingNotifications}
+                  onChange={(event) =>
+                    void updateNotificationPreference(key, event.target.checked)
+                  }
+                  aria-label={label}
+                  className="accent-primary size-4"
+                />
+              </label>
+            ))}
         </div>
       </div>
     </div>

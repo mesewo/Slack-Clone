@@ -94,7 +94,7 @@ export default function AppSidebar() {
       </SidebarHeader>
       <SidebarContent
         className={cn(
-          "flex-1 overflow-x-hidden px-1 pb-0 pt-1",
+          "flex-none gap-0 overflow-x-hidden px-1 pb-0 pt-1",
           isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar",
         )}
       >
@@ -103,7 +103,7 @@ export default function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Home"
-                className="h-auto flex-col gap-1 py-2"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
                 onClick={() => {
                   const last = activeWorkspaceId
                     ? window.localStorage.getItem(
@@ -120,53 +120,45 @@ export default function AppSidebar() {
                 }}
               >
                 <Icons.home className="size-6" />
-                <span className="text-center text-[0.64rem] font-medium leading-none">
-                  Home
-                </span>
+                <span className="sr-only">Home</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Direct messages"
-                className="h-auto flex-col gap-1 py-2"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
                 render={<Link href="/dms" aria-label="Direct messages" />}
               >
                 <Icons.chat className="size-6" />
-                <span className="text-center text-[0.64rem] font-medium leading-none">
-                  DMs
-                </span>
+                <span className="sr-only">DMs</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Activity"
-                className="h-auto flex-col gap-1 py-2"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
                 render={<Link href="/activity" aria-label="Activity" />}
               >
                 <Icons.activity className="size-6" />
-                <span className="text-center text-[0.64rem] font-medium leading-none">
-                  Activity
-                </span>
+                <span className="sr-only">Activity</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="More"
-                className="h-auto flex-col gap-1 py-2"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
                 onClick={() =>
                   toast.info("More workspace tools are coming soon.")
                 }
               >
                 <Icons.dots className="size-6" />
-                <span className="text-center text-[0.64rem] font-medium leading-none">
-                  More
-                </span>
+                <span className="sr-only">More</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Admin"
-                className="h-auto flex-col gap-1 py-2"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
                 onClick={() =>
                   activeWorkspaceId
                     ? router.push(`/home/${activeWorkspaceId}/admin`)
@@ -174,9 +166,7 @@ export default function AppSidebar() {
                 }
               >
                 <Icons.settings className="size-6" />
-                <span className="text-center text-[0.64rem] font-medium leading-none">
-                  Admin
-                </span>
+                <span className="sr-only">Admin</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -185,14 +175,12 @@ export default function AppSidebar() {
                   render={
                     <SidebarMenuButton
                       tooltip="Create"
-                      className="h-auto flex-col gap-1 py-2"
+                      className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
                     />
                   }
                 >
                   <Icons.add className="size-6" />
-                  <span className="text-center text-[0.64rem] font-medium leading-none">
-                    Create
-                  </span>
+                  <span className="sr-only">Create</span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
                   {[
@@ -312,7 +300,7 @@ export default function AppSidebar() {
       </SidebarContent>
       <SidebarFooter
         className={cn(
-          "mt-auto min-h-0 border-t p-0 pb-1",
+          "mt-auto min-h-0 gap-0 border-t-0 p-0 pb-0",
           isWorkspaceRoute
             ? "border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)]"
             : "border-sidebar-border/70 bg-sidebar/90",
@@ -326,7 +314,7 @@ export default function AppSidebar() {
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <SidebarMenuButton className="data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80" />
+                  <SidebarMenuButton className="h-auto min-h-0 py-1 data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80" />
                 }
               >
                 {user && (

@@ -162,7 +162,7 @@ export function WorkspaceChatView() {
       )
     : undefined;
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <ChatArea
         conversation={activeConversation}
         draft={draft}

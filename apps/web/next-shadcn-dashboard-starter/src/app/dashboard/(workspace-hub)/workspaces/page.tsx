@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { Icons } from "@/components/icons";
@@ -16,7 +15,6 @@ import {
 type WorkspaceWithMemberCount = Workspace & { memberCount: number | null };
 
 export default function WorkspacesPage() {
-  const router = useRouter();
   const { user } = useAuth();
   const [workspaces, setWorkspaces] = useState<WorkspaceWithMemberCount[]>([]);
   const [name, setName] = useState("");
@@ -95,22 +93,28 @@ export default function WorkspacesPage() {
   const openWorkspace = async (workspaceId: string) => {
     setOpeningWorkspaceId(workspaceId);
     setError("");
+    const newTab = window.open("about:blank", "_blank");
     try {
       const channels = await channelService.list(workspaceId);
       window.localStorage.setItem("active_workspace_id", workspaceId);
       const lastVisited = window.localStorage.getItem(
         `slack_last_conversation_id:${workspaceId}`,
       );
-      router.push(
-        lastVisited
-          ? lastVisited.startsWith("dm:")
-            ? `/home/${workspaceId}/dms/${lastVisited.slice(3)}`
-            : `/home/${workspaceId}/channels/${lastVisited}`
-          : channels[0]
-            ? `/home/${workspaceId}/channels/${channels[0].id}`
-            : `/home/${workspaceId}`,
-      );
+      const destination = lastVisited
+        ? lastVisited.startsWith("dm:")
+          ? `/home/${workspaceId}/dms/${lastVisited.slice(3)}`
+          : `/home/${workspaceId}/channels/${lastVisited}`
+        : channels[0]
+          ? `/home/${workspaceId}/channels/${channels[0].id}`
+          : `/home/${workspaceId}`;
+      if (newTab) {
+        newTab.opener = null;
+        newTab.location.href = destination;
+      } else {
+        setError("The workspace could not be opened in a new tab.");
+      }
     } catch {
+      newTab?.close();
       setError("Workspace channels could not be loaded.");
     } finally {
       setOpeningWorkspaceId(null);

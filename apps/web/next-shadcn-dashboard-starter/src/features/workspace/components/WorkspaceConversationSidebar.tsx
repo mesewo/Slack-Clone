@@ -19,6 +19,23 @@ export function WorkspaceConversationSidebar() {
 
   function openConversation(id: string) {
     selectConversation(id);
+    const historyKey = `slack_navigation_history:${params.workspaceId}`;
+    const entry = {
+      id,
+      kind: id.startsWith("dm:") ? "dm" : "channel",
+      label:
+        conversations.find((conversation) => conversation.id === id)?.name ||
+        id,
+    } as const;
+    const previous = JSON.parse(
+      window.localStorage.getItem(historyKey) || "[]",
+    ) as (typeof entry)[];
+    window.localStorage.setItem(
+      historyKey,
+      JSON.stringify(
+        [entry, ...previous.filter((item) => item.id !== id)].slice(0, 12),
+      ),
+    );
     router.push(
       id.startsWith("dm:")
         ? `/home/${params.workspaceId}/dms/${id.slice(3)}`
