@@ -12,10 +12,15 @@ import {
   SheetTrigger,
 } from "../ui/sheet";
 import { Icons } from "../icons";
+import { usePathname } from "next/navigation";
 
 export default function Header() {
+  const pathname = usePathname();
+  const isWorkspaceRoute = pathname.startsWith("/home");
   return (
-    <header className="bg-sidebar text-sidebar-foreground sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-sidebar-border px-3 shadow-[0_1px_0_rgba(0,0,0,0.16)] md:px-4">
+    <header
+      className={`text-sidebar-foreground sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-3 shadow-[0_1px_0_rgba(0,0,0,0.16)] md:px-4 ${isWorkspaceRoute ? "border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)]" : "border-sidebar-border bg-sidebar"}`}
+    >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <div className="min-w-0 max-w-2xl flex-1">
           <SearchInput />

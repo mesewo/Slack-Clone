@@ -1,4 +1,5 @@
 "use client";
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -42,9 +43,11 @@ import { OrgSwitcher } from "../org-switcher";
 import { toast } from "sonner";
 import { ThemeModeToggle } from "../themes/theme-mode-toggle";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { cn } from "@/lib/utils";
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const isWorkspaceRoute = pathname.startsWith("/home");
   const { isOpen } = useMediaQuery();
   const router = useRouter();
   const { user } = useAuth();
@@ -76,17 +79,31 @@ export default function AppSidebar() {
   return (
     <Sidebar
       collapsible="none"
-      className="w-[4.5rem] border-sidebar-border/80 bg-sidebar text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]"
+      className={cn(
+        "w-[4.5rem] border-sidebar-border/80 text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]",
+        isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar",
+      )}
     >
-      <SidebarHeader className="border-sidebar-border/70 bg-sidebar/90 px-2 py-3">
+      <SidebarHeader
+        className={cn(
+          "border-sidebar-border/70 px-2 py-3",
+          isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
+        )}
+      >
         <OrgSwitcher />
       </SidebarHeader>
-      <SidebarContent className="flex-1 overflow-x-hidden bg-sidebar px-1 pb-0 pt-1">
+      <SidebarContent
+        className={cn(
+          "flex-1 overflow-x-hidden px-1 pb-0 pt-1",
+          isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar",
+        )}
+      >
         <SidebarGroup className="py-0">
           <SidebarMenu className="gap-0.5">
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Home"
+                className="h-auto flex-col gap-1 py-2"
                 onClick={() => {
                   const last = activeWorkspaceId
                     ? window.localStorage.getItem(
@@ -102,57 +119,80 @@ export default function AppSidebar() {
                   );
                 }}
               >
-                <Icons.home className="size-5" />
-                <span className="text-[0.58rem] font-medium">Home</span>
+                <Icons.home className="size-6" />
+                <span className="text-center text-[0.64rem] font-medium leading-none">
+                  Home
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Direct messages"
+                className="h-auto flex-col gap-1 py-2"
                 render={<Link href="/dms" aria-label="Direct messages" />}
               >
-                <Icons.chat className="size-5" />
-                <span className="text-[0.58rem] font-medium">DMs</span>
+                <Icons.chat className="size-6" />
+                <span className="text-center text-[0.64rem] font-medium leading-none">
+                  DMs
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Activity"
+                className="h-auto flex-col gap-1 py-2"
                 render={<Link href="/activity" aria-label="Activity" />}
               >
-                <Icons.activity className="size-5" />
-                <span className="text-[0.58rem] font-medium">Activity</span>
+                <Icons.activity className="size-6" />
+                <span className="text-center text-[0.64rem] font-medium leading-none">
+                  Activity
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="More"
+                className="h-auto flex-col gap-1 py-2"
                 onClick={() =>
                   toast.info("More workspace tools are coming soon.")
                 }
               >
-                <Icons.dots className="size-5" />
-                <span className="text-[0.58rem] font-medium">More</span>
+                <Icons.dots className="size-6" />
+                <span className="text-center text-[0.64rem] font-medium leading-none">
+                  More
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Admin"
+                className="h-auto flex-col gap-1 py-2"
                 onClick={() =>
                   activeWorkspaceId
                     ? router.push(`/home/${activeWorkspaceId}/admin`)
                     : toast.info("Open a workspace first.")
                 }
               >
-                <Icons.settings className="size-5" />
-                <span className="text-[0.58rem] font-medium">Admin</span>
+                <Icons.settings className="size-6" />
+                <span className="text-center text-[0.64rem] font-medium leading-none">
+                  Admin
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <Popover>
-                <PopoverTrigger render={<SidebarMenuButton tooltip="Create" />}>
-                  <Icons.add className="size-5" />
-                  <span className="text-[0.58rem] font-medium">Create</span>
+                <PopoverTrigger
+                  render={
+                    <SidebarMenuButton
+                      tooltip="Create"
+                      className="h-auto flex-col gap-1 py-2"
+                    />
+                  }
+                >
+                  <Icons.add className="size-6" />
+                  <span className="text-center text-[0.64rem] font-medium leading-none">
+                    Create
+                  </span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
                   {[
@@ -270,7 +310,14 @@ export default function AppSidebar() {
           </SidebarGroup>
         ))}
       </SidebarContent>
-      <SidebarFooter className="border-sidebar-border/70 mt-auto border-t bg-sidebar/90 p-0">
+      <SidebarFooter
+        className={cn(
+          "mt-auto min-h-0 border-t p-0 pb-1",
+          isWorkspaceRoute
+            ? "border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)]"
+            : "border-sidebar-border/70 bg-sidebar/90",
+        )}
+      >
         <SidebarMenu className="gap-0">
           <SidebarMenuItem className="flex items-center justify-center px-1">
             <ThemeModeToggle />

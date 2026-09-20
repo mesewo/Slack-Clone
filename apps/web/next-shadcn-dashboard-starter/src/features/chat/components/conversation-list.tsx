@@ -32,6 +32,7 @@ interface ConversationListProps {
   onSelect: (id: string) => void;
   onCreateChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
   onCreateDM: (userId: string) => Promise<void>;
+  dmOnly?: boolean;
 }
 
 export function ConversationList({
@@ -40,6 +41,7 @@ export function ConversationList({
   onSelect,
   onCreateChannel,
   onCreateDM,
+  dmOnly = false,
 }: ConversationListProps) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const userPresence = useChatStore((state) => state.userPresence);
@@ -95,7 +97,7 @@ export function ConversationList({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] p-3 text-slate-100 shadow-[0_14px_30px_rgba(15,23,42,0.18)] lg:rounded-3xl lg:p-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--chat-sidebar-border)] pb-3">
         <div>
           <p className="text-sm font-semibold tracking-tight">Workspace</p>
@@ -184,26 +186,29 @@ export function ConversationList({
         aria-label="Conversation list"
         role="list"
       >
-        <div className="flex items-center justify-between px-1 pt-1">
-          <button
-            type="button"
-            onClick={() => setChannelsOpen((open) => !open)}
-            className="text-[var(--chat-sidebar-muted)] hover:text-white flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em]"
-            aria-expanded={channelsOpen}
-          >
-            <Icons.chevronRight
-              className={cn(
-                "size-3 transition-transform",
-                channelsOpen && "rotate-90",
-              )}
-            />
-            Channels
-          </button>
-          <span className="text-[var(--chat-sidebar-muted)] text-[0.65rem]">
-            {channels.length}
-          </span>
-        </div>
-        {channelsOpen &&
+        {!dmOnly && (
+          <div className="flex items-center justify-between px-1 pt-1">
+            <button
+              type="button"
+              onClick={() => setChannelsOpen((open) => !open)}
+              className="text-[var(--chat-sidebar-muted)] hover:text-white flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em]"
+              aria-expanded={channelsOpen}
+            >
+              <Icons.chevronRight
+                className={cn(
+                  "size-3 transition-transform",
+                  channelsOpen && "rotate-90",
+                )}
+              />
+              Channels
+            </button>
+            <span className="text-[var(--chat-sidebar-muted)] text-[0.65rem]">
+              {channels.length}
+            </span>
+          </div>
+        )}
+        {!dmOnly &&
+          channelsOpen &&
           channels.map((conversation) => {
             const isActive = conversation.id === selectedId;
             const lastMessage =

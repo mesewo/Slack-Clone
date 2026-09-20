@@ -293,13 +293,13 @@ export function MessageComposer({
   return (
     <form
       onSubmit={onSubmit}
-      className={`group/composer relative space-y-2 border-t border-border/60 bg-background/70 px-3 pt-3 pb-3 transition-[height] duration-200 ease-out sm:space-y-3 sm:px-4 ${expanded ? "h-[60%] min-h-[12rem] max-h-[60vh]" : "h-auto"}`}
+      className={`group/composer sticky bottom-0 z-10 relative space-y-2 border-t border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] px-3 pt-3 pb-3 text-slate-100 transition-[height] duration-200 ease-out sm:space-y-3 sm:px-4 ${expanded ? "h-[60%] min-h-[12rem] max-h-[60vh]" : "h-auto"}`}
       aria-label="Reply composer"
     >
       <label htmlFor="messenger-editor" className="sr-only">
         Write a message
       </label>
-      <div className="border-border/70 bg-muted/40 flex items-end gap-1.5 rounded-[18px] border p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_8px_18px_rgba(15,23,42,0.04)] backdrop-blur-sm sm:gap-2 sm:p-3">
+      <div className="flex items-end gap-1.5 rounded-[18px] border border-white/10 bg-slate-950/30 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:gap-2 sm:p-3">
         <div className="min-w-0 flex-1">
           {attachments.length > 0 && (
             <FilePreview
@@ -326,50 +326,6 @@ export function MessageComposer({
               {attachments.length === 1 ? "" : "s"}...
             </div>
           )}
-          <div className="mb-1 flex items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setAttachOpen((open) => !open)}
-              className="text-muted-foreground hover:bg-accent h-7 min-w-7 rounded-md px-1.5"
-              aria-label="Attach a file"
-              title="Attach a file"
-            >
-              <Icons.add className="size-3.5" />
-            </Button>
-            <button
-              type="button"
-              onClick={() => setFormatterOpen((open) => !open)}
-              className="text-muted-foreground hover:bg-accent rounded-md px-2 py-1 text-xs font-semibold"
-              aria-label="Toggle formatting toolbar"
-              title="Show or hide formatting tools"
-            >
-              Aa
-            </button>
-            <button
-              type="button"
-              onClick={() => setEmojiOpen((current) => !current)}
-              className="text-muted-foreground hover:bg-accent rounded-md px-2 py-1 text-xs font-semibold"
-              aria-label="Insert emoji"
-              title="Insert emoji"
-            >
-              😊
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                editorRef.current?.focus();
-                document.execCommand("insertText", false, "@");
-                syncDraft();
-              }}
-              className="text-muted-foreground hover:bg-accent rounded-md px-2 py-1 text-xs font-semibold"
-              aria-label="Mention a user"
-              title="Mention a user"
-            >
-              @
-            </button>
-          </div>
           {formatterOpen && (
             <div className="border-border/60 bg-background/70 mb-1.5 flex flex-wrap items-center gap-0.5 rounded-xl border p-1 shadow-inner shadow-black/5 sm:mb-2">
               <button
@@ -519,13 +475,35 @@ export function MessageComposer({
               </div>
             )}
           </div>
-          <div className="mt-1 flex flex-wrap gap-1 sm:mt-1.5 sm:gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 sm:gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFormatterOpen((open) => !open)}
+              className="text-slate-300 hover:bg-white/10 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
+              aria-label="Toggle formatting toolbar"
+              title="Show or hide formatting tools"
+            >
+              Aa
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                editorRef.current?.focus();
+                document.execCommand("insertText", false, "@");
+                syncDraft();
+              }}
+              className="text-slate-300 hover:bg-white/10 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
+              aria-label="Mention a user"
+              title="Mention a user"
+            >
+              @
+            </button>
             {quickReplies.map((reply) => (
               <button
                 key={reply}
                 type="button"
                 onClick={() => onDraftChange(reply)}
-                className="border-border/40 bg-muted/50 text-muted-foreground hover:border-primary/30 hover:text-foreground focus-visible:ring-primary/30 focus-visible:ring-offset-background rounded-full border px-2 py-0.5 text-[0.6rem] transition focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-none sm:px-2 sm:py-0.5 sm:text-[0.65rem]"
+                className="border-white/10 bg-white/5 text-slate-300 hover:border-primary/40 hover:bg-white/10 hover:text-white focus-visible:ring-primary/30 focus-visible:ring-offset-background rounded-full border px-2 py-0.5 text-[0.6rem] transition focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-none sm:px-2 sm:py-0.5 sm:text-[0.65rem]"
               >
                 {reply}
               </button>
@@ -559,7 +537,7 @@ export function MessageComposer({
           <div className="relative flex items-center">
             <Button
               type="button"
-              className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-r-none rounded-l-xl border-r-0 transition focus-visible:ring-1 focus-visible:ring-offset-1"
+              className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-r-none rounded-l-xl border-r-0 transition focus-visible:ring-1 focus-visible:ring-offset-1"
               aria-label="Attach content"
               title="Attach content"
               aria-expanded={attachOpen}
@@ -569,13 +547,13 @@ export function MessageComposer({
             </Button>
             <Button
               type="button"
-              className="border-border/30 bg-muted/40 text-muted-foreground hover:bg-muted/60 focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-l-none rounded-r-xl border transition focus-visible:ring-1 focus-visible:ring-offset-1"
+              className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white focus-visible:ring-primary/30 focus-visible:ring-offset-background size-8 rounded-l-none rounded-r-xl border transition focus-visible:ring-1 focus-visible:ring-offset-1"
               aria-label="More composer options"
               title="More composer options"
               aria-expanded={moreOpen}
               onClick={() => setMoreOpen((open) => !open)}
             >
-              <Icons.add className="size-3.5" />
+              <Icons.ellipsis className="size-3.5" />
             </Button>
             {attachOpen && (
               <div className="border-border bg-popover absolute right-0 bottom-10 z-30 w-48 rounded-xl border p-1 shadow-xl">
