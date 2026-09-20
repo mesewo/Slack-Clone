@@ -492,6 +492,16 @@ export function MessageBubble({
             {message.timestamp}
           </span>
         )}
+        {message.replyCount ? (
+          <button
+            type="button"
+            onClick={() => onOpenThread(message)}
+            className="text-primary hover:bg-primary/10 mt-2 rounded-md px-1.5 py-0.5 text-xs font-medium"
+            aria-label={`${message.replyCount} replies`}
+          >
+            {message.replyCount} replies
+          </button>
+        ) : null}
         {reactions.length > 0 && (
           <div className={cn("mt-2 flex flex-wrap gap-1")}>
             {Object.entries(reactionCounts).map(([emoji, count]) => {

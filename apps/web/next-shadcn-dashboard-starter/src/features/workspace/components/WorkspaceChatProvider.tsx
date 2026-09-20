@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useChatStore } from "@/features/chat/utils/store";
-import { useRealtimeConnection } from "@/features/chat/hooks/use-realtime-connection";
+import {
+  RealtimeTypingProvider,
+  useRealtimeConnection,
+} from "@/features/chat/hooks/use-realtime-connection";
 
 export function WorkspaceChatProvider({
   children,
@@ -23,7 +26,14 @@ export function WorkspaceChatProvider({
     if (user) void init(user.id, workspaceId);
   }, [init, user, workspaceId]);
 
-  useRealtimeConnection(Boolean(user), selectedConversationId);
+  const { sendTyping } = useRealtimeConnection(
+    Boolean(user),
+    selectedConversationId,
+  );
 
-  return children;
+  return (
+    <RealtimeTypingProvider sendTyping={sendTyping}>
+      {children}
+    </RealtimeTypingProvider>
+  );
 }

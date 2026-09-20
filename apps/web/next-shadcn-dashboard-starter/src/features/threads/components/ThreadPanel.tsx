@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useChatStore } from "@/features/chat/utils/store";
 import { messageService } from "@/features/workspace/services/messageService";
 import { IconX } from "@tabler/icons-react";
@@ -34,6 +34,35 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
     addThreadReply,
     closeThreadPanel,
   } = useChatStore();
+  const visibleReplyCount = Math.max(
+    parentMessage.replyCount || 0,
+    threadReplies.length,
+  );
+
+  useEffect(() => {
+    if (!selectedConversationId) return;
+    const loadNewReplies = async () => {
+      try {
+        const replies = selectedConversationId.startsWith("dm:")
+          ? await messageService.listDMThreadReplies(
+              selectedConversationId.slice(3),
+              parentMessage.id,
+            )
+          : await messageService.listThreadReplies(
+              selectedConversationId,
+              parentMessage.id,
+            );
+        const knownReplyIds = new Set(threadReplies.map((reply) => reply.id));
+        for (const reply of replies) {
+          if (!knownReplyIds.has(reply.id)) addThreadReply(reply);
+        }
+      } catch {
+        // The WebSocket remains the primary update path.
+      }
+    };
+    const timer = window.setInterval(() => void loadNewReplies(), 1000);
+    return () => window.clearInterval(timer);
+  }, [addThreadReply, parentMessage.id, selectedConversationId, threadReplies]);
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +117,7 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
             {parentMessage.author}
           </span>
           <span className="text-xs text-muted-foreground">
-            {parentMessage.replyCount || 0} replies
+            {visibleReplyCount} replies
           </span>
         </div>
         <p className="text-sm text-foreground">{parentMessage.text}</p>

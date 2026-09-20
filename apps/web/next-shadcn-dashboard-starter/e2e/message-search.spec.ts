@@ -80,16 +80,8 @@ test("searches real channel messages and opens the matching result", async ({
         `[search timing] message created -> Elasticsearch indexed: ${indexedAt ? `${indexedAt - messageCreatedAt}ms` : "not indexed within 15s"}`,
       );
 
-      await expect
-        .poll(
-          async () => {
-            await search.fill("");
-            await search.fill(content);
-            return await result.count();
-          },
-          { timeout: 20_000, intervals: [1_000] },
-        )
-        .toBeGreaterThan(0);
+      await search.fill(content);
+      await expect(result).toBeVisible({ timeout: 15_000 });
       await expect(result).toContainText(content);
       await expect(result).toContainText("Search User");
       await expect(result).toContainText(`# ${channel.body.name}`);

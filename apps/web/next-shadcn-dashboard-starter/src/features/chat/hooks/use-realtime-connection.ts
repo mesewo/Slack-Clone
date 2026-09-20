@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+} from "react";
 import { useChatStore } from "../utils/store";
 import type { ChatMessage } from "@/features/workspace/services/messageService";
 import { useNotificationStore } from "@/features/notifications/utils/store";
@@ -13,6 +20,28 @@ type WSEvent = {
 };
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8081/ws";
+
+const RealtimeTypingContext = createContext<(channelId: string) => void>(
+  () => undefined,
+);
+
+export function useRealtimeTyping() {
+  return useContext(RealtimeTypingContext);
+}
+
+export function RealtimeTypingProvider({
+  sendTyping,
+  children,
+}: {
+  sendTyping: (channelId: string) => void;
+  children: React.ReactNode;
+}) {
+  return createElement(
+    RealtimeTypingContext.Provider,
+    { value: sendTyping },
+    children,
+  );
+}
 
 // One connection for the whole session, not one per open room - the backend
 // (gateway.ServeWS) already subscribes this user to every channel they're a

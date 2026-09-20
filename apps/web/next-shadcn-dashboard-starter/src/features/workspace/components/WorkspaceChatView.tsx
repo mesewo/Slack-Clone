@@ -11,6 +11,7 @@ import { productivityService } from "@/features/workspace/services/productivityS
 import { workspaceService } from "@/features/workspace/services/workspaceService";
 import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
+import { useRealtimeTyping } from "@/features/chat/hooks/use-realtime-connection";
 
 export function WorkspaceChatView() {
   const { user } = useAuth();
@@ -21,6 +22,7 @@ export function WorkspaceChatView() {
     conversationId?: string;
   }>();
   const router = useRouter();
+  const sendTyping = useRealtimeTyping();
   const selectedRouteId =
     params.channelId ||
     (params.dmId || params.conversationId
@@ -165,7 +167,14 @@ export function WorkspaceChatView() {
         conversation={activeConversation}
         draft={draft}
         onDraftChange={setDraft}
-        onTyping={() => undefined}
+        onTyping={() => {
+          if (
+            selectedConversationId &&
+            !selectedConversationId.startsWith("dm:")
+          ) {
+            sendTyping(selectedConversationId);
+          }
+        }}
         onSubmit={handleSubmit}
         attachments={attachments}
         onAddAttachments={handleAddAttachments}
