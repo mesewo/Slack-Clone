@@ -267,7 +267,7 @@ export function ChatArea({
           animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
           transition={{ duration: 0.32, ease: "easeOut" }}
-          className="border-border/60 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-[22px] border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
+          className="border-border/70 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-2xl border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
         >
           <ChatHeader
             conversation={conversation}
@@ -284,7 +284,7 @@ export function ChatArea({
               onChange={(event) => setSearch(event.target.value)}
               placeholder={`Search ${conversation.name}`}
               aria-label={`Search messages in ${conversation.name}`}
-              className="border-border/70 bg-muted/40 h-8 rounded-xl pl-9 text-xs shadow-inner shadow-black/5 sm:text-sm"
+              className="border-border/70 bg-muted/30 h-9 rounded-lg pl-9 text-xs shadow-inner shadow-black/5 sm:text-sm"
             />
             {search.trim() && (
               <div className="border-border/70 bg-popover absolute top-10 right-3 left-3 z-30 max-h-56 overflow-y-auto rounded-xl border p-1 shadow-xl sm:right-4 sm:left-4">
@@ -382,7 +382,7 @@ export function ChatArea({
                 return (
                   <div key={message.id}>
                     {currentDate !== previousDate && currentDate && (
-                      <div className="text-muted-foreground my-5 flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.14em]">
+                      <div className="text-muted-foreground my-4 flex items-center gap-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em]">
                         <span className="bg-border h-px flex-1" />
                         <span>{currentDate}</span>
                         <span className="bg-border h-px flex-1" />

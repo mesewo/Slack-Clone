@@ -95,23 +95,25 @@ export function ConversationList({
   );
 
   return (
-    <div className="border-border/40 bg-background/75 flex h-full min-h-0 flex-col gap-4 overflow-hidden rounded-2xl border p-3 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:rounded-3xl lg:p-4">
-      <div className="flex items-center justify-between gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden rounded-2xl border border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] p-3 text-slate-100 shadow-[0_14px_30px_rgba(15,23,42,0.18)] lg:rounded-3xl lg:p-4">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--chat-sidebar-border)] pb-3">
         <div>
-          <p className="text-foreground text-sm font-semibold">Workspace</p>
-          <p className="text-muted-foreground text-xs">Your conversations</p>
+          <p className="text-sm font-semibold tracking-tight">Workspace</p>
+          <p className="text-[var(--chat-sidebar-muted)] text-xs">
+            Your conversations
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Badge
             variant="outline"
-            className="bg-primary/15 text-primary border-border/50 rounded-full border px-3 py-1 text-[0.7rem] tracking-[0.24em] uppercase"
+            className="border border-emerald-300/20 bg-emerald-400/10 px-2.5 py-1 text-[0.62rem] tracking-[0.2em] text-emerald-200 uppercase"
           >
             Live
           </Badge>
           <button
             type="button"
             onClick={() => setCreateOpen((open) => !open)}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground rounded p-1"
+            className="text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] hover:text-white rounded p-1"
             aria-label="Create channel"
             title="Create channel"
           >
@@ -173,7 +175,7 @@ export function ConversationList({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search conversations"
-          className="border-border/40 bg-background/60 text-foreground placeholder:text-muted-foreground/70 focus-visible:ring-primary/40 w-full rounded-2xl pl-10 text-sm focus-visible:ring-2"
+          className="border-[var(--chat-sidebar-border)] bg-slate-950/25 text-slate-100 placeholder:text-[var(--chat-sidebar-muted)] focus-visible:ring-slate-300/40 w-full rounded-xl pl-10 text-sm focus-visible:ring-2"
         />
       </div>
 
@@ -186,7 +188,7 @@ export function ConversationList({
           <button
             type="button"
             onClick={() => setChannelsOpen((open) => !open)}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em]"
+            className="text-[var(--chat-sidebar-muted)] hover:text-white flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em]"
             aria-expanded={channelsOpen}
           >
             <Icons.chevronRight
@@ -197,7 +199,7 @@ export function ConversationList({
             />
             Channels
           </button>
-          <span className="text-muted-foreground/70 text-[0.65rem]">
+          <span className="text-[var(--chat-sidebar-muted)] text-[0.65rem]">
             {channels.length}
           </span>
         </div>
@@ -213,16 +215,16 @@ export function ConversationList({
                 onClick={() => onSelect(conversation.id)}
                 aria-current={isActive ? "true" : undefined}
                 className={cn(
-                  "focus-visible:ring-primary/50 group focus-visible:ring-offset-background relative flex w-full items-start gap-3 rounded-2xl border border-transparent p-3 text-left transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+                  "focus-visible:ring-slate-300/50 group relative flex w-full items-start gap-3 rounded-lg border border-transparent px-2.5 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
                   isActive
-                    ? "border-primary/30 bg-[linear-gradient(180deg,rgba(99,102,241,0.08),rgba(99,102,241,0.02))] shadow-[inset_0_1px_0_rgba(255,255,255,0.25)]"
-                    : "bg-background/70 hover:border-border/50 hover:bg-muted/45",
+                    ? "bg-[var(--chat-sidebar-active)] text-white"
+                    : "text-slate-200 hover:bg-[var(--chat-sidebar-hover)]",
                 )}
                 role="listitem"
               >
                 <div className="relative shrink-0">
-                  <Avatar className="border-border/40 bg-background/80 text-foreground h-10 w-10 rounded-2xl border">
-                    <AvatarFallback className="bg-primary/15 text-primary rounded-2xl text-sm font-medium">
+                  <Avatar className="h-9 w-9 rounded-lg border border-white/10 bg-slate-700 text-slate-100">
+                    <AvatarFallback className="rounded-lg bg-slate-700 text-xs font-semibold text-slate-100">
                       {conversation.initials}
                     </AvatarFallback>
                   </Avatar>
@@ -246,28 +248,30 @@ export function ConversationList({
                     <div className="min-w-0 flex-1">
                       <p
                         className={cn(
-                          "text-sm font-semibold",
-                          isActive ? "text-foreground" : "text-foreground/90",
+                          "text-sm",
+                          isActive
+                            ? "font-semibold text-white"
+                            : "font-medium text-slate-200",
                         )}
                       >
                         {conversation.name}
                       </p>
-                      <p className="text-muted-foreground text-xs">
+                      <p className="text-[var(--chat-sidebar-muted)] text-xs">
                         {conversation.title}
                       </p>
                     </div>
                     {lastMessage && (
-                      <span className="text-muted-foreground shrink-0 text-[0.65rem]">
+                      <span className="text-[var(--chat-sidebar-muted)] shrink-0 text-[0.62rem]">
                         {lastMessage.timestamp}
                       </span>
                     )}
                   </div>
                   {lastMessage ? (
-                    <p className="text-muted-foreground line-clamp-2 text-xs">
+                    <p className="text-[var(--chat-sidebar-muted)] line-clamp-2 text-xs">
                       {lastMessage.author}: {lastMessage.text}
                     </p>
                   ) : (
-                    <p className="text-muted-foreground text-xs">
+                    <p className="text-[var(--chat-sidebar-muted)] text-xs">
                       No messages yet
                     </p>
                   )}
@@ -275,7 +279,7 @@ export function ConversationList({
                 {conversation.unread > 0 && (
                   <span
                     data-testid={`unread-badge-${conversation.id}`}
-                    className="bg-primary text-primary-foreground ml-2 inline-flex min-h-[1.5rem] min-w-[1.5rem] items-center justify-center rounded-full text-[0.7rem] font-semibold shadow-lg"
+                    className="ml-auto inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-400 px-1.5 text-[0.65rem] font-bold text-slate-950"
                   >
                     {conversation.unread}
                   </span>
@@ -287,7 +291,7 @@ export function ConversationList({
           <button
             type="button"
             onClick={() => setDirectMessagesOpen((open) => !open)}
-            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em]"
+            className="text-[var(--chat-sidebar-muted)] hover:text-white flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em]"
             aria-expanded={directMessagesOpen}
           >
             <Icons.chevronRight
@@ -301,7 +305,7 @@ export function ConversationList({
           <button
             type="button"
             onClick={() => setDmOpen((open) => !open)}
-            className="text-muted-foreground hover:bg-accent rounded p-1"
+            className="text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] rounded p-1"
             aria-label="Start direct message"
           >
             <Icons.add className="size-4" />
@@ -343,12 +347,13 @@ export function ConversationList({
               type="button"
               onClick={() => onSelect(conversation.id)}
               className={cn(
-                "hover:bg-muted/40 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm",
-                selectedId === conversation.id && "bg-primary/10 text-primary",
+                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover)]",
+                selectedId === conversation.id &&
+                  "bg-[var(--chat-sidebar-active)] text-white",
               )}
             >
-              <Avatar className="size-7 rounded-lg">
-                <AvatarFallback className="bg-primary/15 text-primary rounded-lg text-[0.6rem] font-semibold">
+              <Avatar className="size-7 rounded-lg border border-white/10">
+                <AvatarFallback className="rounded-lg bg-slate-700 text-[0.6rem] font-semibold text-slate-100">
                   {conversation.initials}
                 </AvatarFallback>
               </Avatar>
@@ -365,7 +370,7 @@ export function ConversationList({
               {conversation.unread > 0 && (
                 <span
                   data-testid={`unread-badge-${conversation.id}`}
-                  className="bg-primary text-primary-foreground ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1 text-[0.65rem] font-semibold"
+                  className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-rose-400 px-1.5 text-[0.65rem] font-bold text-slate-950"
                 >
                   {conversation.unread}
                 </span>

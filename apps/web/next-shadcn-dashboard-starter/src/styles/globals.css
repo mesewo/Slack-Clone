@@ -10,6 +10,14 @@
 @custom-variant data-horizontal (&[data-orientation='horizontal']);
 @custom-variant data-vertical (&[data-orientation='vertical']);
 
+:root {
+  --chat-sidebar-bg: #202331;
+  --chat-sidebar-hover: #2b3041;
+  --chat-sidebar-active: #3a4054;
+  --chat-sidebar-muted: #a7afc0;
+  --chat-sidebar-border: #3a4050;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
