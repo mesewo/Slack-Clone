@@ -131,7 +131,7 @@ function toDMConversation(
   const displayName = dm.other_display_name || dm.other_email;
   return {
     id: `dm:${dm.id}`,
-    name: isSelf ? `${displayName} (you)` : displayName,
+    name: isSelf ? "You" : displayName,
     title: isSelf ? "Your space" : "Direct message",
     status: normalizePresenceStatus(dm.other_presence_status),
     unread: 0,
@@ -295,18 +295,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       ...conversations,
       ...directMessages,
     ]);
-    const savedConversationId = workspaceId
-      ? null
-      : window.localStorage.getItem(lastConversationKey);
-    const initialConversationId = allConversations.some(
-      (conversation) => conversation.id === savedConversationId,
-    )
-      ? savedConversationId!
-      : "";
     set({
       workspace,
       conversations: allConversations,
-      selectedConversationId: initialConversationId,
+      selectedConversationId: "",
     });
 
     const unreadCounts = await Promise.all(
@@ -328,10 +320,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         unread: unreadCounts.find(([id]) => id === conversation.id)?.[1] ?? 0,
       })),
     }));
-
-    if (initialConversationId) {
-      get().selectConversation(initialConversationId);
-    }
   },
 
   selectConversation: (id) => {

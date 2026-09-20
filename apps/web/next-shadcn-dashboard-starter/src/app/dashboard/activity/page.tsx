@@ -58,6 +58,17 @@ export default function ActivityPage() {
     ? threads.length > 0
     : filteredNotifications.length > 0;
 
+  const openNotification = (notification: Notification) => {
+    markAsRead(notification.id);
+    const workspaceId = window.localStorage.getItem("active_workspace_id");
+    if (!workspaceId || !notification.entityId) return;
+    router.push(
+      notification.title.toLowerCase().includes("direct")
+        ? `/home/${workspaceId}/dms/${notification.entityId}`
+        : `/home/${workspaceId}/channels/${notification.entityId}`,
+    );
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div className="border-border/70 shrink-0 border-b px-5 py-5 sm:px-8">
@@ -184,7 +195,7 @@ export default function ActivityPage() {
                   type="button"
                   onClick={() => {
                     setSelected(item);
-                    markAsRead(item.id);
+                    openNotification(item);
                   }}
                   className={`hover:bg-accent/40 w-full p-4 text-left ${selected?.id === item.id ? "bg-accent/30" : ""}`}
                 >

@@ -25,7 +25,6 @@ export function NotificationCenter() {
   useEffect(() => {
     void load();
   }, [load]);
-  const selectConversation = useChatStore((state) => state.selectConversation);
   const conversations = useChatStore((state) => state.conversations);
   const selectedConversationId = useChatStore(
     (state) => state.selectedConversationId,
@@ -137,16 +136,6 @@ export function NotificationCenter() {
                           "slack_last_conversation_id",
                           conversationId,
                         );
-                        if (
-                          conversations.some(
-                            (conversation) =>
-                              conversation.id === conversationId,
-                          )
-                        ) {
-                          selectConversation(conversationId);
-                          setOpen(false);
-                          return;
-                        }
                       }
                       setOpen(false);
                       const workspaceId = window.localStorage.getItem(

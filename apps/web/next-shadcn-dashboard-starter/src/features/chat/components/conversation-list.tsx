@@ -96,9 +96,13 @@ export function ConversationList({
   const directMessages = filtered.filter(
     (conversation) => conversation.kind === "dm",
   );
-  const visibleDirectMessages = unreadsOnly
-    ? directMessages.filter((conversation) => conversation.unread > 0)
-    : directMessages;
+  const visibleDirectMessages = (
+    unreadsOnly
+      ? directMessages.filter((conversation) => conversation.unread > 0)
+      : directMessages
+  ).sort(
+    (left, right) => Number(right.name === "You") - Number(left.name === "You"),
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
@@ -230,6 +234,15 @@ export function ConversationList({
             <span className="text-[var(--chat-sidebar-muted)] text-[0.65rem]">
               {channels.length}
             </span>
+            <button
+              type="button"
+              onClick={() => setCreateOpen((open) => !open)}
+              className="text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] rounded p-1"
+              aria-label="Create channel"
+              title="Create channel"
+            >
+              <Icons.add className="size-4" />
+            </button>
           </div>
         )}
         {!dmOnly &&
@@ -317,35 +330,32 @@ export function ConversationList({
               </motion.button>
             );
           })}
-        <div
-          className={cn(
-            "mt-4 flex items-center justify-between px-1",
-            dmOnly && "mt-0",
-          )}
-        >
-          <button
-            type="button"
-            onClick={() => setDirectMessagesOpen((open) => !open)}
-            className="text-[var(--chat-sidebar-muted)] hover:text-white flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em]"
-            aria-expanded={directMessagesOpen}
-          >
-            <Icons.chevronRight
-              className={cn(
-                "size-3 transition-transform",
-                directMessagesOpen && "rotate-90",
-              )}
-            />
-            Direct messages
-          </button>
-          <button
-            type="button"
-            onClick={() => setDmOpen((open) => !open)}
-            className="text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] rounded p-1"
-            aria-label="Start direct message"
-          >
-            <Icons.add className="size-4" />
-          </button>
-        </div>
+        {!dmOnly && (
+          <div className="mt-4 flex items-center justify-between px-1">
+            <button
+              type="button"
+              onClick={() => setDirectMessagesOpen((open) => !open)}
+              className="text-[var(--chat-sidebar-muted)] hover:text-white flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em]"
+              aria-expanded={directMessagesOpen}
+            >
+              <Icons.chevronRight
+                className={cn(
+                  "size-3 transition-transform",
+                  directMessagesOpen && "rotate-90",
+                )}
+              />
+              Direct messages
+            </button>
+            <button
+              type="button"
+              onClick={() => setDmOpen((open) => !open)}
+              className="text-[var(--chat-sidebar-muted)] hover:bg-[var(--chat-sidebar-hover)] rounded p-1"
+              aria-label="Start direct message"
+            >
+              <Icons.add className="size-4" />
+            </button>
+          </div>
+        )}
         {directMessagesOpen && dmOpen && (
           <div className="border-border/40 bg-muted/30 my-1 rounded-lg border p-2">
             <label className="mb-2 block text-[0.65rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
@@ -428,7 +438,7 @@ export function ConversationList({
             Starred
           </button>
         </div>
-        {starredOpen && starredHintVisible && (
+        {!dmOnly && starredOpen && starredHintVisible && (
           <div className="text-muted-foreground flex items-center gap-2 px-2 py-2 text-xs">
             <span className="flex-1 indent-4">
               Drag and drop important stuff here
@@ -443,22 +453,26 @@ export function ConversationList({
             </button>
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => toast.info("Huddles are coming soon.")}
-          className="text-muted-foreground hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
-        >
-          <Icons.phone className="size-4" /> Huddles
-        </button>
-        <button
-          type="button"
-          onClick={() => setDirectoriesOpen((open) => !open)}
-          className="text-muted-foreground hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
-          aria-expanded={directoriesOpen}
-        >
-          <Icons.search className="size-4" /> Directories
-        </button>
-        {directoriesOpen && (
+        {!dmOnly && (
+          <button
+            type="button"
+            onClick={() => toast.info("Huddles are coming soon.")}
+            className="text-muted-foreground hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+          >
+            <Icons.phone className="size-4" /> Huddles
+          </button>
+        )}
+        {!dmOnly && (
+          <button
+            type="button"
+            onClick={() => setDirectoriesOpen((open) => !open)}
+            className="text-muted-foreground hover:bg-accent flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm"
+            aria-expanded={directoriesOpen}
+          >
+            <Icons.search className="size-4" /> Directories
+          </button>
+        )}
+        {!dmOnly && directoriesOpen && (
           <div className="border-border/60 bg-muted/30 space-y-2 rounded-lg border p-2">
             <div className="flex flex-wrap gap-1">
               {[
