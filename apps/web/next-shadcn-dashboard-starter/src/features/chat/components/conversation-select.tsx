@@ -124,24 +124,34 @@ export function ConversationSelect({
               New direct message
             </button>
             {dmOpen && (
-              <select
-                defaultValue=""
-                aria-label="Choose a person for a direct message"
-                onChange={async (event) => {
-                  if (event.target.value) {
-                    await onCreateDM(event.target.value);
+              <div className="max-w-[52%]">
+                <label className="mb-1 block text-[0.6rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                  To:
+                </label>
+                <select
+                  defaultValue={[]}
+                  multiple
+                  size={Math.min(dmUsers.length || 1, 4)}
+                  aria-label="Choose people for a direct message"
+                  onChange={async (event) => {
+                    const selected = Array.from(
+                      event.target.selectedOptions,
+                    ).map((option) => option.value);
+                    if (selected.length === 0) return;
+                    for (const userId of selected) {
+                      await onCreateDM(userId);
+                    }
                     setDmOpen(false);
-                  }
-                }}
-                className="border-border bg-background text-foreground max-w-[52%] rounded-xl border px-2 py-1.5 text-xs"
-              >
-                <option value="">Choose...</option>
-                {dmUsers.map((dmUser) => (
-                  <option key={dmUser.id} value={dmUser.id}>
-                    {dmUser.display_name || dmUser.email}
-                  </option>
-                ))}
-              </select>
+                  }}
+                  className="border-border bg-background text-foreground w-full rounded-xl border px-2 py-1.5 text-xs"
+                >
+                  {dmUsers.map((dmUser) => (
+                    <option key={dmUser.id} value={dmUser.id}>
+                      {dmUser.display_name || dmUser.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         </label>

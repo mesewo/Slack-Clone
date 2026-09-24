@@ -7,6 +7,18 @@ RETURNING *;
 INSERT INTO channel_members (channel_id, user_id)
 VALUES ($1, $2);
 
+-- name: ListChannelMembers :many
+SELECT cm.channel_id, cm.user_id, cm.joined_at, cm.last_read_at,
+    u.email, u.display_name, u.presence_status
+FROM channel_members cm
+JOIN users u ON u.id = cm.user_id
+WHERE cm.channel_id = $1
+ORDER BY u.display_name;
+
+-- name: RemoveChannelMember :exec
+DELETE FROM channel_members
+WHERE channel_id = $1 AND user_id = $2;
+
 -- name: ListChannelsForUser :many
 SELECT c.* FROM channels c
 JOIN channel_members cm ON cm.channel_id = c.id

@@ -109,7 +109,8 @@ func (q *Queries) IsDirectConversationMember(ctx context.Context, arg IsDirectCo
 
 const listDirectConversationsForUser = `-- name: ListDirectConversationsForUser :many
 SELECT dc.id, dc.created_by, dc.created_at,
-       u.id AS other_user_id, u.display_name AS other_display_name, u.email AS other_email
+  u.id AS other_user_id, u.display_name AS other_display_name, u.email AS other_email,
+  u.presence_status AS other_presence_status
 FROM direct_conversations dc
 JOIN direct_conversation_members mine ON mine.conversation_id = dc.id AND mine.user_id = $1
 JOIN direct_conversation_members other ON other.conversation_id = dc.id AND other.user_id <> $1
@@ -118,12 +119,13 @@ ORDER BY dc.created_at DESC
 `
 
 type ListDirectConversationsForUserRow struct {
-	ID               uuid.UUID `json:"id"`
-	CreatedBy        uuid.UUID `json:"created_by"`
-	CreatedAt        time.Time `json:"created_at"`
-	OtherUserID      uuid.UUID `json:"other_user_id"`
-	OtherDisplayName string    `json:"other_display_name"`
-	OtherEmail       string    `json:"other_email"`
+	ID                  uuid.UUID `json:"id"`
+	CreatedBy           uuid.UUID `json:"created_by"`
+	CreatedAt           time.Time `json:"created_at"`
+	OtherUserID         uuid.UUID `json:"other_user_id"`
+	OtherDisplayName    string    `json:"other_display_name"`
+	OtherEmail          string    `json:"other_email"`
+	OtherPresenceStatus string    `json:"other_presence_status"`
 }
 
 func (q *Queries) ListDirectConversationsForUser(ctx context.Context, userID uuid.UUID) ([]ListDirectConversationsForUserRow, error) {
@@ -142,6 +144,7 @@ func (q *Queries) ListDirectConversationsForUser(ctx context.Context, userID uui
 			&i.OtherUserID,
 			&i.OtherDisplayName,
 			&i.OtherEmail,
+			&i.OtherPresenceStatus,
 		); err != nil {
 			return nil, err
 		}

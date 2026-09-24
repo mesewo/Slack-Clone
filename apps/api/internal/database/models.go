@@ -73,12 +73,15 @@ type DirectMessageReaction struct {
 }
 
 type EventOutbox struct {
-	ID          uuid.UUID  `json:"id"`
-	Topic       string     `json:"topic"`
-	EventKey    string     `json:"event_key"`
-	Payload     []byte     `json:"payload"`
-	CreatedAt   time.Time  `json:"created_at"`
-	PublishedAt *time.Time `json:"published_at"`
+	ID          uuid.UUID     `json:"id"`
+	Topic       string        `json:"topic"`
+	EventKey    string        `json:"event_key"`
+	Payload     []byte        `json:"payload"`
+	CreatedAt   time.Time     `json:"created_at"`
+	PublishedAt *time.Time    `json:"published_at"`
+	ClaimedAt   *time.Time    `json:"claimed_at"`
+	ClaimToken  uuid.NullUUID `json:"claim_token"`
+	Attempts    int32         `json:"attempts"`
 }
 
 type Message struct {
@@ -144,6 +147,25 @@ type ThreadSubscription struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type UploadSession struct {
+	ID                   uuid.UUID     `json:"id"`
+	UserID               uuid.UUID     `json:"user_id"`
+	WorkspaceID          uuid.NullUUID `json:"workspace_id"`
+	ChannelID            uuid.NullUUID `json:"channel_id"`
+	DirectConversationID uuid.NullUUID `json:"direct_conversation_id"`
+	ObjectKey            string        `json:"object_key"`
+	OriginalFilename     string        `json:"original_filename"`
+	ContentType          string        `json:"content_type"`
+	DeclaredSize         int64         `json:"declared_size"`
+	Status               string        `json:"status"`
+	AttemptCount         int32         `json:"attempt_count"`
+	ExpiresAt            time.Time     `json:"expires_at"`
+	CreatedAt            time.Time     `json:"created_at"`
+	ConfirmedAt          *time.Time    `json:"confirmed_at"`
+	UpdatedAt            time.Time     `json:"updated_at"`
+	NextAttemptAt        *time.Time    `json:"next_attempt_at"`
+}
+
 type User struct {
 	ID             uuid.UUID `json:"id"`
 	Email          string    `json:"email"`
@@ -160,6 +182,16 @@ type Workspace struct {
 	Name      string    `json:"name"`
 	Slug      string    `json:"slug"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+type WorkspaceInvite struct {
+	ID          uuid.UUID  `json:"id"`
+	WorkspaceID uuid.UUID  `json:"workspace_id"`
+	TokenHash   string     `json:"token_hash"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	UsedAt      *time.Time `json:"used_at"`
+	CreatedBy   uuid.UUID  `json:"created_by"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 type WorkspaceMember struct {

@@ -2,6 +2,9 @@ package database
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -59,4 +62,190 @@ func (q *Queries) GetDirectMessageConversationID(ctx context.Context, messageID 
 	var conversationID uuid.UUID
 	err := q.db.QueryRow(ctx, `SELECT conversation_id FROM direct_messages WHERE id = $1`, messageID).Scan(&conversationID)
 	return conversationID, err
+}
+
+func (q *Queries) GetAttachmentByStoragePath(ctx context.Context, userID uuid.UUID, storagePath string) (Attachment, error) {
+	var item Attachment
+	err := q.db.QueryRow(ctx, `
+		SELECT id, message_id, user_id, filename, content_type, size_bytes, storage_path, thumbnail_path, created_at, direct_message_id
+		FROM attachments WHERE user_id = $1 AND storage_path = $2 LIMIT 1
+	`, userID, storagePath).Scan(
+		&item.ID, &item.MessageID, &item.UserID, &item.Filename, &item.ContentType,
+		&item.SizeBytes, &item.StoragePath, &item.ThumbnailPath, &item.CreatedAt, &item.DirectMessageID,
+	)
+	return item, err
+}
+
+func (q *Queries) CreateUploadSession(ctx context.Context, arg UploadSession) (UploadSession, error) {
+	var item UploadSession
+	err := q.db.QueryRow(ctx, `
+		INSERT INTO upload_sessions (
+			id, user_id, workspace_id, channel_id, direct_conversation_id,
+			object_key, original_filename, content_type, declared_size, status,
+			attempt_count, next_attempt_at, expires_at, created_at, confirmed_at, updated_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+		)
+		RETURNING id, user_id, workspace_id, channel_id, direct_conversation_id,
+			object_key, original_filename, content_type, declared_size,
+			status, attempt_count, next_attempt_at, expires_at, created_at, confirmed_at, updated_at
+	`,
+		arg.ID, arg.UserID, arg.WorkspaceID, arg.ChannelID, arg.DirectConversationID,
+		arg.ObjectKey, arg.OriginalFilename, arg.ContentType, arg.DeclaredSize,
+		arg.Status, arg.AttemptCount, arg.NextAttemptAt, arg.ExpiresAt, arg.CreatedAt, arg.ConfirmedAt, arg.UpdatedAt,
+	).Scan(
+		&item.ID, &item.UserID, &item.WorkspaceID, &item.ChannelID, &item.DirectConversationID,
+		&item.ObjectKey, &item.OriginalFilename, &item.ContentType, &item.DeclaredSize,
+		&item.Status, &item.AttemptCount, &item.NextAttemptAt, &item.ExpiresAt, &item.CreatedAt, &item.ConfirmedAt, &item.UpdatedAt,
+	)
+	return item, err
+}
+
+func (q *Queries) GetUploadSessionByID(ctx context.Context, id uuid.UUID) (UploadSession, error) {
+	var item UploadSession
+	err := q.db.QueryRow(ctx, `
+		SELECT id, user_id, workspace_id, channel_id, direct_conversation_id,
+			object_key, original_filename, content_type, declared_size,
+			status, attempt_count, next_attempt_at, expires_at, created_at, confirmed_at, updated_at
+		FROM upload_sessions WHERE id = $1
+	`, id).Scan(
+		&item.ID, &item.UserID, &item.WorkspaceID, &item.ChannelID, &item.DirectConversationID,
+		&item.ObjectKey, &item.OriginalFilename, &item.ContentType, &item.DeclaredSize,
+		&item.Status, &item.AttemptCount, &item.NextAttemptAt, &item.ExpiresAt, &item.CreatedAt, &item.ConfirmedAt, &item.UpdatedAt,
+	)
+	return item, err
+}
+
+func (q *Queries) UpdateUploadSessionStatus(ctx context.Context, id uuid.UUID, status string, confirmedAt *time.Time, attemptCount int32, nextAttemptAt ...*time.Time) error {
+	scheduled := (*time.Time)(nil)
+	if len(nextAttemptAt) > 0 {
+		scheduled = nextAttemptAt[0]
+	}
+	_, err := q.db.Exec(ctx, `
+		UPDATE upload_sessions
+		SET status = $2, confirmed_at = COALESCE($3, confirmed_at), attempt_count = $4, next_attempt_at = $5, updated_at = NOW()
+		WHERE id = $1
+	`, id, status, confirmedAt, attemptCount, scheduled)
+	return err
+}
+
+func (q *Queries) UpdateAttachmentThumbnailByStoragePath(ctx context.Context, storagePath string, userID uuid.UUID, thumbnailPath string) error {
+	_, err := q.db.Exec(ctx, `
+		UPDATE attachments
+		SET thumbnail_path = NULLIF($3, ''), updated_at = NOW()
+		WHERE storage_path = $1 AND user_id = $2
+	`, storagePath, userID, thumbnailPath)
+	return err
+}
+
+func (q *Queries) RequeueUploadSessions(ctx context.Context, statuses []string, staleBefore time.Time) ([]UploadSession, error) {
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+	args := []interface{}{staleBefore}
+	placeholders := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)+1))
+		args = append(args, status)
+	}
+	query := `
+		SELECT id, user_id, workspace_id, channel_id, direct_conversation_id,
+			object_key, original_filename, content_type, declared_size,
+			status, attempt_count, next_attempt_at, expires_at, created_at, confirmed_at, updated_at
+		FROM upload_sessions
+		WHERE updated_at <= $1 AND status IN (` + strings.Join(placeholders, ",") + `)
+		ORDER BY created_at ASC
+	`
+	rows, err := q.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]UploadSession, 0)
+	for rows.Next() {
+		var item UploadSession
+		if err := rows.Scan(
+			&item.ID, &item.UserID, &item.WorkspaceID, &item.ChannelID, &item.DirectConversationID,
+			&item.ObjectKey, &item.OriginalFilename, &item.ContentType, &item.DeclaredSize,
+			&item.Status, &item.AttemptCount, &item.NextAttemptAt, &item.ExpiresAt, &item.CreatedAt, &item.ConfirmedAt, &item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (q *Queries) DueThumbnailRetries(ctx context.Context, now time.Time) ([]UploadSession, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT id, user_id, workspace_id, channel_id, direct_conversation_id,
+			object_key, original_filename, content_type, declared_size,
+			status, attempt_count, next_attempt_at, expires_at, created_at, confirmed_at, updated_at
+		FROM upload_sessions
+		WHERE status IN ('UPLOADED', 'PROCESSING', 'FAILED')
+		  AND next_attempt_at IS NOT NULL
+		  AND next_attempt_at <= $1
+		ORDER BY created_at ASC
+	`, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]UploadSession, 0)
+	for rows.Next() {
+		var item UploadSession
+		if err := rows.Scan(
+			&item.ID, &item.UserID, &item.WorkspaceID, &item.ChannelID, &item.DirectConversationID,
+			&item.ObjectKey, &item.OriginalFilename, &item.ContentType, &item.DeclaredSize,
+			&item.Status, &item.AttemptCount, &item.NextAttemptAt, &item.ExpiresAt, &item.CreatedAt, &item.ConfirmedAt, &item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (q *Queries) ListExpiredUploadSessions(ctx context.Context, cutoff time.Time) ([]UploadSession, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT id, user_id, workspace_id, channel_id, direct_conversation_id,
+			object_key, original_filename, content_type, declared_size,
+			status, attempt_count, next_attempt_at, expires_at, created_at, confirmed_at, updated_at
+		FROM upload_sessions
+		WHERE expires_at < $1 AND status NOT IN ('READY', 'FAILED', 'EXPIRED')
+		ORDER BY expires_at ASC
+	`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := make([]UploadSession, 0)
+	for rows.Next() {
+		var item UploadSession
+		if err := rows.Scan(
+			&item.ID, &item.UserID, &item.WorkspaceID, &item.ChannelID, &item.DirectConversationID,
+			&item.ObjectKey, &item.OriginalFilename, &item.ContentType, &item.DeclaredSize,
+			&item.Status, &item.AttemptCount, &item.NextAttemptAt, &item.ExpiresAt, &item.CreatedAt, &item.ConfirmedAt, &item.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (q *Queries) DeleteUploadSessionByID(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, `DELETE FROM upload_sessions WHERE id = $1`, id)
+	return err
+}
+
+func (q *Queries) CleanupExpiredUploadSessions(ctx context.Context, cutoff time.Time) (int64, error) {
+	result, err := q.db.Exec(ctx, `
+		DELETE FROM upload_sessions
+		WHERE expires_at < $1 AND status NOT IN ('READY', 'FAILED', 'EXPIRED')
+	`, cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

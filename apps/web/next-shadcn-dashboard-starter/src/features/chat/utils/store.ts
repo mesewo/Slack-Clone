@@ -58,7 +58,7 @@ function toUIMessage(m: ChatMessage, currentUserId: string): Message {
 }
 
 function sortMessages(messages: Message[]): Message[] {
-  return messages.slice().sort((left, right) => {
+  return uniqueMessages(messages).sort((left, right) => {
     if (!left.createdAt || !right.createdAt) return 0;
     return (
       new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime()
@@ -66,16 +66,54 @@ function sortMessages(messages: Message[]): Message[] {
   });
 }
 
-function toConversation(channel: Channel, workspaceName: string): Conversation {
+function uniqueMessages(messages: Message[]): Message[] {
+  return Array.from(
+    messages.reduce((byId, message) => {
+      if (!byId.has(message.id)) byId.set(message.id, message);
+      return byId;
+    }, new Map<string, Message>()),
+  ).map(([, message]) => message);
+}
+
+function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
+  const byId = new Map(existing.map((message) => [message.id, message]));
+  for (const message of incoming) {
+    byId.set(message.id, message);
+  }
+  return sortMessages(Array.from(byId.values()));
+}
+
+function uniqueConversations(conversations: Conversation[]): Conversation[] {
+  return Array.from(
+    conversations.reduce((byId, conversation) => {
+      if (!byId.has(conversation.id)) byId.set(conversation.id, conversation);
+      return byId;
+    }, new Map<string, Conversation>()),
+  ).map(([, conversation]) => conversation);
+}
+
+function normalizePresenceStatus(status?: string | null): "online" | "offline" {
+  return status === "active" || status === "away" || status === "dnd"
+    ? "online"
+    : "offline";
+}
+
+function toConversation(
+  channel: Channel,
+  workspaceName: string,
+  members: Array<{ presence_status?: string | null }> = [],
+): Conversation {
+  const status = members.some(
+    (member) => normalizePresenceStatus(member.presence_status) === "online",
+  )
+    ? "online"
+    : "offline";
+
   return {
     id: channel.id,
     name: "# " + channel.name,
     title: workspaceName,
-    // Channels don't have one online/offline state the way a single contact
-    // does - stubbed until per-channel presence rollup is built.
-    status: "online",
-    // Needs a query against channel_members.last_read_at that doesn't exist
-    // yet - stubbed at 0 for now.
+    status,
     unread: 0,
     initials: initials(channel.name),
     messages: [],
@@ -85,20 +123,26 @@ function toConversation(channel: Channel, workspaceName: string): Conversation {
   };
 }
 
-function toDMConversation(dm: DirectConversation): Conversation {
+function toDMConversation(
+  dm: DirectConversation,
+  currentUserId?: string,
+): Conversation {
+  const isSelf = Boolean(currentUserId && dm.other_user_id === currentUserId);
+  const displayName = dm.other_display_name || dm.other_email;
   return {
     id: `dm:${dm.id}`,
-    name: dm.other_display_name || dm.other_email,
-    title: "Direct message",
-    status: "online",
+    name: isSelf ? "You" : displayName,
+    title: isSelf ? "Your space" : "Direct message",
+    status: normalizePresenceStatus(dm.other_presence_status),
     unread: 0,
-    initials: initials(dm.other_display_name || dm.other_email),
+    initials: initials(displayName),
     messages: [],
     quickReplies: [],
     autoReplies: [],
     kind: "dm",
     dmId: dm.id,
     otherUserId: dm.other_user_id,
+    customStatus: dm.other_presence_status || null,
   };
 }
 
@@ -119,14 +163,15 @@ type ChatState = {
   loadingThreadReplies: boolean;
 
   // Presence & Typing state
-  userPresence: Record<string, "active" | "away" | "dnd">;
+  userPresence: Record<string, "active" | "away" | "dnd" | "offline">;
   typingUsers: Record<string, string[]>; // channelId -> [userId, ...]
 
   // Reactions: messageId -> [{ userId, emoji }, ...]
   messageReactions: Record<string, Array<{ userId: string; emoji: string }>>;
 
-  init: (userId: string) => Promise<void>;
+  init: (userId: string, workspaceId?: string) => Promise<void>;
   selectConversation: (id: string) => void;
+  syncConversation: () => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   markConversationRead: (id: string) => Promise<void>;
   setDraft: (text: string) => void;
@@ -190,22 +235,30 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // Local testing bootstrap: if the user has no workspace yet, or if they are
   // not in the shared demo workspace, we create/join a shared demo workspace and
   // ensure it has a default channel so two people can land in the same place.
-  init: async (userId) => {
+  init: async (userId, workspaceId) => {
     set({ currentUserId: userId });
 
     const workspaces = (await workspaceService.list()) ?? [];
-    let workspace =
-      workspaces.find(
-        (w) => w.id === window.localStorage.getItem("active_workspace_id"),
-      ) ??
-      workspaces[0] ??
-      null;
+    let workspace = workspaceId
+      ? (workspaces.find((item) => item.id === workspaceId) ?? null)
+      : (workspaces.find(
+          (w) => w.id === window.localStorage.getItem("active_workspace_id"),
+        ) ??
+        workspaces[0] ??
+        null);
 
-    if (!workspace) {
+    if (!workspace && !workspaceId) {
       workspace = await workspaceService.create({ name: "My Workspace" });
     }
 
-    window.localStorage.setItem("active_workspace_id", workspace.id);
+    if (!workspace) {
+      set({ workspace: null, conversations: [], selectedConversationId: "" });
+      return;
+    }
+
+    if (!workspaceId) {
+      window.localStorage.setItem("active_workspace_id", workspace.id);
+    }
 
     let channels = (await channelService.list(workspace.id)) ?? [];
     if (channels.length === 0) {
@@ -223,25 +276,29 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       }
     }
 
-    const conversations = channels.map((c) =>
-      toConversation(c, workspace.name),
+    await messageService.createSelfDM().catch(() => undefined);
+    const conversations = await Promise.all(
+      channels.map(async (channel) => {
+        try {
+          const members = await channelService.listMembers(channel.id);
+          return toConversation(channel, workspace.name, members);
+        } catch {
+          return toConversation(channel, workspace.name);
+        }
+      }),
     );
     const directMessages = (await messageService.listDMs().catch(() => [])).map(
-      toDMConversation,
+      (dm) => toDMConversation(dm, userId),
     );
 
-    const allConversations = [...conversations, ...directMessages];
-    const savedConversationId =
-      window.localStorage.getItem(lastConversationKey);
-    const initialConversationId = allConversations.some(
-      (conversation) => conversation.id === savedConversationId,
-    )
-      ? savedConversationId!
-      : "";
+    const allConversations = uniqueConversations([
+      ...conversations,
+      ...directMessages,
+    ]);
     set({
       workspace,
       conversations: allConversations,
-      selectedConversationId: initialConversationId,
+      selectedConversationId: "",
     });
 
     const unreadCounts = await Promise.all(
@@ -263,10 +320,6 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         unread: unreadCounts.find(([id]) => id === conversation.id)?.[1] ?? 0,
       })),
     }));
-
-    if (initialConversationId) {
-      get().selectConversation(initialConversationId);
-    }
   },
 
   selectConversation: (id) => {
@@ -281,6 +334,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           : state.drafts,
     }));
     window.localStorage.setItem(lastConversationKey, id);
+    if (get().workspace?.id) {
+      window.localStorage.setItem(
+        `${lastConversationKey}:${get().workspace!.id}`,
+        id,
+      );
+    }
 
     const conversation = get().conversations.find((c) => c.id === id);
     if (!conversation || conversation.messages.length > 0) return; // already loaded
@@ -295,10 +354,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         const currentUserId = get().currentUserId ?? "";
         // REST returns newest-first for pagination; reverse for display order.
         const uiMessages = sortMessages(
-          messages
-            .slice()
-            .reverse()
-            .map((m) => toUIMessage(m, currentUserId)),
+          uniqueMessages(
+            messages
+              .slice()
+              .reverse()
+              .map((m) => toUIMessage(m, currentUserId)),
+          ),
         );
         set((s) => ({
           conversations: s.conversations.map((c) =>
@@ -333,6 +394,37 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       .catch(() => set({ loadingMessages: false }));
   },
 
+  syncConversation: async () => {
+    const state = get();
+    const conversation = state.conversations.find(
+      (item) => item.id === state.selectedConversationId,
+    );
+    if (!conversation) return;
+    const messages =
+      conversation.kind === "dm"
+        ? await messageService.listDMMessages(conversation.dmId!)
+        : await messageService.list(conversation.id);
+    const currentUserId = get().currentUserId ?? "";
+    const uiMessages = sortMessages(
+      uniqueMessages(
+        messages
+          .slice()
+          .reverse()
+          .map((message) => toUIMessage(message, currentUserId)),
+      ),
+    );
+    set((current) => ({
+      conversations: current.conversations.map((item) =>
+        item.id === conversation.id
+          ? {
+              ...item,
+              messages: mergeMessages(item.messages, uiMessages),
+            }
+          : item,
+      ),
+    }));
+  },
+
   loadOlderMessages: async () => {
     const state = get();
     const conversation = state.conversations.find(
@@ -364,7 +456,12 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       set((current) => ({
         conversations: current.conversations.map((item) =>
           item.id === conversation.id
-            ? { ...item, messages: sortMessages([...older, ...item.messages]) }
+            ? {
+                ...item,
+                messages: sortMessages(
+                  uniqueMessages([...older, ...item.messages]),
+                ),
+              }
             : item,
         ),
         hasOlderMessages: {
@@ -428,7 +525,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const dms = await messageService.listDMs();
     const dm = dms.find((item) => item.id === result.id);
     if (!dm) return;
-    const conversation = toDMConversation(dm);
+    const conversation = toDMConversation(dm, get().currentUserId ?? undefined);
     set((state) => ({
       conversations: [
         ...state.conversations.filter((item) => item.id !== conversation.id),
@@ -440,11 +537,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   refreshDMs: async () => {
-    const directMessages = (await messageService.listDMs()).map(
-      toDMConversation,
+    const directMessages = (await messageService.listDMs()).map((dm) =>
+      toDMConversation(dm, get().currentUserId ?? undefined),
     );
     set((state) => ({
-      conversations: [
+      conversations: uniqueConversations([
         ...state.conversations.filter((item) => item.kind !== "dm"),
         ...directMessages.map((conversation) =>
           state.conversations.find((item) => item.id === conversation.id)
@@ -461,7 +558,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
               }
             : conversation,
         ),
-      ],
+      ]),
     }));
   },
 
@@ -576,7 +673,9 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           item.id === channelId
             ? {
                 ...item,
-                messages: sortMessages([...item.messages, message]),
+                messages: sortMessages(
+                  uniqueMessages([...item.messages, message]),
+                ),
               }
             : item,
         ),
@@ -592,11 +691,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     set((state) => ({
       conversations: state.conversations.map((c) => {
         if (c.id !== channelId) return c;
-        if (c.messages.some((existing) => existing.id === message.id)) return c;
         const isOwnMessage = message.user_id === currentUserId;
         return {
           ...c,
-          messages: sortMessages([...c.messages, uiMessage]),
+          messages: mergeMessages(c.messages, [uiMessage]),
           unread: isOwnMessage ? c.unread : c.unread + 1,
         };
       }),
@@ -705,7 +803,13 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // Presence & typing methods
   setUserPresence: (userId: string, status: string) => {
     set((state) => ({
-      userPresence: { ...state.userPresence, [userId]: status as any },
+      userPresence: {
+        ...state.userPresence,
+        [userId]:
+          status === "active" || status === "away" || status === "dnd"
+            ? status
+            : "offline",
+      },
     }));
   },
 

@@ -12,6 +12,8 @@ import type { Attachment, Conversation } from "../utils/types";
 import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
+import { PresenceIndicator } from "./PresenceIndicator";
+import { useChatStore } from "../utils/store";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -22,6 +24,7 @@ interface ChatAreaProps {
   attachments: Attachment[];
   onAddAttachments: (files: FileList) => void;
   onRemoveAttachment: (id: string) => void;
+  isUploading?: boolean;
   onOpenThread: (message: import("../utils/types").Message) => void;
   reactions: Record<string, Array<{ userId: string; emoji: string }>>;
   currentUserId: string;
@@ -34,6 +37,7 @@ interface ChatAreaProps {
   loadingOlderMessages: boolean;
   onSchedule: (scheduledFor: string) => Promise<void>;
   typingUserCount: number;
+  canManageChannel?: boolean;
 }
 
 export function ChatArea({
@@ -45,6 +49,7 @@ export function ChatArea({
   attachments,
   onAddAttachments,
   onRemoveAttachment,
+  isUploading,
   onOpenThread,
   reactions,
   currentUserId,
@@ -57,13 +62,18 @@ export function ChatArea({
   loadingOlderMessages,
   onSchedule,
   typingUserCount,
+  canManageChannel,
 }: ChatAreaProps) {
+  const userPresence = useChatStore((state) => state.userPresence);
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const newMessagesMarkerRef = useRef<HTMLDivElement | null>(null);
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
+  const [searchCursor, setSearchCursor] = useState<string | undefined>();
+  const [searchHasMore, setSearchHasMore] = useState(false);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const isAtBottomRef = useRef(true);
@@ -80,24 +90,36 @@ export function ChatArea({
     const query = search.trim();
     if (!query) {
       setSearchResults([]);
+      setSearchCursor(undefined);
+      setSearchHasMore(false);
       setSearchError(false);
       return;
     }
     let cancelled = false;
     const searchRequest =
       conversation.kind === "dm"
-        ? messageService.searchDM(conversation.dmId!, query)
+        ? messageService
+            .searchDM(conversation.dmId!, query)
+            .then((results) => ({
+              results,
+              nextCursor: undefined,
+              hasMore: false,
+            }))
         : messageService.search(conversation.id, query);
     void searchRequest
-      .then((results) => {
+      .then((page) => {
         if (!cancelled) {
-          setSearchResults(results);
+          setSearchResults(page.results);
+          setSearchCursor(page.nextCursor);
+          setSearchHasMore(page.hasMore);
           setSearchError(false);
         }
       })
       .catch(() => {
         if (!cancelled) {
           setSearchResults([]);
+          setSearchCursor(undefined);
+          setSearchHasMore(false);
           setSearchError(true);
         }
       });
@@ -105,6 +127,32 @@ export function ChatArea({
       cancelled = true;
     };
   }, [conversation.id, search]);
+
+  const loadMoreSearchResults = async () => {
+    if (
+      conversation.kind === "dm" ||
+      !searchCursor ||
+      searchLoadingMore ||
+      !search.trim()
+    ) {
+      return;
+    }
+    setSearchLoadingMore(true);
+    try {
+      const page = await messageService.search(
+        conversation.id,
+        search.trim(),
+        searchCursor,
+      );
+      setSearchResults((current) => [...current, ...page.results]);
+      setSearchCursor(page.nextCursor);
+      setSearchHasMore(page.hasMore);
+    } catch {
+      setSearchError(true);
+    } finally {
+      setSearchLoadingMore(false);
+    }
+  };
 
   const jumpToMessage = (messageId: string) => {
     const target = messagesContainerRef.current?.querySelector<HTMLElement>(
@@ -189,6 +237,15 @@ export function ChatArea({
     onMarkRead();
   };
 
+  const dateLabel = (message: (typeof conversation.messages)[number]) => {
+    if (!message.createdAt) return null;
+    return new Date(message.createdAt).toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
   useEffect(() => {
     if (!liveRegionRef.current) return;
     const lastMessage = conversation.messages[conversation.messages.length - 1];
@@ -210,20 +267,24 @@ export function ChatArea({
           animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
           transition={{ duration: 0.32, ease: "easeOut" }}
-          className="border-border/60 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-[22px] border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
+          className="border-border/70 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-2xl border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
         >
-          <ChatHeader conversation={conversation} />
+          <ChatHeader
+            conversation={conversation}
+            canManageChannel={canManageChannel}
+          />
           <div className="relative px-3 sm:px-4">
             <Icons.search
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 sm:left-6"
               aria-hidden="true"
             />
             <Input
+              type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={`Search ${conversation.name}`}
               aria-label={`Search messages in ${conversation.name}`}
-              className="border-border/70 bg-muted/40 h-8 rounded-xl pl-9 text-xs shadow-inner shadow-black/5 sm:text-sm"
+              className="border-border/70 bg-muted/30 h-9 rounded-lg pl-9 text-xs shadow-inner shadow-black/5 sm:text-sm"
             />
             {search.trim() && (
               <div className="border-border/70 bg-popover absolute top-10 right-3 left-3 z-30 max-h-56 overflow-y-auto rounded-xl border p-1 shadow-xl sm:right-4 sm:left-4">
@@ -236,31 +297,49 @@ export function ChatArea({
                     No messages found
                   </p>
                 ) : (
-                  searchResults.map((result) => (
-                    <button
-                      key={result.id}
-                      type="button"
-                      onClick={() => jumpToMessage(result.id)}
-                      className="hover:bg-accent block w-full rounded p-2 text-left text-xs"
-                    >
-                      <span className="text-foreground font-medium">
-                        {result.author || "Unknown"}
-                      </span>
-                      <span className="text-muted-foreground mt-0.5 block line-clamp-2">
-                        {result.content}
-                      </span>
-                    </button>
-                  ))
+                  <>
+                    {searchResults.map((result) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        data-testid={`search-result-${result.id}`}
+                        onClick={() => jumpToMessage(result.id)}
+                        className="hover:bg-accent block w-full rounded p-2 text-left text-xs"
+                      >
+                        <span className="text-foreground block font-medium">
+                          {result.author || "Unknown"}
+                        </span>
+                        <span className="text-muted-foreground block text-[0.68rem]">
+                          {conversation.name} ·{" "}
+                          {new Date(result.created_at).toLocaleString()}
+                        </span>
+                        <span className="text-muted-foreground mt-0.5 block line-clamp-2">
+                          {result.content}
+                        </span>
+                      </button>
+                    ))}
+                    {searchHasMore && (
+                      <button
+                        type="button"
+                        onClick={() => void loadMoreSearchResults()}
+                        disabled={searchLoadingMore}
+                        className="text-primary hover:bg-accent w-full rounded p-2 text-center text-xs font-medium disabled:opacity-60"
+                      >
+                        {searchLoadingMore ? "Loading..." : "Load more"}
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )}
           </div>
           <div className="text-muted-foreground flex min-h-3 items-center gap-2 px-3 text-[0.7rem] sm:px-4">
-            <span>
-              {conversation.kind === "dm" && conversation.status === "online"
-                ? "Online"
-                : ""}
-            </span>
+            {conversation.kind === "dm" && conversation.otherUserId && (
+              <PresenceIndicator
+                state={userPresence[conversation.otherUserId] || "offline"}
+                customStatus={conversation.customStatus}
+              />
+            )}
             {typingUserCount > 0 && (
               <span className="text-primary">
                 {typingUserCount === 1
@@ -277,9 +356,24 @@ export function ChatArea({
             aria-live="off"
             aria-label={"Message thread with " + conversation.name}
           >
+            {conversation.name.endsWith("(you)") &&
+              conversation.messages.length === 0 && (
+                <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
+                  <div className="bg-sidebar-primary/15 text-sidebar-primary mb-4 flex size-14 items-center justify-center rounded-2xl">
+                    <Icons.user className="size-7" />
+                  </div>
+                  <h2 className="text-lg font-semibold">This is your space</h2>
+                  <p className="text-muted-foreground mt-2 max-w-md text-sm">
+                    Draft messages, list your to-dos, or keep links and files
+                    handy. Only you can see this conversation.
+                  </p>
+                </div>
+              )}
             <AnimatePresence initial={false}>
               {conversation.messages.map((message, index) => {
                 const previous = conversation.messages[index - 1];
+                const currentDate = dateLabel(message);
+                const previousDate = previous ? dateLabel(previous) : null;
                 const compact = Boolean(
                   previous &&
                   previous.sender === message.sender &&
@@ -287,6 +381,13 @@ export function ChatArea({
                 );
                 return (
                   <div key={message.id}>
+                    {currentDate !== previousDate && currentDate && (
+                      <div className="text-muted-foreground my-4 flex items-center gap-3 text-[0.62rem] font-semibold uppercase tracking-[0.16em]">
+                        <span className="bg-border h-px flex-1" />
+                        <span>{currentDate}</span>
+                        <span className="bg-border h-px flex-1" />
+                      </div>
+                    )}
                     {conversation.unread > 0 &&
                       index ===
                         Math.max(
@@ -340,6 +441,7 @@ export function ChatArea({
             attachments={attachments}
             onAddAttachments={onAddAttachments}
             onRemoveAttachment={onRemoveAttachment}
+            isUploading={isUploading}
             mentionSuggestions={mentionSuggestions}
             onSchedule={onSchedule}
           />

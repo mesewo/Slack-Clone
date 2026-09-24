@@ -6,6 +6,35 @@ import (
 	"github.com/google/uuid"
 )
 
+func (q *Queries) FindSelfDirectConversation(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
+	var conversationID uuid.UUID
+	err := q.db.QueryRow(ctx, `
+		SELECT dc.id
+		FROM direct_conversations dc
+		JOIN direct_conversation_members member ON member.conversation_id = dc.id
+		WHERE dc.created_by = $1 AND member.user_id = $1
+		GROUP BY dc.id
+		HAVING COUNT(*) = 1
+		ORDER BY dc.created_at
+		LIMIT 1`, userID).Scan(&conversationID)
+	return conversationID, err
+}
+
+func (q *Queries) CreateSelfDirectConversation(ctx context.Context, userID uuid.UUID) (uuid.UUID, error) {
+	conversationID, err := q.FindSelfDirectConversation(ctx, userID)
+	if err == nil {
+		return conversationID, nil
+	}
+	conversation, err := q.CreateDirectConversation(ctx, userID)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	if err := q.AddDirectConversationMember(ctx, AddDirectConversationMemberParams{ConversationID: conversation.ID, UserID: userID}); err != nil {
+		return uuid.Nil, err
+	}
+	return conversation.ID, nil
+}
+
 func (q *Queries) AttachFilesToDirectMessage(ctx context.Context, messageID uuid.UUID, attachmentIDs []uuid.UUID, userID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, `UPDATE attachments SET direct_message_id = $1 WHERE id = ANY($2::uuid[]) AND user_id = $3 AND message_id IS NULL`, messageID, attachmentIDs, userID)
 	return err

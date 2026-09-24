@@ -35,3 +35,32 @@ FROM channels c
 JOIN workspace_members wm ON wm.workspace_id = c.workspace_id
 WHERE wm.user_id = $2 AND c.workspace_id = $1 AND c.type = 'PUBLIC'
 ON CONFLICT (channel_id, user_id) DO NOTHING;
+
+-- name: ListWorkspaceMembers :many
+SELECT wm.workspace_id, wm.user_id, wm.role, wm.joined_at,
+	u.email, u.display_name, u.presence_status
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = $1
+ORDER BY CASE wm.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END,
+		 u.display_name;
+
+-- name: UpdateWorkspaceMemberRole :one
+UPDATE workspace_members
+SET role = $3
+WHERE workspace_id = $1 AND user_id = $2
+RETURNING *;
+
+-- name: RemoveWorkspaceMember :exec
+DELETE FROM workspace_members
+WHERE workspace_id = $1 AND user_id = $2 AND role <> 'OWNER';
+
+-- name: CreateWorkspaceInvite :exec
+INSERT INTO workspace_invites (workspace_id, token_hash, expires_at, created_by)
+VALUES ($1, $2, $3, $4);
+
+-- name: ConsumeWorkspaceInvite :one
+UPDATE workspace_invites
+SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+RETURNING workspace_id;

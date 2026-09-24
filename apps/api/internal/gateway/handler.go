@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/url"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,11 +18,43 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 )
 
+var (
+	allowedOriginsMu sync.RWMutex
+	allowedOrigins   = map[string]struct{}{}
+)
+
+func ConfigureAllowedOrigins(origins []string) {
+	allowedOriginsMu.Lock()
+	defer allowedOriginsMu.Unlock()
+	allowedOrigins = make(map[string]struct{}, len(origins))
+	for _, origin := range origins {
+		origin = strings.TrimSpace(strings.TrimRight(origin, "/"))
+		if origin != "" {
+			allowedOrigins[origin] = struct{}{}
+		}
+	}
+}
+
+func originAllowed(origin string) bool {
+	if origin == "" {
+		return true // non-browser WebSocket clients do not send Origin.
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return false
+	}
+	normalized := strings.TrimRight(parsed.Scheme+"://"+parsed.Host, "/")
+	allowedOriginsMu.RLock()
+	_, ok := allowedOrigins[normalized]
+	allowedOriginsMu.RUnlock()
+	return ok
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // TODO before Phase 7: restrict to your frontend's origin
+		return originAllowed(r.Header.Get("Origin"))
 	},
 }
 
@@ -86,7 +121,9 @@ func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *aut
 	// workspaces, so broadcasts reach them without a separate "join" step.
 	// This is now a gRPC call to Core instead of a direct DB query - Gateway
 	// has no database access under Option B.
-	resp, err := coreClient.GetUserChannels(r.Context(), &chatpb.GetUserChannelsRequest{UserId: claims.UserID})
+	coreCtx, coreCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer coreCancel()
+	resp, err := coreClient.GetUserChannels(coreCtx, &chatpb.GetUserChannelsRequest{UserId: claims.UserID})
 	if err != nil {
 		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
 	} else {

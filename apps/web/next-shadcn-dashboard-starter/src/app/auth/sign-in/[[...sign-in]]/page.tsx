@@ -33,7 +33,7 @@ export default function SignIn() {
       }
 
       await login(email, password);
-      router.push("/dashboard");
+      router.push("/workspaces");
     } catch (err) {
       setError(
         mode === "sign-up" ? "Could not create account" : "Invalid credentials",

@@ -310,13 +310,14 @@ export function MessageBubble({
       exit={{ opacity: 0, y: 0 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
       className={cn(
-        "group/message relative flex w-full max-w-[85%] gap-2 px-2 py-0.5 transition-colors hover:bg-muted/40",
+        "group/message relative flex w-full max-w-[85%] gap-2 px-2 py-1 transition-colors hover:bg-muted/35",
         isUser && "flex-row-reverse",
         isUser && "ml-auto",
-        compact && (isUser ? "pr-10" : "pl-10"),
+        compact && (isUser ? "pr-8" : "pl-8"),
         !compact && "mt-2",
       )}
       role="group"
+      id={`message-${message.id}`}
       data-message-id={message.id}
       aria-label={message.author + " at " + message.timestamp}
       onClick={(event) => {
@@ -342,7 +343,7 @@ export function MessageBubble({
           isUser ? "text-foreground" : "text-foreground",
         )}
       >
-        <div className="absolute top-0 right-1 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-sm transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
+        <div className="absolute top-0 right-2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 opacity-0 shadow-md transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
           <button
             type="button"
             title="Reply in thread"
@@ -478,9 +479,12 @@ export function MessageBubble({
               type: a.type,
               url: a.url,
               description: a.url,
+              size: a.size,
             }))}
             variant={isUser ? "inverted" : "default"}
             className="mt-1 p-0"
+            mode="message"
+            maxAutoPreviewSize={2 * 1024 * 1024}
           />
         )}
         {compact && (
@@ -488,6 +492,16 @@ export function MessageBubble({
             {message.timestamp}
           </span>
         )}
+        {message.replyCount ? (
+          <button
+            type="button"
+            onClick={() => onOpenThread(message)}
+            className="text-primary hover:bg-primary/10 mt-1.5 rounded-full border border-primary/20 px-2 py-0.5 text-xs font-medium"
+            aria-label={`${message.replyCount} replies`}
+          >
+            {message.replyCount} replies
+          </button>
+        ) : null}
         {reactions.length > 0 && (
           <div className={cn("mt-2 flex flex-wrap gap-1")}>
             {Object.entries(reactionCounts).map(([emoji, count]) => {
@@ -502,7 +516,7 @@ export function MessageBubble({
                   onClick={() => onToggleReaction(message.id, emoji)}
                   aria-label={`${hasReaction ? "Remove" : "Add"} ${emoji} reaction, ${count} total`}
                   className={cn(
-                    "rounded-md border px-2 py-0.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "rounded-full border px-2 py-0.5 text-xs transition-colors hover:bg-accent hover:text-accent-foreground",
                     isUser
                       ? "border-primary-foreground/30 text-primary-foreground/90"
                       : "border-border text-foreground/80",
@@ -570,6 +584,20 @@ export function MessageBubble({
               className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
             >
               Copy text
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void navigator.clipboard?.writeText(
+                  `${window.location.origin}${window.location.pathname}#message-${message.id}`,
+                );
+                toast.success("Message link copied");
+                setMenuOpen(false);
+              }}
+              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Copy link to message
             </button>
             {isUser && (
               <>

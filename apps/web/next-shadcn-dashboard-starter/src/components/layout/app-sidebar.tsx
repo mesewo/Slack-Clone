@@ -1,4 +1,5 @@
 "use client";
+
 import {
   Collapsible,
   CollapsibleContent,
@@ -39,35 +40,27 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import { Icons } from "../icons";
 import { OrgSwitcher } from "../org-switcher";
-import { NotificationCenter } from "@/features/notifications/components/notification-center";
 import { toast } from "sonner";
+import { ThemeModeToggle } from "../themes/theme-mode-toggle";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { cn } from "@/lib/utils";
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const isWorkspaceRoute = pathname.startsWith("/home");
   const { isOpen } = useMediaQuery();
   const router = useRouter();
   const { user } = useAuth();
+  const activeWorkspaceId =
+    typeof window === "undefined"
+      ? null
+      : window.localStorage.getItem("active_workspace_id");
   const organization = null;
   const filteredGroups = useFilteredNavGroups(navGroups);
   const sidebarGroups = filteredGroups
     .map((group) => ({
       ...group,
-      items: group.items
-        .map((item) => ({
-          ...item,
-          items: item.items?.filter((child) =>
-            ["Profile"].includes(child.title),
-          ),
-        }))
-        .filter((item) =>
-          [
-            "Dashboard",
-            "Workspaces",
-            "Chat",
-            "Saved items",
-            "Profile",
-          ].includes(item.title),
-        ),
+      items: group.items.filter((item) => item.title === "Profile"),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -85,13 +78,156 @@ export default function AppSidebar() {
 
   return (
     <Sidebar
-      collapsible="icon"
-      className="border-sidebar-border/80 bg-sidebar text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]"
+      collapsible="none"
+      className={cn(
+        "w-[4.5rem] border-sidebar-border/80 text-sidebar-foreground shadow-[inset_-1px_0_0_rgba(148,163,184,0.12)]",
+        isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar",
+      )}
     >
-      <SidebarHeader className="border-sidebar-border/70 border-b bg-sidebar/90 px-3 py-3 group-data-[collapsible=icon]:pt-4">
+      <SidebarHeader
+        className={cn(
+          "border-sidebar-border/70 px-2 py-3",
+          isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
+        )}
+      >
         <OrgSwitcher />
       </SidebarHeader>
-      <SidebarContent className="overflow-x-hidden bg-sidebar px-2 pb-2 pt-2">
+      <SidebarContent
+        className={cn(
+          "flex-none gap-0 overflow-x-hidden px-1 pb-0 pt-1",
+          isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar",
+        )}
+      >
+        <SidebarGroup className="py-0">
+          <SidebarMenu className="gap-0.5">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Home"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                onClick={() => {
+                  const last = activeWorkspaceId
+                    ? window.localStorage.getItem(
+                        `slack_last_conversation_id:${activeWorkspaceId}`,
+                      )
+                    : null;
+                  router.push(
+                    activeWorkspaceId && last
+                      ? last.startsWith("dm:")
+                        ? `/home/${activeWorkspaceId}/dms/${last.slice(3)}`
+                        : `/home/${activeWorkspaceId}/channels/${last}`
+                      : "/workspaces",
+                  );
+                }}
+              >
+                <Icons.home className="size-6" />
+                <span className="sr-only">Home</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Direct messages"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                render={<Link href="/dms" aria-label="Direct messages" />}
+              >
+                <Icons.chat className="size-6" />
+                <span className="sr-only">DMs</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Activity"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                render={<Link href="/activity" aria-label="Activity" />}
+              >
+                <Icons.activity className="size-6" />
+                <span className="sr-only">Activity</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="More"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                onClick={() =>
+                  toast.info("More workspace tools are coming soon.")
+                }
+              >
+                <Icons.dots className="size-6" />
+                <span className="sr-only">More</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Admin"
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                onClick={() =>
+                  activeWorkspaceId
+                    ? router.push(`/home/${activeWorkspaceId}/admin`)
+                    : toast.info("Open a workspace first.")
+                }
+              >
+                <Icons.settings className="size-6" />
+                <span className="sr-only">Admin</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <SidebarMenuButton
+                      tooltip="Create"
+                      className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                    />
+                  }
+                >
+                  <Icons.add className="size-6" />
+                  <span className="sr-only">Create</span>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" className="w-64 p-1">
+                  {[
+                    ["Message", () => router.push("/dms")],
+                    [
+                      "Channel",
+                      () =>
+                        router.push(
+                          activeWorkspaceId
+                            ? `/home/${activeWorkspaceId}`
+                            : "/home",
+                        ),
+                    ],
+                    ["Huddle", () => toast.info("Huddles are coming soon.")],
+                    ["Canvas", () => toast.info("Canvas is coming soon.")],
+                    ["List", () => toast.info("Lists are coming soon.")],
+                    [
+                      "Workflow",
+                      () => toast.info("Workflows are coming soon."),
+                    ],
+                  ].map(([label, action]) => (
+                    <button
+                      key={label as string}
+                      type="button"
+                      onClick={action as () => void}
+                      className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm"
+                    >
+                      {label as string}
+                    </button>
+                  ))}
+                  <div className="border-border my-1 border-t" />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      activeWorkspaceId
+                        ? router.push(`/home/${activeWorkspaceId}/admin`)
+                        : toast.info("Open a workspace first.")
+                    }
+                    className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm"
+                  >
+                    Invite people
+                  </button>
+                </PopoverContent>
+              </Popover>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
         {sidebarGroups.map((group) => (
           <SidebarGroup key={group.label || "ungrouped"} className="py-0">
             {group.label && (
@@ -132,6 +268,7 @@ export default function AppSidebar() {
                                   aria-label={subItem.title}
                                 />
                               }
+                              onClick={() => router.push(subItem.url)}
                               isActive={pathname === subItem.url}
                               className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                             >
@@ -146,6 +283,7 @@ export default function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
                       render={<Link href={item.url} aria-label={item.title} />}
+                      onClick={() => router.push(item.url)}
                       tooltip={item.title}
                       isActive={pathname === item.url}
                       className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
@@ -159,56 +297,33 @@ export default function AppSidebar() {
             </SidebarMenu>
           </SidebarGroup>
         ))}
-        <SidebarGroup className="py-0">
-          <SidebarGroupLabel className="text-sidebar-foreground/60 px-2 text-[0.68rem] font-semibold tracking-[0.2em] uppercase">
-            Coming soon
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {[
-              ["Huddles", Icons.phone],
-              ["Canvas", Icons.forms],
-              ["Workflow builder", Icons.settings],
-            ].map(([label, Icon]) => (
-              <SidebarMenuItem key={label as string}>
-                <SidebarMenuButton
-                  type="button"
-                  tooltip={`${label as string} coming soon`}
-                  onClick={() =>
-                    toast.info(`${label as string} is coming soon`)
-                  }
-                  className="text-sidebar-foreground/60 hover:text-sidebar-foreground"
-                >
-                  <Icon />
-                  <span>{label as string}</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-sidebar-border/70 border-t bg-sidebar/90 p-2">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <NotificationCenter />
+      <SidebarFooter
+        className={cn(
+          "mt-auto min-h-0 gap-0 border-t-0 p-0 pb-0",
+          isWorkspaceRoute
+            ? "border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)]"
+            : "border-sidebar-border/70 bg-sidebar/90",
+        )}
+      >
+        <SidebarMenu className="gap-0">
+          <SidebarMenuItem className="flex items-center justify-center px-1">
+            <ThemeModeToggle />
           </SidebarMenuItem>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="p-0">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <SidebarMenuButton
-                    size="lg"
-                    className="data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80"
-                  />
+                  <SidebarMenuButton className="h-auto min-h-0 py-1 data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80" />
                 }
               >
                 {user && (
                   <UserAvatarProfile
-                    className="h-8 w-8 rounded-lg"
-                    showInfo
+                    className="h-9 w-9 rounded-lg"
+                    showInfo={false}
                     user={user}
                   />
                 )}
-                <Icons.chevronsDown className="ml-auto size-4" />
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 className="w-(--anchor-width) min-w-56 rounded-xl border border-border/70 bg-popover shadow-lg"

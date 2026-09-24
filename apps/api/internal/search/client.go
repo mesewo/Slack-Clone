@@ -46,7 +46,7 @@ func NewClient(baseURL string) *Client {
 }
 
 func (c *Client) EnsureIndex(ctx context.Context) error {
-	body := strings.NewReader(`{"mappings":{"properties":{"channel_id":{"type":"keyword"},"user_id":{"type":"keyword"},"author":{"type":"text"},"content":{"type":"text"},"created_at":{"type":"date"}}}}`)
+	body := strings.NewReader(`{"mappings":{"properties":{"id":{"type":"keyword"},"channel_id":{"type":"keyword"},"user_id":{"type":"keyword"},"author":{"type":"text"},"content":{"type":"text"},"created_at":{"type":"date"}}}}`)
 	status, response, err := c.request(ctx, http.MethodPut, "/"+indexName, body, "application/json")
 	if err != nil {
 		return err
@@ -72,6 +72,25 @@ func (c *Client) IndexMessage(ctx context.Context, message MessageDocument) erro
 	return nil
 }
 
+func (c *Client) Reindex(ctx context.Context, rows []database.ListMessagesForSearchRow) error {
+	for _, row := range rows {
+		author := ""
+		if row.AuthorName.Valid {
+			author = row.AuthorName.String
+		}
+		if err := c.IndexMessage(ctx, ToDocument(database.Message{
+			ID:        row.ID,
+			ChannelID: row.ChannelID,
+			UserID:    row.UserID,
+			Content:   row.Content,
+			CreatedAt: row.CreatedAt,
+		}, author)); err != nil {
+			return fmt.Errorf("reindex message %s: %w", row.ID, err)
+		}
+	}
+	return nil
+}
+
 func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
 	status, response, err := c.request(ctx, http.MethodDelete, "/"+indexName+"/_doc/"+messageID, nil, "")
 	if err != nil {
@@ -83,8 +102,8 @@ func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
 	return nil
 }
 
-func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []string, limit int) ([]Result, error) {
-	body, err := json.Marshal(map[string]any{
+func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []string, limit int, cursor ...string) ([]Result, error) {
+	searchBody := map[string]any{
 		"size": limit,
 		"query": map[string]any{
 			"bool": map[string]any{
@@ -92,8 +111,12 @@ func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []
 				"filter": []any{map[string]any{"terms": map[string]any{"channel_id": channelIDs}}},
 			},
 		},
-		"sort": []any{map[string]any{"created_at": "desc"}},
-	})
+		"sort": []any{map[string]any{"created_at": "desc"}, map[string]any{"id": "desc"}},
+	}
+	if len(cursor) > 0 && cursor[0] != "" {
+		searchBody["search_after"] = []any{cursor[0]}
+	}
+	body, err := json.Marshal(searchBody)
 	if err != nil {
 		return nil, err
 	}

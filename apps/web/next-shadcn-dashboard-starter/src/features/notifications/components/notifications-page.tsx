@@ -10,12 +10,21 @@ import { useNotificationStore } from "../utils/store";
 import { useEffect } from "react";
 
 const actionRoutes: Record<string, string> = {
-  view: "/dashboard/workspaces",
-  "view-product": "/dashboard/product",
-  billing: "/dashboard/billing",
-  open: "/dashboard/kanban",
-  "open-chat": "/dashboard/chat",
+  view: "/home",
+  open: "/home",
+  "open-chat": "/home",
 };
+
+function notificationRoute(
+  entityId: string | undefined,
+  title: string,
+): string | null {
+  const workspaceId = window.localStorage.getItem("active_workspace_id");
+  if (!workspaceId || !entityId) return null;
+  return title.toLowerCase().includes("direct")
+    ? `/home/${workspaceId}/dms/${entityId}`
+    : `/home/${workspaceId}/channels/${entityId}`;
+}
 
 export default function NotificationsPage() {
   const { notifications, load, markAsRead, markAllAsRead, unreadCount } =
@@ -54,7 +63,14 @@ export default function NotificationsPage() {
             actions={notification.actions}
             onMarkAsRead={markAsRead}
             onAction={(notifId, actionId) => {
-              const route = actionRoutes[actionId];
+              const notification = notifications.find(
+                (item) => item.id === notifId,
+              );
+              const route =
+                notificationRoute(
+                  notification?.entityId,
+                  notification?.title || "",
+                ) || actionRoutes[actionId];
               if (route) {
                 markAsRead(notifId);
                 router.push(route);

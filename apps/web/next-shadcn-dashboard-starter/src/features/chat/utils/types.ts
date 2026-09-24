@@ -6,6 +6,7 @@ export type Attachment = {
   file?: File;
   url?: string;
   thumbnailUrl?: string;
+  isUploading?: boolean;
 };
 
 export type Message = {
@@ -39,4 +40,5 @@ export type Conversation = {
   kind?: "channel" | "dm";
   dmId?: string;
   otherUserId?: string;
+  customStatus?: string | null;
 };

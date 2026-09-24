@@ -7,6 +7,10 @@ import { cn } from "@/lib/utils";
 import type { Conversation } from "../utils/types";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { ChannelMembersPanel } from "./ChannelMembersPanel";
+import { PresenceIndicator } from "./PresenceIndicator";
+import { useChatStore } from "../utils/store";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -17,8 +21,20 @@ interface ChatHeaderProps {
   conversation: Conversation;
 }
 
-export function ChatHeader({ conversation }: ChatHeaderProps) {
+export function ChatHeader({
+  conversation,
+  canManageChannel,
+}: ChatHeaderProps & { canManageChannel?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [starred, setStarred] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const router = useRouter();
+  const params = useParams<{ workspaceId: string }>();
+  const userPresence = useChatStore((state) => state.userPresence);
+  const presence = conversation.otherUserId
+    ? userPresence[conversation.otherUserId] || "offline"
+    : "offline";
   return (
     <header className="border-border/60 bg-muted/30 relative flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:gap-4 sm:px-4">
       <div className="flex items-center gap-2 sm:gap-3">
@@ -28,13 +44,13 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
               {conversation.initials}
             </AvatarFallback>
           </Avatar>
-          <span
-            className={cn(
-              "border-background absolute right-0 bottom-0 inline-flex h-3 w-3 rounded-full border-2 sm:h-3.5 sm:w-3.5",
-              statusDotColor[conversation.status],
-            )}
-            aria-label={conversation.status === "online" ? "Online" : "Offline"}
-          />
+          {conversation.kind === "dm" && (
+            <PresenceIndicator
+              state={presence}
+              customStatus={conversation.customStatus}
+              className="absolute -bottom-1 left-1/2 -translate-x-1/2"
+            />
+          )}
         </div>
         <div>
           <p className="text-foreground text-sm font-semibold tracking-tight sm:text-base">
@@ -51,12 +67,57 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
           type="button"
           variant="ghost"
           size="icon"
+          aria-label={starred ? "Unstar conversation" : "Star conversation"}
+          onClick={() => setStarred((value) => !value)}
+          title={starred ? "Unstar" : "Star"}
+        >
+          <Icons.star
+            className={cn("size-4", starred && "fill-current text-yellow-500")}
+          />
+        </Button>
+        {conversation.kind === "channel" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="hidden sm:inline-flex"
+            onClick={() => router.push(`/home/${params.workspaceId}/admin`)}
+          >
+            Invite teammates
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={muted ? "Unmute conversation" : "Mute conversation"}
+          onClick={() => setMuted((value) => !value)}
+          title={muted ? "Unmute" : "Mute"}
+        >
+          <Icons.notification
+            className={cn("size-4", muted && "text-muted-foreground")}
+          />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
           className="border-border/60 bg-background/70 text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:ring-primary/40 focus-visible:ring-offset-background size-8 rounded-full border shadow-sm transition focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-10"
           aria-label="Start audio call"
           onClick={() => toast.info("Audio calls are coming soon")}
         >
           <Icons.phone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </Button>
+        {conversation.kind === "channel" && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => toast.info("Huddles are coming soon")}
+          >
+            Huddle
+          </Button>
+        )}
         <Button
           type="button"
           variant="ghost"
@@ -91,10 +152,13 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => toast.info("Channel details are coming soon")}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setMembersOpen(true);
+                  }}
                   className="hover:bg-accent w-full rounded-lg px-3 py-2 text-left text-xs"
                 >
-                  Channel details
+                  Channel members
                 </button>
               </>
             ) : (
@@ -134,6 +198,39 @@ export function ChatHeader({ conversation }: ChatHeaderProps) {
           </div>
         )}
       </div>
+      {conversation.kind === "channel" && (
+        <div className="order-3 flex w-full items-center gap-4 border-t border-border/50 pt-2 text-xs">
+          <button
+            type="button"
+            className="border-b-2 border-sidebar-primary pb-1 font-medium"
+          >
+            Messages
+          </button>
+          <button
+            type="button"
+            onClick={() => toast.info("Canvas is coming soon")}
+            className="text-muted-foreground hover:text-foreground pb-1"
+          >
+            Add canvas
+          </button>
+          <button
+            type="button"
+            onClick={() => toast.info("Additional tabs are coming soon")}
+            className="text-muted-foreground hover:text-foreground pb-1"
+          >
+            +
+          </button>
+        </div>
+      )}
+      {membersOpen &&
+        conversation.kind === "channel" &&
+        canManageChannel !== undefined && (
+          <ChannelMembersPanel
+            channelId={conversation.id}
+            canManage={canManageChannel}
+            onClose={() => setMembersOpen(false)}
+          />
+        )}
     </header>
   );
 }

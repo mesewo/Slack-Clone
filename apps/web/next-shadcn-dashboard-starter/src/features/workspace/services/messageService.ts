@@ -30,6 +30,23 @@ export interface MessageSearchResult {
   created_at: string;
 }
 
+export interface MessageSearchPage {
+  results: MessageSearchResult[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+export interface ThreadSummary {
+  id: string;
+  kind: "channel" | "dm";
+  channel_id?: string;
+  conversation_id?: string;
+  title: string;
+  preview: string;
+  reply_count: number;
+  last_activity: string;
+}
+
 export interface UploadedAttachment {
   id: string;
   filename: string;
@@ -44,6 +61,7 @@ export interface DirectConversation {
   other_user_id: string;
   other_display_name: string;
   other_email: string;
+  other_presence_status?: string;
 }
 
 export interface DirectUser {
@@ -53,9 +71,17 @@ export interface DirectUser {
 }
 
 export const messageService = {
+  async listThreads(): Promise<ThreadSummary[]> {
+    const res = await apiClient.get<ThreadSummary[]>("/api/threads");
+    return res.data ?? [];
+  },
   async listDMs(): Promise<DirectConversation[]> {
     const res = await apiClient.get<DirectConversation[]>("/api/dms");
     return res.data ?? [];
+  },
+  async createSelfDM(): Promise<{ id: string }> {
+    const res = await apiClient.post<{ id: string }>("/api/dms/self");
+    return res.data;
   },
 
   async listDMUsers(): Promise<DirectUser[]> {
@@ -176,19 +202,68 @@ export const messageService = {
   async search(
     channelId: string,
     query: string,
-  ): Promise<MessageSearchResult[]> {
-    const res = await apiClient.get<MessageSearchResult[]>(
-      "/api/search/messages",
-      { params: { q: query, channel_id: channelId } },
-    );
-    return res.data;
+    cursor?: string,
+  ): Promise<MessageSearchPage> {
+    const res = await apiClient.get<
+      | MessageSearchResult[]
+      | {
+          results: MessageSearchResult[];
+          next_cursor?: string;
+          has_more?: boolean;
+        }
+    >("/api/search/messages", {
+      params: { q: query, channel_id: channelId, cursor },
+    });
+    if (Array.isArray(res.data)) {
+      return { results: res.data, hasMore: false };
+    }
+    return {
+      results: res.data.results ?? [],
+      nextCursor: res.data.next_cursor,
+      hasMore: Boolean(res.data.has_more && res.data.next_cursor),
+    };
   },
 
   async upload(file: File): Promise<UploadedAttachment> {
-    const form = new FormData();
-    form.append("file", file);
-    const res = await apiClient.post<UploadedAttachment>("/api/uploads", form);
-    return res.data;
+    try {
+      const presign = await apiClient.post<{
+        session_id: string;
+        upload_url: string;
+        filename: string;
+        content_type: string;
+        size_bytes: number;
+      }>("/api/uploads/presign", {
+        filename: file.name,
+        content_type: file.type || "application/octet-stream",
+        size_bytes: file.size,
+      });
+
+      const uploadURL = presign.data.upload_url;
+      const putResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+      if (!putResponse.ok) {
+        throw new Error(`upload PUT failed: ${putResponse.status}`);
+      }
+
+      const complete = await apiClient.post<UploadedAttachment>(
+        "/api/uploads/complete",
+        { session_id: presign.data.session_id },
+      );
+      return complete.data;
+    } catch (error) {
+      const form = new FormData();
+      form.append("file", file);
+      const fallback = await apiClient.post<UploadedAttachment>(
+        "/api/uploads",
+        form,
+      );
+      return fallback.data;
+    }
   },
 
   async send(

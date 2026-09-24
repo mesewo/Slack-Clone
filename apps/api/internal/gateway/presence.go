@@ -10,6 +10,7 @@ type UserStatus string
 const (
 	StatusActive UserStatus = "active"
 	StatusAway   UserStatus = "away"
+	StatusDND    UserStatus = "dnd"
 )
 
 // PresenceManagerInterface defines the operations a PresenceManager must support,

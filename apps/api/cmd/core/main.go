@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -40,10 +41,24 @@ import (
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 )
 
+func syncSearchDocument(ctx context.Context, queries *database.Queries, searchClient *searchpkg.Client, messageID uuid.UUID) error {
+	message, err := queries.GetMessageByID(ctx, messageID)
+	if err != nil {
+		return err
+	}
+	author := ""
+	if message.UserID.Valid {
+		if name, lookupErr := queries.GetUserDisplayName(ctx, message.UserID.UUID); lookupErr == nil {
+			author = name
+		}
+	}
+	return searchClient.IndexMessage(ctx, searchpkg.ToDocument(message, author))
+}
+
 func main() {
 	_ = godotenv.Load()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -118,19 +133,8 @@ func main() {
 		log.Printf("warning: Elasticsearch unavailable at startup: %v", err)
 	} else if messages, err := queries.ListMessagesForSearch(context.Background()); err != nil {
 		log.Printf("warning: failed to load messages for search backfill: %v", err)
-	} else {
-		for _, message := range messages {
-			author := ""
-			if message.AuthorName.Valid {
-				author = message.AuthorName.String
-			}
-			if err := searchClient.IndexMessage(context.Background(), searchpkg.ToDocument(database.Message{
-				ID: message.ID, ChannelID: message.ChannelID, UserID: message.UserID,
-				Content: message.Content, CreatedAt: message.CreatedAt,
-			}, author)); err != nil {
-				log.Printf("warning: failed to backfill message %s: %v", message.ID, err)
-			}
-		}
+	} else if err := searchClient.Reindex(context.Background(), messages); err != nil {
+		log.Printf("warning: failed to backfill search index: %v", err)
 	}
 	s3Endpoint := os.Getenv("S3_ENDPOINT")
 	if s3Endpoint == "" {
@@ -152,7 +156,39 @@ func main() {
 			log.Fatalf("failed to initialize object store bucket: %v", err)
 		}
 	}
-	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: ""}
+	thumbnailWorker := upload.NewThumbnailWorker(queries, objectStore, s3Bucket, 64, 2)
+	thumbnailWorker.Start(ctx)
+	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
+		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
+	} else if removed > 0 {
+		log.Printf("cleaned %d orphaned upload sessions", removed)
+	}
+	if err := thumbnailWorker.RequeueStale(context.Background()); err != nil {
+		log.Printf("warning: failed to requeue stale thumbnail jobs: %v", err)
+	}
+	if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
+		log.Printf("warning: failed to process due thumbnail retries: %v", err)
+	}
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
+					log.Printf("warning: failed to process due thumbnail retries: %v", err)
+				}
+				if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
+					log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
+				} else if removed > 0 {
+					log.Printf("cleaned %d orphaned upload sessions", removed)
+				}
+			}
+		}
+	}()
+	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", ThumbnailWorker: thumbnailWorker}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer redisClient.Close()
@@ -171,19 +207,19 @@ func main() {
 	defer messageConsumer.Close()
 	go messageConsumer.Run(ctx, "dedup:message_created:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.MessageCreatedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.MessageID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageCreated, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.MessageCreatedEvent
 			if err := json.Unmarshal(raw, &evt); err != nil {
 				return err
 			}
+			msgID, err := uuid.Parse(evt.MessageID)
+			if err != nil {
+				return err
+			}
 			log.Printf("[kafka] message.created: %s in channel %s by %s", evt.MessageID, evt.ChannelID, evt.UserID)
-			return nil
+			return syncSearchDocument(ctx, queries, searchClient, msgID)
 		},
 	)
 
@@ -191,19 +227,19 @@ func main() {
 	defer messageEditedConsumer.Close()
 	go messageEditedConsumer.Run(ctx, "dedup:message_edited:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.MessageEditedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.MessageID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageEdited, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.MessageEditedEvent
 			if err := json.Unmarshal(raw, &evt); err != nil {
 				return err
 			}
+			msgID, err := uuid.Parse(evt.MessageID)
+			if err != nil {
+				return err
+			}
 			log.Printf("[kafka] message.edited: %s in channel %s by %s", evt.MessageID, evt.ChannelID, evt.UserID)
-			return nil
+			return syncSearchDocument(ctx, queries, searchClient, msgID)
 		},
 	)
 
@@ -211,11 +247,7 @@ func main() {
 	defer userConsumer.Close()
 	go userConsumer.Run(ctx, "dedup:user_registered:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.UserRegisteredEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.UserID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicUserRegistered, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.UserRegisteredEvent
@@ -231,11 +263,7 @@ func main() {
 	defer messageDeletedConsumer.Close()
 	go messageDeletedConsumer.Run(ctx, "dedup:message_deleted:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.MessageDeletedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.MessageID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageDeleted, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.MessageDeletedEvent
@@ -243,7 +271,10 @@ func main() {
 				return err
 			}
 			log.Printf("[kafka] message.deleted: %s in channel %s", evt.MessageID, evt.ChannelID)
-			return nil
+			if searchClient == nil {
+				return nil
+			}
+			return searchClient.DeleteMessage(ctx, evt.MessageID)
 		},
 	)
 
@@ -251,11 +282,7 @@ func main() {
 	defer reactionAddedConsumer.Close()
 	go reactionAddedConsumer.Run(ctx, "dedup:reaction_added:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.ReactionAddedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.ReactionID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionAdded, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.ReactionAddedEvent
@@ -271,11 +298,7 @@ func main() {
 	defer reactionRemovedConsumer.Close()
 	go reactionRemovedConsumer.Run(ctx, "dedup:reaction_removed:",
 		func(raw []byte) (string, error) {
-			var evt kafkapkg.ReactionRemovedEvent
-			if err := json.Unmarshal(raw, &evt); err != nil {
-				return "", err
-			}
-			return evt.ReactionID, nil
+			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionRemoved, raw)
 		},
 		func(raw []byte) error {
 			var evt kafkapkg.ReactionRemovedEvent
@@ -305,6 +328,10 @@ func main() {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
+	httpAddr := os.Getenv("CORE_HTTP_ADDR")
+	if httpAddr == "" {
+		httpAddr = ":8080"
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
@@ -328,6 +355,7 @@ func main() {
 		r.Post("/api/notifications/{notificationID}/read", notificationHandler.MarkRead)
 		r.Post("/api/notifications/read-all", notificationHandler.MarkAllRead)
 		r.Get("/api/profile", productivityHandler.Profile)
+		r.Get("/api/threads", productivityHandler.Threads)
 		r.Patch("/api/profile", productivityHandler.UpdateProfile)
 		r.Get("/api/saved-messages", productivityHandler.Saved)
 		r.Post("/api/saved-messages/{messageID}", productivityHandler.Save)
@@ -340,15 +368,23 @@ func main() {
 
 		r.Post("/api/workspaces", workspaceHandler.CreateWorkspace)
 		r.Post("/api/workspaces/join", workspaceHandler.JoinWorkspace)
+		r.Post("/api/workspaces/{workspaceID}/invites", workspaceHandler.CreateInvite)
+		r.Post("/api/workspaces/join/{token}", workspaceHandler.AcceptInvite)
 		r.Get("/api/workspaces", workspaceHandler.ListWorkspaces)
+		r.Get("/api/workspaces/{workspaceID}/members", workspaceHandler.ListMembers)
+		r.Patch("/api/workspaces/{workspaceID}/members/{userID}", workspaceHandler.UpdateMemberRole)
+		r.Delete("/api/workspaces/{workspaceID}/members/{userID}", workspaceHandler.RemoveMember)
 
 		r.Post("/api/channels", channelHandler.CreateChannel)
 		r.Get("/api/channels", channelHandler.ListChannels)
 		r.Post("/api/channels/{channelID}/join", channelHandler.JoinChannel)
 		r.Post("/api/channels/{channelID}/members", channelHandler.AddMember)
+		r.Get("/api/channels/{channelID}/members", channelHandler.ListMembers)
+		r.Delete("/api/channels/{channelID}/members/{userID}", channelHandler.RemoveMember)
 		r.Post("/api/channels/{channelID}/read", channelHandler.MarkRead)
 		r.Get("/api/channels/{channelID}/unread", channelHandler.Unread)
 		r.Get("/api/dms", dmHandler.List)
+		r.Post("/api/dms/self", dmHandler.Self)
 		r.Get("/api/dms/users", dmHandler.Users)
 		r.Post("/api/dms", dmHandler.Create)
 		r.Get("/api/dms/{conversationID}/messages", dmHandler.ListMessages)
@@ -365,6 +401,8 @@ func main() {
 		r.Post("/api/channels/{channelID}/messages", messageHandler.SendMessage)
 		r.Get("/api/channels/{channelID}/messages", messageHandler.ListMessages)
 		r.Get("/api/search/messages", messageHandler.SearchMessages)
+		r.Post("/api/uploads/presign", uploadHandler.CreatePresignedUpload)
+		r.Post("/api/uploads/complete", uploadHandler.CompletePresignedUpload)
 		r.Post("/api/uploads", uploadHandler.Create)
 		r.Get("/api/uploads/{id}", uploadHandler.Serve)
 		r.Get("/api/uploads/{id}/{variant}", uploadHandler.Serve)
@@ -377,7 +415,7 @@ func main() {
 		r.Delete("/api/channels/{channelID}/messages/{messageID}/reactions", messageHandler.RemoveReaction)
 	})
 
-	httpServer := &http.Server{Addr: ":8080", Handler: r}
+	httpServer := &http.Server{Addr: httpAddr, Handler: r}
 
 	// This is the piece that was missing: something has to actually act on
 	// ctx being cancelled. Without this goroutine, capturing the interrupt
@@ -385,16 +423,24 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("shutting down...")
-		grpcServer.GracefulStop()
-
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
+		grpcStopped := make(chan struct{})
+		go func() {
+			grpcServer.GracefulStop()
+			close(grpcStopped)
+		}()
+		select {
+		case <-grpcStopped:
+		case <-shutdownCtx.Done():
+			grpcServer.Stop()
+		}
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
 			log.Printf("http shutdown error: %v", err)
 		}
 	}()
 
-	log.Println("core HTTP listening on :8080")
+	log.Printf("core HTTP listening on %s", httpAddr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("http server failed: %v", err)
 	}
@@ -409,7 +455,8 @@ func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapk
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			items, err := queries.ListPendingOutbox(ctx, 100)
+			claimToken := uuid.New()
+			items, err := queries.ClaimPendingOutbox(ctx, 100, claimToken)
 			if err != nil {
 				log.Printf("outbox read failed: %v", err)
 				continue
@@ -417,9 +464,10 @@ func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapk
 			for _, item := range items {
 				if err := producer.PublishRaw(ctx, item.Topic, item.EventKey, item.Payload); err != nil {
 					log.Printf("outbox publish failed for %s: %v", item.ID, err)
+					_ = queries.ReleaseOutboxClaim(ctx, item.ID, item.ClaimToken)
 					continue
 				}
-				if err := queries.MarkOutboxPublished(ctx, item.ID); err != nil {
+				if err := queries.MarkOutboxPublished(ctx, item.ID, item.ClaimToken); err != nil {
 					log.Printf("outbox ack failed for %s: %v", item.ID, err)
 				}
 			}

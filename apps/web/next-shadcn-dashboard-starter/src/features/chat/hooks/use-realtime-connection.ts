@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+} from "react";
 import { useChatStore } from "../utils/store";
 import type { ChatMessage } from "@/features/workspace/services/messageService";
 import { useNotificationStore } from "@/features/notifications/utils/store";
@@ -13,6 +20,28 @@ type WSEvent = {
 };
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8081/ws";
+
+const RealtimeTypingContext = createContext<(channelId: string) => void>(
+  () => undefined,
+);
+
+export function useRealtimeTyping() {
+  return useContext(RealtimeTypingContext);
+}
+
+export function RealtimeTypingProvider({
+  sendTyping,
+  children,
+}: {
+  sendTyping: (channelId: string) => void;
+  children: React.ReactNode;
+}) {
+  return createElement(
+    RealtimeTypingContext.Provider,
+    { value: sendTyping },
+    children,
+  );
+}
 
 // One connection for the whole session, not one per open room - the backend
 // (gateway.ServeWS) already subscribes this user to every channel they're a
@@ -34,6 +63,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
   const selectedThreadParentId = useChatStore((s) => s.selectedThreadParentId);
   const addNotification = useNotificationStore((s) => s.addNotification);
   const refreshDMs = useChatStore((s) => s.refreshDMs);
+  const syncConversation = useChatStore((s) => s.syncConversation);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,6 +97,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
 
       ws.onopen = () => {
         reconnectAttemptRef.current = 0;
+        void syncConversation().catch(() => undefined);
       };
 
       ws.onmessage = (event) => {
@@ -115,8 +146,14 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
                         "slack_last_conversation_id",
                         parsed.channel_id!,
                       );
-                      if (window.location.pathname !== "/dashboard/chat") {
-                        window.location.assign("/dashboard/chat");
+                      const workspaceId = window.localStorage.getItem(
+                        "active_workspace_id",
+                      );
+                      const target = parsed.channel_id!.startsWith("dm:")
+                        ? `/home/${workspaceId}/dms/${parsed.channel_id!.slice(3)}`
+                        : `/home/${workspaceId}/channels/${parsed.channel_id}`;
+                      if (!workspaceId || window.location.pathname !== target) {
+                        window.location.assign(workspaceId ? target : "/home");
                       } else {
                         useChatStore
                           .getState()
@@ -264,9 +301,10 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
       };
 
       ws.onclose = () => {
-        if (disposed) return;
+        if (disposed || wsRef.current !== ws) return;
         const attempt = reconnectAttemptRef.current++;
-        const delay = Math.min(30_000, 1_000 * 2 ** attempt);
+        const baseDelay = Math.min(30_000, 1_000 * 2 ** attempt);
+        const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
         reconnectTimerRef.current = setTimeout(connect, delay);
       };
       ws.onerror = () => ws.close();
@@ -291,6 +329,7 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
     updateReactionUI,
     addNotification,
     refreshDMs,
+    syncConversation,
   ]);
 
   return { sendTyping };

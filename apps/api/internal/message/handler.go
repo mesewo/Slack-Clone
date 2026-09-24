@@ -53,6 +53,14 @@ type ReactionRequest struct {
 	Emoji string `json:"emoji"`
 }
 
+func enqueueEvent(ctx context.Context, queries *database.Queries, topic, key string, event any) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+	return queries.EnqueueOutbox(ctx, topic, key, payload)
+}
+
 // MessageResponse adds the sender's display name to the raw DB row - the
 // frontend needs a name to render, and messages only store user_id.
 type MessageResponse struct {
@@ -62,11 +70,12 @@ type MessageResponse struct {
 }
 
 type AttachmentResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Filename    string    `json:"filename"`
-	ContentType string    `json:"content_type"`
-	SizeBytes   int64     `json:"size_bytes"`
-	URL         string    `json:"url"`
+	ID           uuid.UUID `json:"id"`
+	Filename     string    `json:"filename"`
+	ContentType  string    `json:"content_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	URL          string    `json:"url"`
+	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
 }
 
 func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID) []AttachmentResponse {
@@ -81,6 +90,9 @@ func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID
 			ID: attachment.ID, Filename: attachment.Filename,
 			ContentType: attachment.ContentType, SizeBytes: attachment.SizeBytes,
 			URL: "/api/uploads/" + attachment.ID.String(),
+		}
+		if attachment.ThumbnailPath.Valid && attachment.ThumbnailPath.String != "" {
+			item.ThumbnailURL = "/api/uploads/" + attachment.ID.String() + "/thumbnail"
 		}
 		result = append(result, item)
 	}
@@ -127,11 +139,19 @@ func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType 
 
 	var broadcastErr error
 	for attempt := 0; attempt < 3; attempt++ {
+		log.Printf("broadcasting channel=%s event=%s attempt=%d", channelID, eventType, attempt+1)
 		if _, broadcastErr = h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{ChannelId: channelID.String(), Payload: event}); broadcastErr == nil {
+			log.Printf("broadcast accepted channel=%s event=%s", channelID, eventType)
 			return
 		}
 		if attempt < 2 {
-			time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
+			timer := time.NewTimer(time.Duration(attempt+1) * 100 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			case <-timer.C:
+			}
 		}
 	}
 	log.Printf("failed to broadcast to gateway after retries: %v", broadcastErr)
@@ -190,15 +210,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msg, err := h.Queries.CreateMessage(r.Context(), database.CreateMessageParams{
-		ChannelID: channelID,
-		UserID:    uuid.NullUUID{UUID: userID, Valid: true},
-		Content:   req.Content,
-	})
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to send message")
-		return
-	}
 	attachmentIDs := make([]uuid.UUID, 0, len(req.AttachmentIDs))
 	for _, rawID := range req.AttachmentIDs {
 		attachmentID, parseErr := uuid.Parse(rawID)
@@ -208,13 +219,36 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		attachmentIDs = append(attachmentIDs, attachmentID)
 	}
-	if len(attachmentIDs) > 0 {
-		if err := h.Queries.AttachFilesToMessage(r.Context(), database.AttachFilesToMessageParams{
-			MessageID: uuid.NullUUID{UUID: msg.ID, Valid: true}, Column2: attachmentIDs, UserID: userID, ChannelID: channelID,
-		}); err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to attach files to message")
-			return
+
+	var msg database.Message
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		msg, err = txQueries.CreateMessage(r.Context(), database.CreateMessageParams{
+			ChannelID: channelID,
+			UserID:    uuid.NullUUID{UUID: userID, Valid: true},
+			Content:   req.Content,
+		})
+		if err != nil {
+			return err
 		}
+		if len(attachmentIDs) > 0 {
+			if err := txQueries.AttachFilesToMessage(r.Context(), database.AttachFilesToMessageParams{
+				MessageID: uuid.NullUUID{UUID: msg.ID, Valid: true}, Column2: attachmentIDs, UserID: userID, ChannelID: channelID,
+			}); err != nil {
+				return err
+			}
+		}
+		eventPayload, err := json.Marshal(kafka.MessageCreatedEvent{
+			EventID: msg.ID.String(), Version: 1, Source: "core", MessageID: msg.ID.String(), ChannelID: channelID.String(),
+			UserID: userID.String(), Content: msg.Content, CreatedAt: msg.CreatedAt,
+		})
+		if err != nil {
+			return err
+		}
+		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicMessageCreated, msg.ID.String(), eventPayload)
+	}); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to persist message")
+		return
 	}
 
 	authorName, err := h.Queries.GetUserDisplayName(r.Context(), userID)
@@ -226,7 +260,9 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if memberIDs, memberErr := h.Queries.ListChannelMemberIDs(r.Context(), channelID); memberErr == nil {
 		for _, memberID := range memberIDs {
 			if memberID != userID {
-				_ = h.Queries.CreateNotification(r.Context(), memberID, "New message in a channel", authorName+": "+msg.Content, "open-chat", channelID)
+				if enabled, prefErr := h.Queries.NotificationEnabled(r.Context(), memberID, "mentions"); prefErr == nil && enabled {
+					_ = h.Queries.CreateNotification(r.Context(), memberID, "New message in a channel", authorName+": "+msg.Content, "open-chat", channelID)
+				}
 			}
 		}
 	}
@@ -235,22 +271,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	// around, or a message could appear live but fail to persist.
 	if payload, err := json.Marshal(resp); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventMessageCreated, payload)
-	}
-
-	// Durable event log entry - separate from the live broadcast above.
-	// Best-effort: the message already persisted, so a Kafka hiccup here
-	// shouldn't fail the response.
-	if err := h.Kafka.Publish(r.Context(), kafka.TopicMessageCreated, channelID.String(), kafka.MessageCreatedEvent{
-		MessageID: msg.ID.String(),
-		ChannelID: channelID.String(),
-		UserID:    userID.String(),
-		Content:   msg.Content,
-		CreatedAt: msg.CreatedAt,
-	}); err != nil {
-		log.Printf("failed to publish message.created event: %v", err)
-		if payload, marshalErr := json.Marshal(kafka.MessageCreatedEvent{MessageID: msg.ID.String(), ChannelID: channelID.String(), UserID: userID.String(), Content: msg.Content, CreatedAt: msg.CreatedAt}); marshalErr == nil {
-			_ = h.Queries.EnqueueOutbox(r.Context(), kafka.TopicMessageCreated, msg.ID.String(), payload)
-		}
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -361,9 +381,23 @@ func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
 		return
 	}
-	results, err := h.Search.SearchMessages(r.Context(), query, []string{channelID.String()}, 50)
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed <= 0 || parsed > 200 {
+			writeJSONError(w, http.StatusBadRequest, "limit must be between 1 and 200")
+			return
+		}
+		limit = parsed
+	}
+	cursor := r.URL.Query().Get("cursor")
+	results, err := h.Search.SearchMessages(r.Context(), query, []string{channelID.String()}, limit, cursor)
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
+		return
+	}
+	if cursor != "" {
+		json.NewEncoder(w).Encode(map[string]any{"results": results, "next_cursor": cursor, "has_more": len(results) == limit})
 		return
 	}
 	json.NewEncoder(w).Encode(results)
@@ -485,11 +519,17 @@ func (h *Handler) EditMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.Queries.UpdateMessageContent(r.Context(), database.UpdateMessageContentParams{
-		ID:      messageID,
-		Content: req.Content,
-	})
-	if err != nil {
+	var updated database.Message
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		updated, err = txQueries.UpdateMessageContent(r.Context(), database.UpdateMessageContentParams{ID: messageID, Content: req.Content})
+		if err != nil {
+			return err
+		}
+		return enqueueEvent(r.Context(), txQueries, kafka.TopicMessageEdited, messageID.String(), kafka.MessageEditedEvent{
+			EventID: messageID.String(), Version: 1, Source: "core", MessageID: messageID.String(), ChannelID: channelID.String(), UserID: userID.String(), Content: updated.Content, UpdatedAt: time.Now(),
+		})
+	}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to update message")
 		return
 	}
@@ -506,16 +546,6 @@ func (h *Handler) EditMessage(w http.ResponseWriter, r *http.Request) {
 		Content:   updated.Content,
 	}); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventMessageEdited, payload)
-	}
-
-	if err := h.Kafka.Publish(r.Context(), kafka.TopicMessageEdited, messageID.String(), kafka.MessageEditedEvent{
-		MessageID: messageID.String(),
-		ChannelID: channelID.String(),
-		UserID:    userID.String(),
-		Content:   updated.Content,
-		UpdatedAt: time.Now(),
-	}); err != nil {
-		log.Printf("failed to publish message.edited event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -583,19 +613,19 @@ func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reply, err := h.Queries.CreateThreadReply(r.Context(), database.CreateThreadReplyParams{
-		ChannelID: channelID,
-		UserID:    uuid.NullUUID{UUID: userID, Valid: true},
-		Content:   req.Content,
-		ParentID:  uuid.NullUUID{UUID: parentID, Valid: true},
-	})
-	if err != nil {
+	var reply database.Message
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		reply, err = txQueries.CreateThreadReply(r.Context(), database.CreateThreadReplyParams{ChannelID: channelID, UserID: uuid.NullUUID{UUID: userID, Valid: true}, Content: req.Content, ParentID: uuid.NullUUID{UUID: parentID, Valid: true}})
+		if err != nil {
+			return err
+		}
+		if err := txQueries.IncrementReplyCount(r.Context(), parentID); err != nil {
+			return err
+		}
+		return enqueueEvent(r.Context(), txQueries, kafka.TopicMessageSent, reply.ID.String(), kafka.MessageCreatedEvent{EventID: reply.ID.String(), Version: 1, Source: "core", MessageID: reply.ID.String(), ChannelID: channelID.String(), UserID: userID.String(), Content: reply.Content, CreatedAt: reply.CreatedAt})
+	}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to create thread reply")
-		return
-	}
-
-	if err := h.Queries.IncrementReplyCount(r.Context(), parentID); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to update reply count")
 		return
 	}
 
@@ -604,6 +634,16 @@ func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 		authorName = ""
 	}
 	resp := MessageResponse{Message: reply, AuthorName: authorName}
+	if subscriberIDs, subscriberErr := h.Queries.ListThreadSubscriberIDs(r.Context(), parentID); subscriberErr == nil {
+		for _, subscriberID := range subscriberIDs {
+			if subscriberID == userID {
+				continue
+			}
+			if enabled, prefErr := h.Queries.NotificationEnabled(r.Context(), subscriberID, "thread_replies"); prefErr == nil && enabled {
+				_ = h.Queries.CreateNotification(r.Context(), subscriberID, "New thread reply", authorName+": "+reply.Content, "open-chat", channelID)
+			}
+		}
+	}
 
 	if payload, err := json.Marshal(resp); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventThreadReplyCreated, payload)
@@ -669,10 +709,12 @@ func (h *Handler) AddReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.UpsertMessageReaction(r.Context(), database.UpsertMessageReactionParams{
-		MessageID: messageID,
-		UserID:    userID,
-		Emoji:     req.Emoji,
+	reactionID := uuid.New()
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		if err := txQueries.UpsertMessageReaction(r.Context(), database.UpsertMessageReactionParams{MessageID: messageID, UserID: userID, Emoji: req.Emoji}); err != nil {
+			return err
+		}
+		return enqueueEvent(r.Context(), txQueries, kafka.TopicReactionAdded, reactionID.String(), kafka.ReactionAddedEvent{EventID: reactionID.String(), Version: 1, Source: "core", ReactionID: reactionID.String(), MessageID: messageID.String(), ChannelID: channelID.String(), UserID: userID.String(), Emoji: req.Emoji, CreatedAt: time.Now()})
 	}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to save reaction")
 		return
@@ -685,18 +727,6 @@ func (h *Handler) AddReaction(w http.ResponseWriter, r *http.Request) {
 		Emoji:     req.Emoji,
 	}); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventReactionAdded, payload)
-	}
-
-	// Publish durable event to Kafka for other services
-	if err := h.Kafka.Publish(r.Context(), kafka.TopicReactionAdded, messageID.String(), kafka.ReactionAddedEvent{
-		ReactionID: uuid.New().String(),
-		MessageID:  messageID.String(),
-		ChannelID:  channelID.String(),
-		UserID:     userID.String(),
-		Emoji:      req.Emoji,
-		CreatedAt:  time.Now(),
-	}); err != nil {
-		log.Printf("failed to publish reaction.added event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusCreated)
@@ -805,9 +835,12 @@ func (h *Handler) RemoveReaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.RemoveMessageReaction(r.Context(), database.RemoveMessageReactionParams{
-		MessageID: messageID,
-		UserID:    userID,
+	reactionID := uuid.New()
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		if err := txQueries.RemoveMessageReaction(r.Context(), database.RemoveMessageReactionParams{MessageID: messageID, UserID: userID}); err != nil {
+			return err
+		}
+		return enqueueEvent(r.Context(), txQueries, kafka.TopicReactionRemoved, reactionID.String(), kafka.ReactionRemovedEvent{EventID: reactionID.String(), Version: 1, Source: "core", ReactionID: reactionID.String(), MessageID: messageID.String(), ChannelID: channelID.String(), UserID: userID.String(), RemovedAt: time.Now()})
 	}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to remove reaction")
 		return
@@ -820,18 +853,6 @@ func (h *Handler) RemoveReaction(w http.ResponseWriter, r *http.Request) {
 		Emoji:     "",
 	}); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventReactionRemoved, payload)
-	}
-
-	// Publish durable event to Kafka for other services
-	if err := h.Kafka.Publish(r.Context(), kafka.TopicReactionRemoved, messageID.String(), kafka.ReactionRemovedEvent{
-		ReactionID: uuid.New().String(),
-		MessageID:  messageID.String(),
-		ChannelID:  channelID.String(),
-		UserID:     userID.String(),
-		Emoji:      "",
-		RemovedAt:  time.Now(),
-	}); err != nil {
-		log.Printf("failed to publish reaction.removed event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -890,7 +911,12 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.Queries.DeleteMessage(r.Context(), messageID); err != nil {
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		if err := txQueries.DeleteMessage(r.Context(), messageID); err != nil {
+			return err
+		}
+		return enqueueEvent(r.Context(), txQueries, kafka.TopicMessageDeleted, messageID.String(), kafka.MessageDeletedEvent{EventID: messageID.String(), Version: 1, Source: "core", MessageID: messageID.String(), ChannelID: channelID.String(), UserID: userID.String(), DeletedAt: time.Now()})
+	}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to delete message")
 		return
 	}
@@ -905,16 +931,6 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		MessageID: messageID.String(),
 	}); err == nil {
 		h.broadcast(r.Context(), channelID, events.EventMessageDeleted, payload)
-	}
-
-	// Publish durable event to Kafka for other services
-	if err := h.Kafka.Publish(r.Context(), kafka.TopicMessageDeleted, messageID.String(), kafka.MessageDeletedEvent{
-		MessageID: messageID.String(),
-		ChannelID: channelID.String(),
-		UserID:    userID.String(),
-		DeletedAt: time.Now(),
-	}); err != nil {
-		log.Printf("failed to publish message.deleted event: %v", err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)

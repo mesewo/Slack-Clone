@@ -14,6 +14,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
+	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 )
 
@@ -26,10 +27,11 @@ type CreateRequest struct {
 	UserID string `json:"user_id"`
 }
 type ConversationResponse struct {
-	ID               uuid.UUID `json:"id"`
-	OtherUserID      uuid.UUID `json:"other_user_id"`
-	OtherDisplayName string    `json:"other_display_name"`
-	OtherEmail       string    `json:"other_email"`
+	ID                  uuid.UUID `json:"id"`
+	OtherUserID         uuid.UUID `json:"other_user_id"`
+	OtherDisplayName    string    `json:"other_display_name"`
+	OtherEmail          string    `json:"other_email"`
+	OtherPresenceStatus string    `json:"other_presence_status"`
 }
 type MessageResponse struct {
 	ID             uuid.UUID            `json:"id"`
@@ -44,11 +46,12 @@ type MessageResponse struct {
 }
 
 type AttachmentResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Filename    string    `json:"filename"`
-	ContentType string    `json:"content_type"`
-	SizeBytes   int64     `json:"size_bytes"`
-	URL         string    `json:"url"`
+	ID           uuid.UUID `json:"id"`
+	Filename     string    `json:"filename"`
+	ContentType  string    `json:"content_type"`
+	SizeBytes    int64     `json:"size_bytes"`
+	URL          string    `json:"url"`
+	ThumbnailURL string    `json:"thumbnail_url,omitempty"`
 }
 
 type ReactionResponse struct {
@@ -64,7 +67,11 @@ func directAttachments(ctx context.Context, queries *database.Queries, messageID
 	}
 	result := make([]AttachmentResponse, 0, len(items))
 	for _, item := range items {
-		result = append(result, AttachmentResponse{ID: item.ID, Filename: item.Filename, ContentType: item.ContentType, SizeBytes: item.SizeBytes, URL: "/api/uploads/" + item.ID.String()})
+		attachment := AttachmentResponse{ID: item.ID, Filename: item.Filename, ContentType: item.ContentType, SizeBytes: item.SizeBytes, URL: "/api/uploads/" + item.ID.String()}
+		if item.ThumbnailPath.Valid && item.ThumbnailPath.String != "" {
+			attachment.ThumbnailURL = "/api/uploads/" + item.ID.String() + "/thumbnail"
+		}
+		result = append(result, attachment)
 	}
 	return result
 }
@@ -84,16 +91,46 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 401, "not authenticated")
 		return
 	}
+	selfID, err := h.Queries.CreateSelfDirectConversation(r.Context(), userID)
+	if err != nil {
+		writeError(w, 500, "failed to ensure self direct message")
+		return
+	}
 	items, err := h.Queries.ListDirectConversationsForUser(r.Context(), userID)
 	if err != nil {
 		writeError(w, 500, "failed to list direct messages")
 		return
 	}
-	result := make([]ConversationResponse, 0, len(items))
+	seen := make(map[uuid.UUID]struct{}, len(items)+1)
+	result := make([]ConversationResponse, 0, len(items)+1)
 	for _, item := range items {
-		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail})
+		if _, exists := seen[item.ID]; exists {
+			continue
+		}
+		seen[item.ID] = struct{}{}
+		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus})
+	}
+	if _, exists := seen[selfID]; !exists {
+		if self, userErr := h.Queries.GetUserByID(r.Context(), userID); userErr == nil {
+			seen[selfID] = struct{}{}
+			result = append(result, ConversationResponse{ID: selfID, OtherUserID: userID, OtherDisplayName: self.DisplayName, OtherEmail: self.Email, OtherPresenceStatus: self.PresenceStatus})
+		}
 	}
 	writeJSON(w, result)
+}
+
+func (h *Handler) Self(w http.ResponseWriter, r *http.Request) {
+	userID, ok := currentUser(r)
+	if !ok {
+		writeError(w, 401, "not authenticated")
+		return
+	}
+	conversationID, err := h.Queries.CreateSelfDirectConversation(r.Context(), userID)
+	if err != nil {
+		writeError(w, 500, "failed to create self direct message")
+		return
+	}
+	writeJSON(w, map[string]string{"id": conversationID.String()})
 }
 
 func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
@@ -203,11 +240,6 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "content is required")
 		return
 	}
-	message, err := h.Queries.CreateDirectMessage(r.Context(), database.CreateDirectMessageParams{ConversationID: conversationID, UserID: uuid.NullUUID{UUID: userID, Valid: true}, Content: req.Content})
-	if err != nil {
-		writeError(w, 500, "failed to send direct message")
-		return
-	}
 	attachmentIDs := make([]uuid.UUID, 0, len(req.AttachmentIDs))
 	for _, rawID := range req.AttachmentIDs {
 		id, parseErr := uuid.Parse(rawID)
@@ -217,18 +249,35 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		attachmentIDs = append(attachmentIDs, id)
 	}
-	if len(attachmentIDs) > 0 {
-		if err := h.Queries.AttachFilesToDirectMessage(r.Context(), message.ID, attachmentIDs, userID); err != nil {
-			writeError(w, 500, "failed to attach files")
-			return
+	var message database.DirectMessage
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		message, err = txQueries.CreateDirectMessage(r.Context(), database.CreateDirectMessageParams{ConversationID: conversationID, UserID: uuid.NullUUID{UUID: userID, Valid: true}, Content: req.Content})
+		if err != nil {
+			return err
 		}
+		if len(attachmentIDs) > 0 {
+			if err := txQueries.AttachFilesToDirectMessage(r.Context(), message.ID, attachmentIDs, userID); err != nil {
+				return err
+			}
+		}
+		payload, err := json.Marshal(kafka.MessageCreatedEvent{EventID: message.ID.String(), Version: 1, Source: "core", MessageID: message.ID.String(), ChannelID: "dm:" + conversationID.String(), UserID: userID.String(), Content: message.Content, CreatedAt: message.CreatedAt})
+		if err != nil {
+			return err
+		}
+		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicMessageCreated, message.ID.String(), payload)
+	}); err != nil {
+		writeError(w, 500, "failed to send direct message")
+		return
 	}
 	author, _ := h.Queries.GetUserDisplayName(r.Context(), userID)
 	response := MessageResponse{ID: message.ID, ConversationID: message.ConversationID, UserID: message.UserID, Content: message.Content, CreatedAt: message.CreatedAt.Format("2006-01-02T15:04:05.000Z07:00"), AuthorName: author, Attachments: directAttachments(r.Context(), h.Queries, message.ID)}
 	if memberIDs, memberErr := h.Queries.ListDirectConversationMemberIDs(r.Context(), conversationID); memberErr == nil {
 		for _, memberID := range memberIDs {
 			if memberID != userID {
-				_ = h.Queries.CreateNotification(r.Context(), memberID, "New direct message", author+": "+message.Content, "open-chat", conversationID)
+				if enabled, prefErr := h.Queries.NotificationEnabled(r.Context(), memberID, "direct_messages"); prefErr == nil && enabled {
+					_ = h.Queries.CreateNotification(r.Context(), memberID, "New direct message", author+": "+message.Content, "open-chat", conversationID)
+				}
 			}
 		}
 	}
@@ -307,8 +356,19 @@ func (h *Handler) CreateThreadReply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "content is required")
 		return
 	}
-	reply, err := h.Queries.CreateDirectThreadReply(r.Context(), conversationID, userID, parentID, strings.TrimSpace(req.Content))
-	if err != nil {
+	var reply database.DirectMessage
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		reply, err = txQueries.CreateDirectThreadReply(r.Context(), conversationID, userID, parentID, strings.TrimSpace(req.Content))
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(kafka.MessageCreatedEvent{EventID: reply.ID.String(), Version: 1, Source: "core", MessageID: reply.ID.String(), ChannelID: "dm:" + conversationID.String(), UserID: userID.String(), Content: reply.Content, CreatedAt: reply.CreatedAt})
+		if err != nil {
+			return err
+		}
+		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicMessageSent, reply.ID.String(), payload)
+	}); err != nil {
 		writeError(w, 500, "failed to create thread reply")
 		return
 	}

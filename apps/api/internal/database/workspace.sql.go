@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -64,6 +65,20 @@ func (q *Queries) AddWorkspaceMember(ctx context.Context, arg AddWorkspaceMember
 	return err
 }
 
+const consumeWorkspaceInvite = `-- name: ConsumeWorkspaceInvite :one
+UPDATE workspace_invites
+SET used_at = now()
+WHERE token_hash = $1 AND used_at IS NULL AND expires_at > now()
+RETURNING workspace_id
+`
+
+func (q *Queries) ConsumeWorkspaceInvite(ctx context.Context, tokenHash string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, consumeWorkspaceInvite, tokenHash)
+	var workspace_id uuid.UUID
+	err := row.Scan(&workspace_id)
+	return workspace_id, err
+}
+
 const createWorkspace = `-- name: CreateWorkspace :one
 INSERT INTO workspaces (name, slug)
 VALUES ($1, $2)
@@ -85,6 +100,28 @@ func (q *Queries) CreateWorkspace(ctx context.Context, arg CreateWorkspaceParams
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const createWorkspaceInvite = `-- name: CreateWorkspaceInvite :exec
+INSERT INTO workspace_invites (workspace_id, token_hash, expires_at, created_by)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateWorkspaceInviteParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	TokenHash   string    `json:"token_hash"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	CreatedBy   uuid.UUID `json:"created_by"`
+}
+
+func (q *Queries) CreateWorkspaceInvite(ctx context.Context, arg CreateWorkspaceInviteParams) error {
+	_, err := q.db.Exec(ctx, createWorkspaceInvite,
+		arg.WorkspaceID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.CreatedBy,
+	)
+	return err
 }
 
 const getWorkspaceBySlug = `-- name: GetWorkspaceBySlug :one
@@ -126,6 +163,54 @@ func (q *Queries) GetWorkspaceMember(ctx context.Context, arg GetWorkspaceMember
 	return i, err
 }
 
+const listWorkspaceMembers = `-- name: ListWorkspaceMembers :many
+SELECT wm.workspace_id, wm.user_id, wm.role, wm.joined_at,
+	u.email, u.display_name, u.presence_status
+FROM workspace_members wm
+JOIN users u ON u.id = wm.user_id
+WHERE wm.workspace_id = $1
+ORDER BY CASE wm.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END,
+		 u.display_name
+`
+
+type ListWorkspaceMembersRow struct {
+	WorkspaceID    uuid.UUID `json:"workspace_id"`
+	UserID         uuid.UUID `json:"user_id"`
+	Role           string    `json:"role"`
+	JoinedAt       time.Time `json:"joined_at"`
+	Email          string    `json:"email"`
+	DisplayName    string    `json:"display_name"`
+	PresenceStatus string    `json:"presence_status"`
+}
+
+func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListWorkspaceMembersRow, error) {
+	rows, err := q.db.Query(ctx, listWorkspaceMembers, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorkspaceMembersRow
+	for rows.Next() {
+		var i ListWorkspaceMembersRow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.UserID,
+			&i.Role,
+			&i.JoinedAt,
+			&i.Email,
+			&i.DisplayName,
+			&i.PresenceStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkspacesForUser = `-- name: ListWorkspacesForUser :many
 SELECT w.id, w.name, w.slug, w.created_at FROM workspaces w
 JOIN workspace_members wm ON wm.workspace_id = w.id
@@ -156,4 +241,44 @@ func (q *Queries) ListWorkspacesForUser(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeWorkspaceMember = `-- name: RemoveWorkspaceMember :exec
+DELETE FROM workspace_members
+WHERE workspace_id = $1 AND user_id = $2 AND role <> 'OWNER'
+`
+
+type RemoveWorkspaceMemberParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) RemoveWorkspaceMember(ctx context.Context, arg RemoveWorkspaceMemberParams) error {
+	_, err := q.db.Exec(ctx, removeWorkspaceMember, arg.WorkspaceID, arg.UserID)
+	return err
+}
+
+const updateWorkspaceMemberRole = `-- name: UpdateWorkspaceMemberRole :one
+UPDATE workspace_members
+SET role = $3
+WHERE workspace_id = $1 AND user_id = $2
+RETURNING workspace_id, user_id, role, joined_at
+`
+
+type UpdateWorkspaceMemberRoleParams struct {
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	Role        string    `json:"role"`
+}
+
+func (q *Queries) UpdateWorkspaceMemberRole(ctx context.Context, arg UpdateWorkspaceMemberRoleParams) (WorkspaceMember, error) {
+	row := q.db.QueryRow(ctx, updateWorkspaceMemberRole, arg.WorkspaceID, arg.UserID, arg.Role)
+	var i WorkspaceMember
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.UserID,
+		&i.Role,
+		&i.JoinedAt,
+	)
+	return i, err
 }

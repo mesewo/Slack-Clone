@@ -16,8 +16,8 @@ import (
 // share state.
 type RedisHub struct {
 	// In-memory per-instance state
-	clients  map[string]map[*Client]bool
-	mu       sync.RWMutex
+	clients map[string]map[*Client]bool
+	mu      sync.RWMutex
 
 	// Redis for shared state
 	redis *redis.Client
@@ -96,6 +96,7 @@ func (h *RedisHub) BroadcastToChannel(channelID string, message []byte) {
 		log.Printf("failed to get channel subscribers from Redis: %v", err)
 		return
 	}
+	log.Printf("redis broadcast channel=%s subscribers=%d local_users=%d", channelID, len(subscribers), len(h.clients))
 
 	// Send to each subscriber's connections on this instance
 	for _, userID := range subscribers {

@@ -3,7 +3,6 @@ package user
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -43,12 +42,19 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.Queries.CreateUser(r.Context(), database.CreateUserParams{
-		Email:        req.Email,
-		PasswordHash: hashed,
-		DisplayName:  req.DisplayName,
-	})
-	if err != nil {
+	var u database.User
+	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
+		var err error
+		u, err = txQueries.CreateUser(r.Context(), database.CreateUserParams{Email: req.Email, PasswordHash: hashed, DisplayName: req.DisplayName})
+		if err != nil {
+			return err
+		}
+		payload, err := json.Marshal(kafka.UserRegisteredEvent{EventID: u.ID.String(), Version: 1, Source: "core", UserID: u.ID.String(), Email: u.Email, DisplayName: u.DisplayName, RegisteredAt: u.CreatedAt})
+		if err != nil {
+			return err
+		}
+		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicUserRegistered, u.ID.String(), payload)
+	}); err != nil {
 		writeJSONError(w, http.StatusConflict, "email already exists or invalid data")
 		return
 	}
@@ -60,16 +66,6 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.Cookies.Set(w, token, h.Tokens.TTL())
-
-	// Durable event log entry, best-effort - registration already succeeded.
-	if err := h.Kafka.Publish(r.Context(), kafka.TopicUserRegistered, u.ID.String(), kafka.UserRegisteredEvent{
-		UserID:       u.ID.String(),
-		Email:        u.Email,
-		DisplayName:  u.DisplayName,
-		RegisteredAt: u.CreatedAt,
-	}); err != nil {
-		log.Printf("failed to publish user.registered event: %v", err)
-	}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"id": u.ID.String(), "email": u.Email})
