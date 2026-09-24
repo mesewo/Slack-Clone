@@ -120,7 +120,7 @@ export default function AppSidebar() {
                 }}
               >
                 <Icons.home className="size-6" />
-                <span className="sr-only">Home</span>
+                <span className="text-[10px] font-medium leading-none">Home</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -130,7 +130,7 @@ export default function AppSidebar() {
                 render={<Link href="/dms" aria-label="Direct messages" />}
               >
                 <Icons.chat className="size-6" />
-                <span className="sr-only">DMs</span>
+                <span className="text-[10px] font-medium leading-none">DMs</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -140,7 +140,7 @@ export default function AppSidebar() {
                 render={<Link href="/activity" aria-label="Activity" />}
               >
                 <Icons.activity className="size-6" />
-                <span className="sr-only">Activity</span>
+                <span className="text-[10px] font-medium leading-none">Activity</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -152,7 +152,7 @@ export default function AppSidebar() {
                 }
               >
                 <Icons.dots className="size-6" />
-                <span className="sr-only">More</span>
+                <span className="text-[10px] font-medium leading-none">More</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -166,7 +166,7 @@ export default function AppSidebar() {
                 }
               >
                 <Icons.settings className="size-6" />
-                <span className="sr-only">Admin</span>
+                <span className="text-[10px] font-medium leading-none">Admin</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -180,7 +180,7 @@ export default function AppSidebar() {
                   }
                 >
                   <Icons.add className="size-6" />
-                  <span className="sr-only">Create</span>
+                  <span className="text-[10px] font-medium leading-none">Create</span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
                   {[
@@ -306,8 +306,8 @@ export default function AppSidebar() {
             : "border-sidebar-border/70 bg-sidebar/90",
         )}
       >
-        <SidebarMenu className="gap-0">
-          <SidebarMenuItem className="flex items-center justify-center px-1">
+        <SidebarMenu className="gap-0.5">
+          <SidebarMenuItem className="flex items-center justify-center px-1 py-2">
             <ThemeModeToggle />
           </SidebarMenuItem>
           <SidebarMenuItem className="p-0">

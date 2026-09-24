@@ -395,6 +395,8 @@ func main() {
 		r.Get("/api/dms/{conversationID}/messages/{messageID}/reactions", dmHandler.ListReactions)
 		r.Post("/api/dms/{conversationID}/messages/{messageID}/reactions", dmHandler.AddReaction)
 		r.Delete("/api/dms/{conversationID}/messages/{messageID}/reactions", dmHandler.RemoveReaction)
+		r.Delete("/api/dms/{conversationID}/messages/{messageID}", dmHandler.DeleteMessage)
+		r.Patch("/api/dms/{conversationID}/messages/{messageID}", dmHandler.EditMessage) // if you add edit
 		r.Post("/api/dms/{conversationID}/read", dmHandler.MarkRead)
 		r.Get("/api/dms/{conversationID}/unread", dmHandler.Unread)
 

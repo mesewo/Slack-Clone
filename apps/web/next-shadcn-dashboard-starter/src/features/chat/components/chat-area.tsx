@@ -267,7 +267,7 @@ export function ChatArea({
           animate={shouldReduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
           exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
           transition={{ duration: 0.32, ease: "easeOut" }}
-          className="border-border/70 bg-background flex min-h-0 flex-col gap-2 overflow-hidden rounded-2xl border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
+          className="border-border/70 bg-background flex min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded-2xl border shadow-[0_1px_0_rgba(15,23,42,0.04),0_18px_40px_rgba(15,23,42,0.05)] sm:gap-2.5 lg:col-start-2 lg:col-end-3"
         >
           <ChatHeader
             conversation={conversation}

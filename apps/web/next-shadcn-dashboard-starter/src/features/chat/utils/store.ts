@@ -632,7 +632,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }));
 
     try {
-      await messageService.edit(channelId, messageId, content.trim());
+      if (channelId.startsWith("dm:")) {
+        await messageService.editDM(
+          channelId.slice(3),
+          messageId,
+          content.trim(),
+        );
+      } else {
+        await messageService.edit(channelId, messageId, content.trim());
+      }
     } catch (error) {
       set((state) => ({
         conversations: state.conversations.map((conversation) =>
@@ -666,7 +674,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     get().removeIncomingMessage(channelId, messageId);
     try {
-      await messageService.delete(channelId, messageId);
+      if (channelId.startsWith("dm:")) {
+        await messageService.deleteDM(channelId.slice(3), messageId);
+      } else {
+        await messageService.delete(channelId, messageId);
+      }
     } catch (error) {
       set((state) => ({
         conversations: state.conversations.map((item) =>

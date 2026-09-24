@@ -293,7 +293,19 @@ export const messageService = {
   async delete(channelId: string, messageId: string): Promise<void> {
     await apiClient.delete(`/api/channels/${channelId}/messages/${messageId}`);
   },
+  async editDM(
+    conversationId: string,
+    messageId: string,
+    content: string,
+  ): Promise<void> {
+    await apiClient.patch(`/api/dms/${conversationId}/messages/${messageId}`, {
+      content,
+    });
+  },
 
+  async deleteDM(conversationId: string, messageId: string): Promise<void> {
+    await apiClient.delete(`/api/dms/${conversationId}/messages/${messageId}`);
+  },
   async list(
     channelId: string,
     opts?: { before?: string; limit?: number },
