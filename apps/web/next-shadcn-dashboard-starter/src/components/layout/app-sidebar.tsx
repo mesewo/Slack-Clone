@@ -90,7 +90,7 @@ export default function AppSidebar() {
           isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
         )}
       >
-        <OrgSwitcher />
+        {/* <OrgSwitcher /> */}
       </SidebarHeader>
       <SidebarContent
         className={cn(
@@ -100,6 +100,17 @@ export default function AppSidebar() {
       >
         <SidebarGroup className="py-0">
           <SidebarMenu className="gap-0.5">
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                // tooltip="Home"
+                className={cn(
+                  "border-sidebar-border/70 px-2 py-3",
+                  isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
+                )}
+              >
+                  <OrgSwitcher />
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Home"
@@ -120,7 +131,9 @@ export default function AppSidebar() {
                 }}
               >
                 <Icons.home className="size-6" />
-                <span className="text-[10px] font-medium leading-none">Home</span>
+                <span className="text-[10px] font-medium leading-none">
+                  Home
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -130,7 +143,9 @@ export default function AppSidebar() {
                 render={<Link href="/dms" aria-label="Direct messages" />}
               >
                 <Icons.chat className="size-6" />
-                <span className="text-[10px] font-medium leading-none">DMs</span>
+                <span className="text-[10px] font-medium leading-none">
+                  DMs
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -140,7 +155,9 @@ export default function AppSidebar() {
                 render={<Link href="/activity" aria-label="Activity" />}
               >
                 <Icons.activity className="size-6" />
-                <span className="text-[10px] font-medium leading-none">Activity</span>
+                <span className="text-[10px] font-medium leading-none">
+                  Activity
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -152,7 +169,9 @@ export default function AppSidebar() {
                 }
               >
                 <Icons.dots className="size-6" />
-                <span className="text-[10px] font-medium leading-none">More</span>
+                <span className="text-[10px] font-medium leading-none">
+                  More
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -166,7 +185,9 @@ export default function AppSidebar() {
                 }
               >
                 <Icons.settings className="size-6" />
-                <span className="text-[10px] font-medium leading-none">Admin</span>
+                <span className="text-[10px] font-medium leading-none">
+                  Admin
+                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -180,7 +201,9 @@ export default function AppSidebar() {
                   }
                 >
                   <Icons.add className="size-6" />
-                  <span className="text-[10px] font-medium leading-none">Create</span>
+                  <span className="text-[10px] font-medium leading-none">
+                    Create
+                  </span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
                   {[

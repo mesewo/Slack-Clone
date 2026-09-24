@@ -430,10 +430,7 @@ export function MessageBubble({
               value={editDraft}
               onChange={(event) => setEditDraft(event.target.value)}
               rows={3}
-              className={cn(
-                "w-full resize-none rounded-lg border border-border bg-background/80 p-2 text-[0.875rem] text-foreground outline-none ring-0 placeholder:text-muted-foreground/70",
-                isUser && "bg-primary-foreground/10 text-primary-foreground",
-              )}
+              className="w-full resize-none rounded-lg border border-border bg-background p-2 text-[0.875rem] text-foreground outline-none ring-0 placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring/50"
             />
             <div className="flex justify-end gap-2">
               <button
@@ -548,7 +545,7 @@ export function MessageBubble({
               }}
               className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
             >
-              {isSaved ? "Remove saved item" : "Save for later"}
+              {isSaved ? "Remove saved item" : "Save this message for later"}
             </button>
             <button
               type="button"

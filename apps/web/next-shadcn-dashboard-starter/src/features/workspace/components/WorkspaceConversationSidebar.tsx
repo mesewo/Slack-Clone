@@ -10,6 +10,7 @@ export function WorkspaceConversationSidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const conversations = useChatStore((state) => state.conversations);
+  const workspace = useChatStore((state) => state.workspace);
   const selectedConversationId = useChatStore(
     (state) => state.selectedConversationId,
   );
@@ -48,6 +49,7 @@ export function WorkspaceConversationSidebar() {
       <ConversationList
         conversations={conversations}
         selectedId={selectedConversationId}
+        workspaceName={workspace?.name}
         onSelect={openConversation}
         onCreateChannel={async (name, type) => {
           await createChannel(name, type);

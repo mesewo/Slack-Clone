@@ -32,6 +32,7 @@ interface ConversationListProps {
   onSelect: (id: string) => void;
   onCreateChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
   onCreateDM: (userId: string) => Promise<void>;
+  workspaceName?: string;
   dmOnly?: boolean;
 }
 
@@ -41,6 +42,7 @@ export function ConversationList({
   onSelect,
   onCreateChannel,
   onCreateDM,
+  workspaceName,
   dmOnly = false,
 }: ConversationListProps) {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -108,20 +110,26 @@ export function ConversationList({
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--chat-sidebar-border)] pb-3">
         <div>
-          <p className="text-sm font-semibold tracking-tight">
-            {dmOnly ? "Direct messages" : "Workspace"}
-          </p>
-          <p className="text-[var(--chat-sidebar-muted)] text-xs">
-            {dmOnly ? "Private conversations" : "Your conversations"}
-          </p>
+          <button
+            type="button"
+            className="flex min-w-0 items-center gap-1 text-sm font-semibold tracking-tight hover:opacity-80"
+            aria-label="Workspace menu"
+          >
+            <span className="truncate">
+              {dmOnly ? "Direct messages" : workspaceName || "Workspace"}
+            </span>
+
+            {!dmOnly && <Icons.chevronDown className="size-3.5 shrink-0" />}
+          </button>
         </div>
         <div className="flex items-center gap-2">
-          <Badge
+          {/* <Badge
             variant="outline"
             className="border border-emerald-300/20 bg-emerald-400/10 px-2.5 py-1 text-[0.62rem] tracking-[0.2em] text-emerald-200 uppercase"
           >
-            Live
-          </Badge>
+            Setting
+          </Badge> */}
+            <Icons.settings className="size-5" />
           <button
             type="button"
             onClick={() =>
@@ -178,7 +186,7 @@ export function ConversationList({
       )}
 
       <label htmlFor="messenger-search" className="sr-only">
-        Search conversations
+        Find a conversation...
       </label>
       <div className="relative">
         <Icons.search
@@ -190,7 +198,7 @@ export function ConversationList({
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={dmOnly ? "Find a DM..." : "Search conversations"}
+          placeholder={dmOnly ? "Find a DM..." : "Find a conversation..."}
           className="border-[var(--chat-sidebar-border)] bg-slate-950/25 text-slate-100 placeholder:text-[var(--chat-sidebar-muted)] focus-visible:ring-slate-300/40 w-full rounded-xl pl-10 text-sm focus-visible:ring-2"
         />
       </div>
