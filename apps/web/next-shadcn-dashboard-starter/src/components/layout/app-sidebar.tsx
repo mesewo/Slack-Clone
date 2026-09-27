@@ -86,12 +86,11 @@ export default function AppSidebar() {
     >
       <SidebarHeader
         className={cn(
-          "border-sidebar-border/70 px-2 py-3",
+          "h-[70px] shrink-0 border-sidebar-border/70 px-2 py-3",
           isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
         )}
-      >
-        {/* <OrgSwitcher /> */}
-      </SidebarHeader>
+        aria-hidden="true"
+      />
       <SidebarContent
         className={cn(
           "flex-none gap-0 overflow-x-hidden px-1 pb-0 pt-1",
@@ -101,15 +100,7 @@ export default function AppSidebar() {
         <SidebarGroup className="py-0">
           <SidebarMenu className="gap-0.5">
             <SidebarMenuItem>
-              <SidebarMenuButton
-                // tooltip="Home"
-                className={cn(
-                  "border-sidebar-border/70 px-2 py-3",
-                  isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
-                )}
-              >
-                  <OrgSwitcher />
-              </SidebarMenuButton>
+              <OrgSwitcher />
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton

@@ -437,6 +437,7 @@ export function ChatArea({
             onTyping={onTyping}
             onSubmit={onSubmit}
             contactName={conversation.name}
+            isSelfDM={conversation.title === "Your space"}
             quickReplies={conversation.quickReplies}
             attachments={attachments}
             onAddAttachments={onAddAttachments}

@@ -195,6 +195,7 @@ interface MessageComposerProps {
   onTyping?: () => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   contactName: string;
+  isSelfDM?: boolean;
   quickReplies: string[];
   attachments: Attachment[];
   onAddAttachments: (files: FileList) => void;
