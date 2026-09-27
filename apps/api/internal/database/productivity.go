@@ -106,7 +106,7 @@ func (q *Queries) UpdateProfileSettings(ctx context.Context, userID uuid.UUID, d
 }
 
 func (q *Queries) ListSavedMessages(ctx context.Context, userID uuid.UUID) ([]SavedMessageRow, error) {
-	rows, err := q.db.Query(ctx, `SELECT s.message_id, m.channel_id, NULL::uuid, m.content, s.created_at FROM saved_messages s JOIN messages m ON m.id = s.message_id WHERE s.user_id = $1 UNION ALL SELECT s.message_id, NULL::uuid, d.conversation_id, d.content, s.created_at FROM saved_messages s JOIN direct_messages d ON d.id = s.message_id WHERE s.user_id = $1 ORDER BY created_at DESC`, userID, userID)
+	rows, err := q.db.Query(ctx, `SELECT s.message_id, m.channel_id, NULL::uuid, m.content, s.created_at FROM saved_messages s JOIN messages m ON m.id = s.message_id WHERE s.user_id = $1 UNION ALL SELECT s.message_id, NULL::uuid, d.conversation_id, d.content, s.created_at FROM saved_messages s JOIN direct_messages d ON d.id = s.message_id WHERE s.user_id = $1 ORDER BY created_at DESC`, userID)
 	if err != nil {
 		return nil, err
 	}

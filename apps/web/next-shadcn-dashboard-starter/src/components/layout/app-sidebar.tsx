@@ -59,6 +59,31 @@ export default function AppSidebar() {
     typeof window === "undefined"
       ? null
       : window.localStorage.getItem("active_workspace_id");
+  const openDirectMessages = () => {
+    if (!activeWorkspaceId) {
+      router.push("/workspaces");
+      return;
+    }
+    const last = window.localStorage.getItem(
+      `slack_last_conversation_id:${activeWorkspaceId}`,
+    );
+    router.push(
+      last?.startsWith("dm:")
+        ? `/home/${activeWorkspaceId}/dms/${last.slice(3)}`
+        : `/home/${activeWorkspaceId}?dmOnly=1`,
+    );
+  };
+  const resolveWorkspaceRoute = (url: string) => {
+    if (url === "/dashboard/saved")
+      return activeWorkspaceId
+        ? `/home/${activeWorkspaceId}/saved`
+        : "/workspaces";
+    if (url === "/dashboard/notifications")
+      return activeWorkspaceId
+        ? `/home/${activeWorkspaceId}/notifications`
+        : "/workspaces";
+    return url;
+  };
   const organization = null;
   const filteredGroups = useFilteredNavGroups(navGroups);
   const sidebarGroups = filteredGroups
@@ -135,7 +160,7 @@ export default function AppSidebar() {
               <SidebarMenuButton
                 tooltip="Direct messages"
                 className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
-                render={<Link href="/dms" aria-label="Direct messages" />}
+                onClick={openDirectMessages}
               >
                 <Icons.chat className="size-6" />
                 <span className="text-[10px] font-medium leading-none">
@@ -150,17 +175,12 @@ export default function AppSidebar() {
                   <span className="text-[10px] font-medium leading-none">More</span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
-                  <button type="button" onClick={() => { setMoreOpen(false); router.push("/activity"); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.activity className="size-5" />Activity</button>
+                  <button type="button" onClick={() => { setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/activity` : "/workspaces"); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.activity className="size-5" />Activity</button>
                   <button type="button" onClick={() => { setMoreOpen(false); window.dispatchEvent(new Event("workspace:open-files")); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.page className="size-5" />Files</button>
+                  <button type="button" onClick={() => { setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/saved` : "/workspaces"); }} className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm ${pathname === `/home/${activeWorkspaceId}/saved` ? "bg-accent" : "hover:bg-accent"}`}><Icons.bookmark className="size-5" />Saved items</button>
                   <button type="button" onClick={() => { setMoreOpen(false); toast.info("Agents & tools are coming soon."); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.settings className="size-5" />Agents &amp; tools</button>
                 </PopoverContent>
               </Popover>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Later" className="h-auto flex-col gap-1 py-2 [&_svg]:size-7" onClick={() => router.push("/dashboard/saved")} isActive={pathname === "/dashboard/saved"}>
-                <Icons.bookmark className="size-6" />
-                <span className="text-[10px] font-medium leading-none">Later</span>
-              </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
@@ -190,6 +210,7 @@ export default function AppSidebar() {
             <SidebarMenu>
               {group.items.map((item) => {
                 const Icon = item.icon ? Icons[item.icon] : Icons.logo;
+                const itemUrl = resolveWorkspaceRoute(item.url);
                 return item?.items && item?.items?.length > 0 ? (
                   <Collapsible
                     key={item.title}
@@ -200,7 +221,7 @@ export default function AppSidebar() {
                       render={
                         <SidebarMenuButton
                           tooltip={item.title}
-                          isActive={pathname === item.url}
+                          isActive={pathname === itemUrl}
                           className="group/collapsible hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                         />
                       }
@@ -211,33 +232,36 @@ export default function AppSidebar() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {item.items?.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarMenuSubButton
-                              render={
-                                <Link
-                                  href={subItem.url}
-                                  aria-label={subItem.title}
-                                />
-                              }
-                              onClick={() => router.push(subItem.url)}
-                              isActive={pathname === subItem.url}
-                              className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
-                            >
-                              <span>{subItem.title}</span>
-                            </SidebarMenuSubButton>
-                          </SidebarMenuSubItem>
-                        ))}
+                        {item.items?.map((subItem) => {
+                          const subItemUrl = resolveWorkspaceRoute(subItem.url);
+                          return (
+                            <SidebarMenuSubItem key={subItem.title}>
+                              <SidebarMenuSubButton
+                                render={
+                                  <Link
+                                    href={subItemUrl}
+                                    aria-label={subItem.title}
+                                  />
+                                }
+                                onClick={() => router.push(subItemUrl)}
+                                isActive={pathname === subItemUrl}
+                                className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                              >
+                                <span>{subItem.title}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </Collapsible>
                 ) : (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton
-                      render={<Link href={item.url} aria-label={item.title} />}
-                      onClick={() => router.push(item.url)}
+                      render={<Link href={itemUrl} aria-label={item.title} />}
+                      onClick={() => router.push(itemUrl)}
                       tooltip={item.title}
-                      isActive={pathname === item.url}
+                      isActive={pathname === itemUrl}
                       className="hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                     >
                       <Icon />
@@ -261,14 +285,14 @@ export default function AppSidebar() {
         <SidebarMenu className="gap-1">
           <SidebarMenuItem className="px-1 pt-2">
             <Popover open={createOpen} onOpenChange={setCreateOpen}>
-                <PopoverTrigger render={<SidebarMenuButton tooltip="Create" aria-label="Create" className="mx-auto flex size-10 items-center justify-center rounded-full bg-[#e01e5a] text-white shadow-md transition-colors hover:bg-[#c91850] dark:bg-[#d1d2d3] dark:text-[#1d1c1d] dark:hover:bg-[#bdbdbf]" />}>
+                <PopoverTrigger render={<SidebarMenuButton tooltip="Create" aria-label="Create" className="mx-auto flex size-10 items-center justify-center rounded-full bg-zinc-300 text-zinc-800 shadow-md transition-colors hover:bg-zinc-400 dark:bg-zinc-300 dark:text-zinc-800 dark:hover:bg-zinc-400" />}>
                 <span className="relative flex size-6 items-center justify-center">
                   <Icons.add className={cn("absolute size-6 transition-all duration-200", createOpen ? "rotate-45 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100")} />
                   <IconX className={cn("absolute size-6 transition-all duration-200", createOpen ? "rotate-0 scale-100 opacity-100" : "-rotate-45 scale-0 opacity-0")} />
                 </span>
               </PopoverTrigger>
               <PopoverContent side="right" align="end" className="w-64 p-1">
-                {[["Message", () => router.push("/dms")], ["Channel", () => router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}` : "/home")], ["Huddle", () => toast.info("Huddles are coming soon.")], ["Canvas", () => toast.info("Canvas is coming soon.")], ["List", () => toast.info("Lists are coming soon.")], ["Workflow", () => toast.info("Workflows are coming soon.")]].map(([label, action]) => <button key={label as string} type="button" onClick={action as () => void} className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm">{label as string}</button>)}
+                {[["Message", openDirectMessages], ["Channel", () => router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}` : "/home")], ["Huddle", () => toast.info("Huddles are coming soon.")], ["Canvas", () => toast.info("Canvas is coming soon.")], ["List", () => toast.info("Lists are coming soon.")], ["Workflow", () => toast.info("Workflows are coming soon.")]].map(([label, action]) => <button key={label as string} type="button" onClick={action as () => void} className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm">{label as string}</button>)}
                 <div className="border-border my-1 border-t" />
                 <button type="button" onClick={() => activeWorkspaceId ? router.push(`/home/${activeWorkspaceId}/admin`) : toast.info("Open a workspace first.")} className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm">Invite people</button>
               </PopoverContent>
@@ -321,7 +345,7 @@ export default function AppSidebar() {
                     Profile
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.push("/dashboard/notifications")}
+                    onClick={() => router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/notifications` : "/workspaces")}
                   >
                     <Icons.notification className="mr-2 h-4 w-4" />
                     Notifications

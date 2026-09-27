@@ -70,6 +70,9 @@ export function WorkspaceChatView() {
   }, [params.workspaceId]);
 
   const activeConversation = getActiveConversation();
+  const routeConversation = conversations.find(
+    (conversation) => conversation.id === selectedRouteId,
+  );
   const handleMarkRead = useCallback(() => {
     if (selectedConversationId)
       void markConversationRead(selectedConversationId);
@@ -130,6 +133,14 @@ export function WorkspaceChatView() {
   };
 
   if (!user) {
+    return (
+      <div className="flex h-full min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
+        Loading conversation...
+      </div>
+    );
+  }
+
+  if (selectedRouteId && (!routeConversation || selectedConversationId !== selectedRouteId)) {
     return (
       <div className="flex h-full min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
         Loading conversation...
