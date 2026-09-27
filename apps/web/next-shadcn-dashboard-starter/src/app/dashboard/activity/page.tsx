@@ -14,8 +14,9 @@ import {
 } from "@/features/notifications/utils/store";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useChatStore } from "@/features/chat/utils/store";
 
-type Tab = "all" | "dms" | "mentions" | "threads";
+type Tab = "all" | "dms" | "channels" | "threads";
 
 export default function ActivityPage() {
   const router = useRouter();
@@ -26,6 +27,10 @@ export default function ActivityPage() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const { notifications, load, markAsRead, markAllAsRead } =
     useNotificationStore();
+  const unreadMessageCount = useChatStore((state) =>
+    state.conversations.reduce((total, conversation) => total + (conversation.unread || 0), 0),
+  );
+  const caughtUp = unreadMessageCount === 0 && !notifications.some((item) => item.status === "unread");
 
   useEffect(() => {
     void load();
@@ -39,9 +44,10 @@ export default function ActivityPage() {
     const normalized = query.trim().toLowerCase();
     return notifications.filter((item) => {
       if (unreadOnly && item.status !== "unread") return false;
-      if (tab === "dms" && !item.title.toLowerCase().includes("direct"))
+      const title = item.title.toLowerCase();
+      if (tab === "dms" && !title.includes("direct message"))
         return false;
-      if (tab === "mentions" && !item.title.toLowerCase().includes("mention"))
+      if (tab === "channels" && (title.includes("direct message") || title.includes("thread")))
         return false;
       if (
         normalized &&
@@ -56,7 +62,7 @@ export default function ActivityPage() {
   const allCount = notifications.length + threads.length;
   const hasItems = isThreads
     ? threads.length > 0
-    : filteredNotifications.length > 0;
+    : filteredNotifications.length > 0 || (tab === "all" && threads.length > 0);
 
   const openNotification = (notification: Notification) => {
     markAsRead(notification.id);
@@ -78,24 +84,21 @@ export default function ActivityPage() {
               Workspace activity
             </p>
             <h1 className="mt-1 text-2xl font-semibold">Activity</h1>
+            {caughtUp && <p className="text-muted-foreground mt-2 flex items-center gap-2 text-sm"><Icons.circleCheck className="size-4 text-emerald-500" />All caught up</p>}
           </div>
           <Button variant="outline" size="sm" onClick={markAllAsRead}>
             Mark all as read
           </Button>
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-2">
-          {(["all", "dms", "mentions", "threads"] as Tab[]).map((value) => (
+          {(["all", "dms", "channels", "threads"] as Tab[]).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
               className={`rounded-full px-3 py-1.5 text-sm capitalize transition-colors ${tab === value ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-muted-foreground hover:bg-accent"}`}
             >
-              {value === "all"
-                ? `All (${allCount})`
-                : value === "threads"
-                  ? `Threads (${threads.length})`
-                  : value}
+              {value === "all" ? `All (${allCount})` : value === "dms" ? `DMs (${notifications.filter((item) => item.title.toLowerCase().includes("direct message")).length})` : value === "channels" ? `Channels (${notifications.filter((item) => !item.title.toLowerCase().includes("direct message") && !item.title.toLowerCase().includes("thread")).length})` : `Threads (${threads.length})`}
             </button>
           ))}
           <button
@@ -151,7 +154,7 @@ export default function ActivityPage() {
         >
           {!hasItems ? (
             <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
-              <Icons.circleCheck className="text-sidebar-primary size-10" />
+              <Icons.circleCheck className="size-10 text-emerald-500" />
               <p className="text-sm">All caught up</p>
               <p className="text-xs">There is nothing new here.</p>
             </div>
@@ -213,6 +216,22 @@ export default function ActivityPage() {
                       </p>
                     </span>
                   </div>
+                </button>
+              ))}
+              {tab === "all" && threads.map((thread) => (
+                <button
+                  key={`thread-${thread.kind}-${thread.id}`}
+                  type="button"
+                  onClick={() => {
+                    const workspaceId = window.localStorage.getItem("active_workspace_id");
+                    if (!workspaceId) { toast.info("Open a workspace first."); return; }
+                    router.push(thread.kind === "dm" ? `/home/${workspaceId}/dms/${thread.conversation_id}` : `/home/${workspaceId}/channels/${thread.channel_id}`);
+                  }}
+                  className="hover:bg-accent/40 w-full p-4 text-left"
+                >
+                  <p className="text-sm font-medium">{thread.title}</p>
+                  <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">{thread.preview}</p>
+                  <p className="text-muted-foreground mt-2 text-[0.7rem]">Thread · {thread.reply_count} replies</p>
                 </button>
               ))}
             </div>

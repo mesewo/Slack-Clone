@@ -13,7 +13,6 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { WorkspaceConversationSidebar } from "./WorkspaceConversationSidebar";
-import { WorkspacePanelSystem } from "./WorkspacePanelSystem";
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -60,7 +59,6 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         </Button>
         <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
       </main>
-      <WorkspacePanelSystem />
     </div>
   );
 }

@@ -14,13 +14,23 @@ import { CreateChannelDialog } from "./create-channel-dialog";
 import {
   messageService,
   type DirectUser,
+  type ThreadSummary,
 } from "@/features/workspace/services/messageService";
+import { useRouter, useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import { IconMessageCircle } from "@tabler/icons-react";
 import {
   workspaceService,
   type WorkspaceMember,
 } from "@/features/workspace/services/workspaceService";
-import { useParams } from "next/navigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+// import { useParams } from "next/navigation";
 
 interface ConversationListProps {
   conversations?: Conversation[];
@@ -51,6 +61,8 @@ export function ConversationList({
   const [starredOpen, setStarredOpen] = useState(true);
   const [starredHintVisible, setStarredHintVisible] = useState(true);
   const [directoriesOpen, setDirectoriesOpen] = useState(false);
+  const [threadsOpen, setThreadsOpen] = useState(false);
+  const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [directoryTab, setDirectoryTab] = useState("People");
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -65,6 +77,18 @@ export function ConversationList({
   );
   const [directorySearch, setDirectorySearch] = useState("");
   const [unreadsOnly, setUnreadsOnly] = useState(false);
+  const router = useRouter();
+  // const { logout } = useAuth();
+
+  const handleSignOut = async () => {
+    // try {
+      // await logout();
+      // await authService.logout();
+    // } finally {
+      localStorage.removeItem("active_workspace_id");
+      router.replace("/workspaces");
+    // }
+  };
 
   useEffect(() => {
     if (!dmOpen) return;
@@ -81,6 +105,17 @@ export function ConversationList({
       isMounted = false;
     };
   }, [dmOpen]);
+
+  useEffect(() => {
+    if (!threadsOpen) return;
+    let isMounted = true;
+    messageService.listThreads().then((items) => {
+      if (isMounted) setThreads(items);
+    }).catch(() => {
+      if (isMounted) setThreads([]);
+    });
+    return () => { isMounted = false; };
+  }, [threadsOpen]);
 
   useEffect(() => {
     if (!directoriesOpen || !workspaceId) return;
@@ -158,20 +193,44 @@ export function ConversationList({
     }
   };
 
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] pb-3">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] pb-3">
         <div>
-          <button
-            type="button"
-            className="flex min-w-0 items-center gap-1 text-sm font-semibold tracking-tight hover:opacity-80"
-            aria-label="Workspace menu"
-          >
-            <span className="truncate">
-              {dmOnly ? "Direct messages" : workspaceName || "Workspace"}
-            </span>
-            {!dmOnly && <Icons.chevronDown className="size-3.5 shrink-0" />}
-          </button>
+          {!dmOnly ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    type="button"
+                    className="flex min-w-0 items-center gap-1 text-sm font-semibold tracking-tight hover:opacity-80"
+                    aria-label="Workspace menu"
+                  >
+                    <span className="truncate">
+                      {workspaceName || "Workspace"}
+                    </span>
+                    <Icons.chevronDown className="size-3.5 shrink-0" />
+                  </button>
+                }
+              />
+
+              <DropdownMenuContent align="start" className="w-56">
+
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={handleSignOut}
+                >
+                  <Icons.logout className="mr-2 size-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="text-sm font-semibold tracking-tight">
+              Direct messages
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Icons.settings className="size-5 text-[var(--chat-sidebar-muted,#94a3b8)]" />
@@ -191,6 +250,7 @@ export function ConversationList({
         </div>
       </div>
 
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pt-3 pr-1">
       {createOpen && !dmOnly && (
         <form
           onSubmit={handleCreateChannelSubmit}
@@ -247,8 +307,11 @@ export function ConversationList({
         <nav aria-label="Conversation shortcuts" className="space-y-0.5">
           <button
             type="button"
+            onClick={() => setThreadsOpen((open) => !open)}
             className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--chat-sidebar-muted,#94a3b8)] transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white"
+            aria-expanded={threadsOpen}
           >
+            <Icons.chevronRight className={cn("size-3 shrink-0 transition-transform", threadsOpen && "rotate-90")} />
             <IconMessageCircle className="size-4 shrink-0" />
             <span>Threads</span>
           </button>
@@ -272,6 +335,48 @@ export function ConversationList({
         </nav>
       )}
 
+      {!dmOnly && threadsOpen && (
+        <div className="max-h-56 space-y-1 overflow-y-auto rounded-md pl-3" aria-label="Threads">
+          {threads.length ? threads.map((thread) => (
+            <button key={`${thread.kind}-${thread.id}`} type="button" onClick={() => {
+              if (!workspaceId) return;
+              router.push(thread.kind === "dm" ? `/home/${workspaceId}/dms/${thread.conversation_id}` : `/home/${workspaceId}/channels/${thread.channel_id}`);
+            }} className="hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] block w-full rounded-md px-2 py-2 text-left">
+              <span className="block truncate text-xs font-medium">{thread.title}</span>
+              <span className="text-[var(--chat-sidebar-muted,#94a3b8)] mt-0.5 block truncate text-[0.68rem]">{thread.preview}</span>
+            </button>
+          )) : <p className="text-[var(--chat-sidebar-muted,#94a3b8)] px-2 py-2 text-xs">No threads yet.</p>}
+        </div>
+      )}
+
+      {!dmOnly && directoriesOpen && (
+        <div className="space-y-2 rounded-lg border border-white/10 bg-slate-900/40 p-2" aria-label="Directories">
+          <div className="flex flex-wrap gap-1">
+            {["People", "Channels", "User groups", "External", "Invitations"].map((tab) => (
+              <button key={tab} type="button" onClick={() => setDirectoryTab(tab)} className={cn("rounded px-1.5 py-1 text-[0.65rem]", directoryTab === tab ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800")}>{tab}</button>
+            ))}
+          </div>
+          {directoryTab === "People" && <>
+            <Input value={directorySearch} onChange={(event) => setDirectorySearch(event.target.value)} placeholder="Search people" aria-label="Search people" className="h-8 text-xs" />
+            <div className="max-h-48 space-y-1 overflow-y-auto">
+              {directoryMembers.filter((member) => `${member.display_name || ""} ${member.email || ""}`.toLowerCase().includes(directorySearch.toLowerCase())).map((member) => (
+                <button key={member.user_id} type="button" onClick={() => { void onCreateDM(member.user_id).catch(() => undefined); setDirectoriesOpen(false); }} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800">
+                  <Avatar className="size-6 rounded-md"><AvatarFallback className="rounded-md bg-primary/15 text-[0.55rem] font-semibold text-primary">{(member.display_name || member.email || "U").slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
+                  <span className="min-w-0 flex-1 truncate text-xs">{member.display_name || member.email}</span>
+                  <PresenceIndicator state={member.presence_status === "active" ? "active" : "offline"} />
+                </button>
+              ))}
+              {directoryMembers.length === 0 && <p className="px-2 py-2 text-xs text-slate-400">No people found.</p>}
+            </div>
+          </>}
+          {directoryTab === "Channels" && <div className="max-h-48 space-y-1 overflow-y-auto">
+            {channels.map((conversation) => <button key={conversation.id} type="button" onClick={() => { onSelect(conversation.id); setDirectoriesOpen(false); }} className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-slate-800">{conversation.name}</button>)}
+            {channels.length === 0 && <p className="px-2 py-2 text-xs text-slate-400">No channels found.</p>}
+          </div>}
+          {!(["People", "Channels"].includes(directoryTab)) && <p className="px-2 py-2 text-xs text-slate-400">This directory is not available in this workspace yet.</p>}
+        </div>
+      )}
+
       {dmOnly && (
         <button
           type="button"
@@ -289,7 +394,7 @@ export function ConversationList({
       )}
 
       <div
-        className="flex-1 space-y-1 overflow-y-auto pr-1"
+        className="space-y-1"
         aria-label="Conversation list"
         role="list"
       >
@@ -536,113 +641,7 @@ export function ConversationList({
           </div>
         )}
 
-        {!dmOnly && directoriesOpen && (
-          <div className="space-y-2 rounded-lg border border-white/10 bg-slate-900/40 p-2">
-            <div className="flex flex-wrap gap-1">
-              {[
-                "People",
-                "Channels",
-                "User groups",
-                "External",
-                "Invitations",
-              ].map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setDirectoryTab(tab)}
-                  className={cn(
-                    "rounded px-1.5 py-1 text-[0.65rem]",
-                    directoryTab === tab
-                      ? "bg-slate-700 text-white"
-                      : "text-slate-400 hover:bg-slate-800",
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-            {directoryTab === "People" && (
-              <>
-                <Input
-                  value={directorySearch}
-                  onChange={(event) => setDirectorySearch(event.target.value)}
-                  placeholder="Search people"
-                  aria-label="Search people"
-                  className="h-8 text-xs"
-                />
-                <div className="max-h-40 space-y-1 overflow-y-auto">
-                  {directoryMembers
-                    .filter((member) =>
-                      `${member.display_name || ""} ${member.email || ""}`
-                        .toLowerCase()
-                        .includes(directorySearch.toLowerCase()),
-                    )
-                    .map((member) => (
-                      <button
-                        key={member.user_id}
-                        type="button"
-                        onClick={() => {
-                          onCreateDM(member.user_id).catch(() => undefined);
-                          setDirectoriesOpen(false);
-                        }}
-                        className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800"
-                      >
-                        <Avatar className="size-6 rounded-md">
-                          <AvatarFallback className="rounded-md bg-primary/15 text-[0.55rem] font-semibold text-primary">
-                            {(member.display_name || member.email || "U")
-                              .slice(0, 2)
-                              .toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="min-w-0 flex-1 truncate text-xs">
-                          {member.display_name || member.email}
-                        </span>
-                        <PresenceIndicator
-                          state={
-                            member.presence_status === "active"
-                              ? "active"
-                              : "offline"
-                          }
-                        />
-                      </button>
-                    ))}
-                  {directoryMembers.length === 0 && (
-                    <p className="px-2 py-2 text-xs text-slate-400">
-                      No people found.
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-            {directoryTab === "Channels" && (
-              <div className="max-h-40 space-y-1 overflow-y-auto">
-                {channels.map((conversation) => (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => {
-                      onSelect(conversation.id);
-                      setDirectoriesOpen(false);
-                    }}
-                    className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-slate-800"
-                  >
-                    {conversation.name}
-                  </button>
-                ))}
-                {channels.length === 0 && (
-                  <p className="px-2 py-2 text-xs text-slate-400">
-                    No channels found.
-                  </p>
-                )}
-              </div>
-            )}
-            {!["People", "Channels"].includes(directoryTab) && (
-              <p className="px-2 py-2 text-xs text-slate-400">
-                This directory is not available in this workspace yet.
-              </p>
-            )}
-          </div>
-        )}
+      </div>
       </div>
     </div>
   );
