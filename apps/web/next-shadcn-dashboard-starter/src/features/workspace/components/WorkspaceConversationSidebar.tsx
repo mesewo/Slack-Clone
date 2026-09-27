@@ -5,7 +5,13 @@ import { toast } from "sonner";
 import { ConversationList } from "@/features/chat/components/conversation-list";
 import { useChatStore } from "@/features/chat/utils/store";
 
-export function WorkspaceConversationSidebar() {
+export function WorkspaceConversationSidebar({
+  onNewMessage,
+  onBeforeNavigate,
+}: {
+  onNewMessage: () => void;
+  onBeforeNavigate: () => void;
+}) {
   const params = useParams<{ workspaceId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,6 +25,7 @@ export function WorkspaceConversationSidebar() {
   const createDM = useChatStore((state) => state.createDM);
 
   function openConversation(id: string) {
+    onBeforeNavigate();
     selectConversation(id);
     const historyKey = `slack_navigation_history:${params.workspaceId}`;
     const entry = {
@@ -37,11 +44,11 @@ export function WorkspaceConversationSidebar() {
         [entry, ...previous.filter((item) => item.id !== id)].slice(0, 12),
       ),
     );
-    router.push(
-      id.startsWith("dm:")
-        ? `/home/${params.workspaceId}/dms/${id.slice(3)}`
-        : `/home/${params.workspaceId}/channels/${id}`,
-    );
+    const dmOnly = searchParams.get("dmOnly") === "1";
+    const destination = id.startsWith("dm:")
+      ? `/home/${params.workspaceId}/dms/${id.slice(3)}`
+      : `/home/${params.workspaceId}/channels/${id}`;
+    router.push(id.startsWith("dm:") && dmOnly ? `${destination}?dmOnly=1` : destination);
   }
 
   return (
@@ -49,6 +56,7 @@ export function WorkspaceConversationSidebar() {
       <ConversationList
         conversations={conversations}
         selectedId={selectedConversationId}
+        onNewMessage={onNewMessage}
         workspaceName={workspace?.name}
         onSelect={openConversation}
         onCreateChannel={async (name, type) => {
@@ -56,7 +64,16 @@ export function WorkspaceConversationSidebar() {
           toast.success("Channel created");
         }}
         onCreateDM={async (userId) => {
-          await createDM(userId);
+          const id = await createDM(userId);
+          if (!id) {
+            toast.error("Failed to open direct message");
+            return;
+          }
+          onBeforeNavigate();
+          const dmOnly = searchParams.get("dmOnly") === "1";
+          router.push(
+            `/home/${params.workspaceId}/dms/${id.slice(3)}${dmOnly ? "?dmOnly=1" : ""}`,
+          );
           toast.success("Direct message opened");
         }}
         dmOnly={searchParams.get("dmOnly") === "1"}

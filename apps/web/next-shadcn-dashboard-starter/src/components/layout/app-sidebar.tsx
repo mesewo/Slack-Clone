@@ -283,7 +283,7 @@ export default function AppSidebar() {
         )}
       >
         <SidebarMenu className="gap-1">
-          <SidebarMenuItem className="px-1 pt-2">
+          <SidebarMenuItem className="px-1 pt-1.5 dark:pt-2">
             <Popover open={createOpen} onOpenChange={setCreateOpen}>
                 <PopoverTrigger render={<SidebarMenuButton tooltip="Create" aria-label="Create" className="mx-auto flex size-10 items-center justify-center rounded-full bg-zinc-300 text-zinc-800 shadow-md transition-colors hover:bg-zinc-400 dark:bg-zinc-300 dark:text-zinc-800 dark:hover:bg-zinc-400" />}>
                 <span className="relative flex size-6 items-center justify-center">
@@ -298,7 +298,7 @@ export default function AppSidebar() {
               </PopoverContent>
             </Popover>
           </SidebarMenuItem>
-          <SidebarMenuItem className="flex items-center justify-center px-1 py-3">
+          <SidebarMenuItem className="flex items-center justify-center px-1 py-1.5 dark:py-2.5">
             <ThemeModeToggle />
           </SidebarMenuItem>
           <SidebarMenuItem className="p-0">

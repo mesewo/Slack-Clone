@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 // Keep the theme's font variable contract without next/font/google's
 // Turbopack-only resolver, which is unavailable in this workspace install.
 export const fontVariables = cn(
+  "[--font-google-sans-flex:Arial,sans-serif]",
   "[--font-sans:'Lato',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif]",
   "[--font-mono:'Courier New',monospace]",
   "[--font-source-code-pro:'Courier New',monospace]",

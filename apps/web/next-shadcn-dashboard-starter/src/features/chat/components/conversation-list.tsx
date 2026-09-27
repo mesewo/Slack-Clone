@@ -30,12 +30,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 // import { useParams } from "next/navigation";
 
 interface ConversationListProps {
   conversations?: Conversation[];
   selectedId: string;
   onSelect: (id: string) => void;
+  onNewMessage: () => void;
   onCreateChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
   onCreateDM: (userId: string) => Promise<void>;
   workspaceName?: string;
@@ -46,6 +48,7 @@ export function ConversationList({
   conversations = [],
   selectedId,
   onSelect,
+  onNewMessage,
   onCreateChannel,
   onCreateDM,
   workspaceName,
@@ -233,19 +236,37 @@ export function ConversationList({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Icons.settings className="size-5 text-[var(--chat-sidebar-muted,#94a3b8)]" />
+          <Popover>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  className="rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white"
+                  aria-label="Sidebar settings"
+                  title="Sidebar settings"
+                />
+              }
+            >
+              <Icons.settings className="size-5" />
+            </PopoverTrigger>
+            <PopoverContent
+              side="bottom"
+              align="end"
+              className="w-60 gap-0 border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] bg-[var(--chat-sidebar-bg,#1a1d21)] p-1 text-slate-100"
+            >
+              <div className="rounded px-3 py-2 text-sm">Preferences</div>
+              <div className="rounded px-3 py-2 text-sm">Notification schedule</div>
+              <div className="rounded px-3 py-2 text-sm">Set a status</div>
+            </PopoverContent>
+          </Popover>
           <button
             type="button"
-            onClick={() =>
-              dmOnly
-                ? setDmOpen((open) => !open)
-                : setCreateOpen((open) => !open)
-            }
+            onClick={onNewMessage}
             className="rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white"
-            aria-label={dmOnly ? "Start direct message" : "Create channel"}
-            title={dmOnly ? "Start direct message" : "Create channel"}
+            aria-label="New message"
+            title="New message"
           >
-            <Icons.add className="size-4" />
+            <Icons.edit className="size-4" />
           </button>
         </div>
       </div>

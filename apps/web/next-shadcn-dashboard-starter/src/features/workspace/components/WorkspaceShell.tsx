@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { IconMenu2 } from "@tabler/icons-react";
 import { Icons } from "@/components/icons";
@@ -14,9 +14,11 @@ import {
 } from "@/components/ui/sheet";
 import { WorkspaceConversationSidebar } from "./WorkspaceConversationSidebar";
 import { useChatStore } from "@/features/chat/utils/store";
+import { NewMessageComposer } from "@/features/chat/components/new-message-composer";
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [newMessagePath, setNewMessagePath] = useState<string | null>(null);
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -24,6 +26,17 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     (state) => state.selectedConversationId,
   );
   const conversations = useChatStore((state) => state.conversations);
+  const newMessageOpen = newMessagePath === pathname;
+
+  useEffect(() => {
+    setNewMessagePath(null);
+  }, [pathname]);
+
+  const openNewMessage = () => {
+    setMobileOpen(false);
+    setNewMessagePath(pathname);
+  };
+  const closeNewMessage = () => setNewMessagePath(null);
 
   function closePanel() {
     const selected = conversations.find(
@@ -47,7 +60,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="bg-background relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
       <aside className="hidden h-full w-72 shrink-0 flex-col border-r border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] text-sidebar-foreground lg:flex">
-        <WorkspaceConversationSidebar />
+        <WorkspaceConversationSidebar
+          onNewMessage={openNewMessage}
+          onBeforeNavigate={closeNewMessage}
+        />
       </aside>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
@@ -58,11 +74,14 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             <SheetTitle>Workspace navigation</SheetTitle>
             <SheetDescription>Channels and direct messages</SheetDescription>
           </SheetHeader>
-          <WorkspaceConversationSidebar />
+          <WorkspaceConversationSidebar
+            onNewMessage={openNewMessage}
+            onBeforeNavigate={closeNewMessage}
+          />
         </SheetContent>
       </Sheet>
       <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        {pathname !== `/home/${workspaceId}` && <Button
+        {pathname !== `/home/${workspaceId}` && !newMessageOpen && <Button
           type="button"
           variant="ghost"
           size="icon"
@@ -83,7 +102,16 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         >
           <IconMenu2 className="size-5" />
         </Button>
-        <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
+        <div className="flex min-h-0 min-w-0 flex-1">
+          {newMessageOpen ? (
+            <NewMessageComposer
+              conversations={conversations}
+              onClose={() => setNewMessagePath(null)}
+            />
+          ) : (
+            children
+          )}
+        </div>
       </main>
     </div>
   );

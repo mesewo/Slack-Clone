@@ -176,7 +176,7 @@ type ChatState = {
   markConversationRead: (id: string) => Promise<void>;
   setDraft: (text: string) => void;
   createChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
-  createDM: (userId: string) => Promise<void>;
+  createDM: (userId: string) => Promise<string | null>;
   refreshDMs: () => Promise<void>;
   sendMessage: (text: string, attachmentIds?: string[]) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
@@ -524,7 +524,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const result = await messageService.createDM(userId);
     const dms = await messageService.listDMs();
     const dm = dms.find((item) => item.id === result.id);
-    if (!dm) return;
+    if (!dm) return null;
     const conversation = toDMConversation(dm, get().currentUserId ?? undefined);
     set((state) => ({
       conversations: [
@@ -534,6 +534,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       selectedConversationId: conversation.id,
     }));
     window.localStorage.setItem(lastConversationKey, conversation.id);
+    return conversation.id;
   },
 
   refreshDMs: async () => {
