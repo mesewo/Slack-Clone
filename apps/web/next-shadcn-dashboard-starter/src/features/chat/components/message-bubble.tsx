@@ -2,7 +2,7 @@
 
 import { Icons } from "@/components/icons";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { FilePreview } from "@/components/ui/file-preview";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -10,6 +10,7 @@ import { AlertModal } from "@/components/modal/alert-modal";
 import { toast } from "sonner";
 import type { Message } from "../utils/types";
 import { productivityService } from "@/features/workspace/services/productivityService";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const reactionChoices = Array.from(
   new Set([
@@ -242,7 +243,6 @@ export function MessageBubble({
   const [reactionSearch, setReactionSearch] = useState("");
   const [isSaved, setIsSaved] = useState(false);
   const [editDraft, setEditDraft] = useState(message.text);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const hasMention = /(^|\s)@\w+/.test(message.text);
 
@@ -281,18 +281,6 @@ export function MessageBubble({
   );
 
   const openActions = () => setMenuOpen(true);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const closeMenuOutside = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!menuRef.current?.contains(target)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener("pointerdown", closeMenuOutside);
-    return () => document.removeEventListener("pointerdown", closeMenuOutside);
-  }, [menuOpen]);
 
   const saveEdit = () => {
     const trimmed = editDraft.trim();
@@ -353,69 +341,84 @@ export function MessageBubble({
           >
             <Icons.chat className="size-3.5" />
           </button>
-          <button
-            type="button"
-            title="Add reaction"
-            aria-label="Add reaction"
-            aria-expanded={reactionPickerOpen}
-            onClick={() => setReactionPickerOpen((open) => !open)}
-            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
-          >
-            😊
-          </button>
-          <button
-            type="button"
-            title="More message actions"
-            aria-label="More message actions"
-            aria-expanded={menuOpen}
-            aria-haspopup="menu"
-            onClick={() => setMenuOpen((open) => !open)}
-            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
-          >
-            <Icons.ellipsis className="size-3.5" />
-          </button>
-        </div>
-        {reactionPickerOpen && (
-          <div className="border-border bg-popover absolute top-7 right-1 z-30 w-64 rounded-lg border p-2 shadow-xl">
-            <button
+          <Popover open={reactionPickerOpen} onOpenChange={setReactionPickerOpen}>
+            <PopoverTrigger render={<button
               type="button"
-              onClick={() => setReactionPickerOpen(false)}
-              className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
-              aria-label="Close reaction picker"
-            >
-              <Icons.close className="size-3" />
-            </button>
-            <input
-              value={reactionSearch}
-              onChange={(event) => setReactionSearch(event.target.value)}
-              placeholder="Search emoji"
-              aria-label="Search reaction emoji"
-              className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 text-xs outline-none"
-            />
-            <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto pr-1">
-              {reactionChoices
-                .filter((emoji) =>
-                  `${emoji} ${reactionAliases[emoji] || ""}`
-                    .toLowerCase()
-                    .includes(reactionSearch.toLowerCase()),
-                )
-                .map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    title={`React ${emoji}`}
-                    onClick={() => {
-                      onToggleReaction(message.id, emoji);
-                      setReactionPickerOpen(false);
-                    }}
-                    className="hover:bg-accent flex size-7 items-center justify-center rounded text-lg"
-                  >
-                    {emoji}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
+              title="Add reaction"
+              aria-label="Add reaction"
+              aria-expanded={reactionPickerOpen}
+              onClick={() => setReactionPickerOpen((open) => !open)}
+              className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
+            />}>
+            😊
+            </PopoverTrigger>
+            <PopoverContent side="top" align="end" sideOffset={8} className="w-64 p-2">
+              <button
+                type="button"
+                onClick={() => setReactionPickerOpen(false)}
+                className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
+                aria-label="Close reaction picker"
+              >
+                <Icons.close className="size-3" />
+              </button>
+              <input
+                value={reactionSearch}
+                onChange={(event) => setReactionSearch(event.target.value)}
+                placeholder="Search emoji"
+                aria-label="Search reaction emoji"
+                className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 text-xs outline-none"
+              />
+              <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto pr-1">
+                {reactionChoices
+                  .filter((emoji) =>
+                    `${emoji} ${reactionAliases[emoji] || ""}`
+                      .toLowerCase()
+                      .includes(reactionSearch.toLowerCase()),
+                  )
+                  .map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      title={`React ${emoji}`}
+                      onClick={() => {
+                        onToggleReaction(message.id, emoji);
+                        setReactionPickerOpen(false);
+                      }}
+                      className="hover:bg-accent flex size-7 items-center justify-center rounded text-lg"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            <PopoverTrigger render={<button
+              type="button"
+              title="More message actions"
+              aria-label="More message actions"
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              onClick={() => setMenuOpen((open) => !open)}
+              className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
+            />}>
+            <Icons.ellipsis className="size-3.5" />
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align={isUser ? "end" : "start"} sideOffset={6} className="min-w-52 p-1">
+              <div role="menu" className="flex min-w-52 flex-col text-popover-foreground">
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); toggleSaved(); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">{isSaved ? "Remove saved item" : "Save this message for later"}</button>
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenThread(message); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">{message.replyCount ? `${message.replyCount} replies` : "Reply in thread"}</button>
+                <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onToggleThreadSubscription?.(message.id); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Follow thread</button>
+                <button type="button" role="menuitem" onClick={() => { void navigator.clipboard?.writeText(message.text); setMenuOpen(false); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Copy text</button>
+                <button type="button" role="menuitem" onClick={() => { void navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}#message-${message.id}`); toast.success("Message link copied"); setMenuOpen(false); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Copy link to message</button>
+                {isUser && <>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setIsEditing(true); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Edit message</button>
+                  <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setIsDeleteDialogOpen(true); }} className="rounded-md px-3 py-2 text-left text-destructive hover:bg-destructive/10">Delete message</button>
+                </>}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
         {!compact && (
           <p className="text-foreground text-xs font-bold sm:text-sm">
             {message.author}{" "}
@@ -525,103 +528,6 @@ export function MessageBubble({
                 </button>
               );
             })}
-          </div>
-        )}
-        {menuOpen && (
-          <div
-            ref={menuRef}
-            role="menu"
-            className={cn(
-              "absolute z-20 mt-2 flex min-w-52 flex-col rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl",
-              isUser ? "right-0" : "left-0",
-            )}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                toggleSaved();
-              }}
-              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              {isSaved ? "Remove saved item" : "Save this message for later"}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenThread(message);
-              }}
-              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              {message.replyCount
-                ? `${message.replyCount} replies`
-                : "Reply in thread"}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setMenuOpen(false);
-                onToggleThreadSubscription?.(message.id);
-              }}
-              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              Follow thread
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                void navigator.clipboard?.writeText(message.text);
-                setMenuOpen(false);
-              }}
-              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              Copy text
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                void navigator.clipboard?.writeText(
-                  `${window.location.origin}${window.location.pathname}#message-${message.id}`,
-                );
-                toast.success("Message link copied");
-                setMenuOpen(false);
-              }}
-              className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-            >
-              Copy link to message
-            </button>
-            {isUser && (
-              <>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setIsEditing(true);
-                  }}
-                  className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-                >
-                  Edit message
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setIsDeleteDialogOpen(true);
-                  }}
-                  className="rounded-md px-3 py-2 text-left text-destructive hover:bg-destructive/10"
-                >
-                  Delete message
-                </button>
-              </>
-            )}
           </div>
         )}
       </div>

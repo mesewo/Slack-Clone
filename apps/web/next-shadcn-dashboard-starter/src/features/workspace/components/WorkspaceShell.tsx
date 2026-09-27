@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { IconMenu2 } from "@tabler/icons-react";
 import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,36 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { WorkspaceConversationSidebar } from "./WorkspaceConversationSidebar";
+import { useChatStore } from "@/features/chat/utils/store";
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const pathname = usePathname();
   const router = useRouter();
+  const selectedConversationId = useChatStore(
+    (state) => state.selectedConversationId,
+  );
+  const conversations = useChatStore((state) => state.conversations);
+
+  function closePanel() {
+    const selected = conversations.find(
+      (conversation) => conversation.id === selectedConversationId,
+    );
+    if (!selected) {
+      router.push(`/home/${workspaceId}`);
+      return;
+    }
+    const conversationPath =
+      selected.kind === "dm"
+        ? `/home/${workspaceId}/dms/${selected.dmId ?? selected.id.slice(3)}`
+        : `/home/${workspaceId}/channels/${selected.id}`;
+    router.push(
+      pathname === conversationPath
+        ? `/home/${workspaceId}`
+        : conversationPath,
+    );
+  }
 
   return (
     <div className="bg-background relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -36,17 +62,17 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         </SheetContent>
       </Sheet>
       <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        <Button
+        {pathname !== `/home/${workspaceId}` && <Button
           type="button"
           variant="ghost"
           size="icon"
           className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground"
-          aria-label="Close workspace"
-          title="Close workspace"
-          onClick={() => router.push("/workspaces")}
+          aria-label="Close panel"
+          title="Close panel"
+          onClick={closePanel}
         >
           <Icons.close className="size-4" />
-        </Button>
+        </Button>}
         <Button
           type="button"
           variant="ghost"
