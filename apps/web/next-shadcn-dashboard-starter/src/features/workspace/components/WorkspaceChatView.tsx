@@ -13,6 +13,7 @@ import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 import { useRealtimeTyping } from "@/features/chat/hooks/use-realtime-connection";
 import { AppLoader } from "@/components/ui/app-loader";
+import { IconMessageCircle } from "@tabler/icons-react";
 
 export function WorkspaceChatView() {
   const { user } = useAuth();
@@ -145,15 +146,20 @@ export function WorkspaceChatView() {
 
   if (!activeConversation) {
     return (
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black text-white">
-        <div className="relative flex flex-col items-center gap-5 text-center">
-          <div className="absolute inset-0 -z-0 animate-pulse rounded-full bg-purple-700/20 blur-3xl" />
-          <div className="z-10 flex size-20 items-center justify-center rounded-3xl border border-purple-400/30 bg-purple-950/70 shadow-[0_0_60px_rgba(97,31,105,0.45)]">
-            <span className="size-3 animate-ping rounded-full bg-purple-300" />
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-background text-foreground">
+        <div className="flex flex-col items-center gap-5 text-center">
+          <div className="relative flex size-36 items-center justify-center [perspective:600px]">
+            <span className="absolute left-4 top-3 size-20 -rotate-12 rounded-[1.6rem] bg-gradient-to-br from-violet-200 via-fuchsia-400 to-violet-800 shadow-[0_22px_35px_rgba(76,29,149,0.4),inset_0_2px_3px_rgba(255,255,255,0.7)] ring-1 ring-white/30 motion-safe:animate-[bounce_4s_ease-in-out_infinite]" />
+            <span className="absolute right-3 bottom-3 flex size-14 rotate-[12deg] items-center justify-center rounded-[1.2rem] bg-gradient-to-br from-sky-200 via-cyan-400 to-blue-700 shadow-[0_16px_26px_rgba(30,64,175,0.35),inset_0_2px_3px_rgba(255,255,255,0.75)] ring-1 ring-white/40 motion-safe:animate-[bounce_4.5s_ease-in-out_infinite]">
+              <IconMessageCircle className="size-7 text-white drop-shadow" strokeWidth={2.5} />
+            </span>
+            <span className="relative -translate-x-2 -translate-y-1 flex size-[4.5rem] -rotate-6 items-center justify-center rounded-[1.5rem] border border-white/60 bg-gradient-to-br from-fuchsia-300 via-purple-500 to-indigo-800 text-white shadow-[0_24px_38px_rgba(88,28,135,0.45),inset_0_3px_5px_rgba(255,255,255,0.55)] ring-1 ring-black/10 motion-safe:animate-[bounce_3.5s_ease-in-out_infinite]">
+              <IconMessageCircle className="size-9 drop-shadow-sm" strokeWidth={2.2} />
+            </span>
           </div>
-          <div className="z-10">
+          <div>
             <h1 className="text-xl font-semibold">Open to chat</h1>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="text-muted-foreground mt-1 text-sm">
               Choose a channel or direct message from the sidebar.
             </p>
           </div>

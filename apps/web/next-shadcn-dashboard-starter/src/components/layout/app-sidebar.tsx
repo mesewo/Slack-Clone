@@ -53,12 +53,22 @@ export default function AppSidebar() {
   const { isOpen } = useMediaQuery();
   const router = useRouter();
   const { user } = useAuth();
+  const routeWorkspaceId = pathname.match(/^\/home\/([^/]+)/)?.[1] ?? null;
   const [createOpen, setCreateOpen] = React.useState(false);
   const [moreOpen, setMoreOpen] = React.useState(false);
   const activeWorkspaceId =
     typeof window === "undefined"
       ? null
       : window.localStorage.getItem("active_workspace_id");
+  const activityPath = routeWorkspaceId || activeWorkspaceId
+    ? `/home/${routeWorkspaceId || activeWorkspaceId}/activity`
+    : "/workspaces";
+  // Determine selection from the URL so server and first client render agree;
+  // localStorage is only available on the client and can otherwise cause a
+  // hydration mismatch on workspace routes.
+  const isActivityActive = Boolean(
+    routeWorkspaceId && pathname === `/home/${routeWorkspaceId}/activity`,
+  );
   const openDirectMessages = () => {
     if (!activeWorkspaceId) {
       router.push("/workspaces");
@@ -169,13 +179,26 @@ export default function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
+              <SidebarMenuButton
+                tooltip="Activity"
+                isActive={isActivityActive}
+                aria-current={isActivityActive ? "page" : undefined}
+                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                onClick={() => router.push(activityPath)}
+              >
+                <span className={cn("flex size-10 items-center justify-center rounded-lg transition-colors", isActivityActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "group-hover/menu-button:bg-sidebar-accent/80")}>
+                  <Icons.activity className="size-6" />
+                </span>
+                <span className="text-[10px] font-medium leading-none">Activity</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
               <Popover open={moreOpen} onOpenChange={setMoreOpen}>
                 <PopoverTrigger render={<SidebarMenuButton tooltip="More" aria-label="More" className="h-auto flex-col gap-1 py-2 [&_svg]:size-7" />}>
                   <Icons.dots className="size-6" />
                   <span className="text-[10px] font-medium leading-none">More</span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
-                  <button type="button" onClick={() => { setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/activity` : "/workspaces"); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.activity className="size-5" />Activity</button>
                   <button type="button" onClick={() => { setMoreOpen(false); window.dispatchEvent(new Event("workspace:open-files")); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.page className="size-5" />Files</button>
                   <button type="button" onClick={() => { setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/saved` : "/workspaces"); }} className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm ${pathname === `/home/${activeWorkspaceId}/saved` ? "bg-accent" : "hover:bg-accent"}`}><Icons.bookmark className="size-5" />Saved items</button>
                   <button type="button" onClick={() => { setMoreOpen(false); toast.info("Agents & tools are coming soon."); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.settings className="size-5" />Agents &amp; tools</button>

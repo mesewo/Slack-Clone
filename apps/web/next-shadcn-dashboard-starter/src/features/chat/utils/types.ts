@@ -41,4 +41,7 @@ export type Conversation = {
   dmId?: string;
   otherUserId?: string;
   customStatus?: string | null;
+  lastMessage?: string;
+  lastMessageAt?: string;
+  lastMessageIsMine?: boolean;
 };

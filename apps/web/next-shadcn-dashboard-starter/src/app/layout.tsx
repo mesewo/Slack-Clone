@@ -20,13 +20,13 @@ export const metadata: Metadata = {
     ? { metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL) }
     : {}),
   title: {
-    default: "Slack Clone - Next.js Admin Dashboard Template",
+    default: "Slack Clone",
     template: "%s | Slack Clone",
   },
   description:
     "This is a slack clone that I personally worked on to make it appear and function as close as possible.",
   openGraph: {
-    title: "Slack Clone - Next.js Admin Dashboard Template",
+    title: "Slack Clone",
     description:
       "This is a slack clone that I personally worked on to make it appear and function as close as possible.",
     siteName: "Slack Clone",
@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Slack Clone - Next.js Admin Dashboard Template",
+    title: "Slack Clone",
     description:
       "This is a slack clone that I personally worked on to make it appear and function as close as possible.",
     images: ["/shadcn-dashboard.png"],

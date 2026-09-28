@@ -40,3 +40,10 @@ coverage.out
 .idea/
 *.swp
 *.swo
+**/bin/
+*.exe
+*.exe~
+*.test
+**/test-results/
+**/playwright-report/
+**/data/uploads/

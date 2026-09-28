@@ -143,6 +143,9 @@ function toDMConversation(
     dmId: dm.id,
     otherUserId: dm.other_user_id,
     customStatus: dm.other_presence_status || null,
+    lastMessage: dm.last_message || "",
+    lastMessageAt: dm.last_message_at,
+    lastMessageIsMine: dm.last_message_is_mine,
   };
 }
 

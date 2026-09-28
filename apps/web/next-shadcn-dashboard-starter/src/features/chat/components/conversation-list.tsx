@@ -12,6 +12,7 @@ import { useChatStore } from "../utils/store";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { CreateChannelDialog } from "./create-channel-dialog";
 import { usePathname, useRouter, useParams } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import {
   IconHash,
   IconMessage,
@@ -61,7 +62,7 @@ export function ConversationList({
   const [unreadsOnly, setUnreadsOnly] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  // const { logout } = useAuth();
+  const { user } = useAuth();
 
   const handleSignOut = async () => {
     // try {
@@ -230,15 +231,15 @@ export function ConversationList({
         <button
           type="button"
           onClick={() => setUnreadsOnly((value) => !value)}
-          className={cn(
-            "rounded-lg border border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] px-3 py-1.5 text-left text-xs font-medium transition-colors",
-            unreadsOnly
-              ? "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white"
-              : "text-[var(--chat-sidebar-muted,#94a3b8)] hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white",
-          )}
-          aria-pressed={unreadsOnly}
+          role="switch"
+          aria-checked={unreadsOnly}
+          aria-label="Show unread direct messages only"
+          className="flex items-center gap-2 rounded-md px-1 py-1 text-left text-xs text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
         >
-          {unreadsOnly ? "Unread only" : "Unreads"}
+          <span>Unreads</span>
+          <span className={cn("flex h-5 w-9 items-center rounded-full p-0.5 transition-colors", unreadsOnly ? "bg-emerald-500" : "bg-white/20")}>
+            <span className={cn("size-4 rounded-full bg-white shadow-sm transition-transform", unreadsOnly && "translate-x-4")} />
+          </span>
         </button>
       )}
 
@@ -252,15 +253,13 @@ export function ConversationList({
             <button
               type="button"
               onClick={() => setChannelsOpen((open) => !open)}
-              className="group/row flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
+              className="group/row flex items-center gap-1 text-sm font-medium text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
               aria-expanded={channelsOpen}
             >
               <SectionIcon icon={IconHash} open={channelsOpen} />
               Channels
             </button>
-            <span className="text-[0.65rem] text-[var(--chat-sidebar-muted,#94a3b8)]">
-              {channels.length}
-            </span>
+            <span className="flex-1" />
             <CreateChannelDialog
               existingChannelNames={channels.map((channel) => channel.name)}
               onCreateChannel={onCreateChannel}
@@ -282,9 +281,7 @@ export function ConversationList({
           channelsOpen &&
           channels.map((conversation) => {
             const isActive = conversation.id === selectedId;
-            const lastMessage = conversation.messages?.length
-              ? conversation.messages[conversation.messages.length - 1]
-              : null;
+            const isUnread = (conversation.unread || 0) > 0;
 
             return (
               <motion.button
@@ -293,75 +290,21 @@ export function ConversationList({
                 onClick={() => onSelect(conversation.id)}
                 aria-current={isActive ? "true" : undefined}
                 className={cn(
-                  "group relative flex w-full items-start gap-3 rounded-lg border border-transparent px-2.5 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/50",
+                  "group relative flex h-7 w-full items-center gap-2 rounded-md border border-transparent px-2 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/50",
                   isActive
                     ? "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white"
                     : "text-slate-200 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
                 )}
                 role="listitem"
               >
-                <div className="relative shrink-0">
-                  <Avatar className="h-9 w-9 rounded-lg border border-white/10 bg-slate-700 text-slate-100">
-                    <AvatarFallback className="rounded-lg bg-slate-700 text-xs font-semibold text-slate-100">
-                      {conversation.initials ||
-                        conversation.name?.slice(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <PresenceIndicator
-                    state={
-                      conversation.kind === "channel"
-                        ? conversation.status === "online"
-                          ? "active"
-                          : "offline"
-                        : conversation.otherUserId
-                          ? userPresence[conversation.otherUserId] || "offline"
-                          : "offline"
-                    }
-                    customStatus={conversation.customStatus}
-                    testId={`presence-dot-${conversation.id}`}
-                    className="absolute bottom-0 right-0"
-                  />
-                </div>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={cn(
-                          "text-sm truncate",
-                          isActive
-                            ? "font-semibold text-white"
-                            : "font-medium text-slate-200",
-                        )}
-                      >
-                        {conversation.name}
-                      </p>
-                      {conversation.title && (
-                        <p className="truncate text-xs text-[var(--chat-sidebar-muted,#94a3b8)]">
-                          {conversation.title}
-                        </p>
-                      )}
-                    </div>
-                    {lastMessage?.timestamp && (
-                      <span className="shrink-0 text-[0.62rem] text-[var(--chat-sidebar-muted,#94a3b8)]">
-                        {lastMessage.timestamp}
-                      </span>
-                    )}
-                  </div>
-                  {lastMessage ? (
-                    <p className="line-clamp-2 text-xs text-[var(--chat-sidebar-muted,#94a3b8)]">
-                      {lastMessage.author ? `${lastMessage.author}: ` : ""}
-                      {lastMessage.text}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-[var(--chat-sidebar-muted,#94a3b8)]">
-                      No messages yet
-                    </p>
-                  )}
-                </div>
-                {(conversation.unread || 0) > 0 && (
+                <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />
+                <span className={cn("min-w-0 flex-1 truncate", isUnread ? "font-bold" : "font-normal")}>
+                  {conversation.name.replace(/^#\s*/, "")}
+                </span>
+                {isUnread && (
                   <span
                     data-testid={`unread-badge-${conversation.id}`}
-                    className="ml-auto inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-400 px-1.5 text-[0.65rem] font-bold text-slate-950"
+                    className="inline-flex min-w-5 items-center justify-center rounded-full bg-rose-400 px-1.5 text-[0.65rem] font-bold text-slate-950"
                   >
                     {conversation.unread}
                   </span>
@@ -375,7 +318,7 @@ export function ConversationList({
             <button
               type="button"
               onClick={() => setDirectMessagesOpen((open) => !open)}
-              className="group/row flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
+              className="group/row flex items-center gap-1 text-sm font-medium text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
               aria-expanded={directMessagesOpen}
             >
               <SectionIcon icon={IconMessage} open={directMessagesOpen} />
@@ -400,27 +343,40 @@ export function ConversationList({
               type="button"
               onClick={() => onSelect(conversation.id)}
               className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
+                "flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
                 selectedId === conversation.id &&
                   "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white",
               )}
             >
-              <Avatar className="size-7 rounded-lg border border-white/10">
-                <AvatarFallback className="rounded-lg bg-slate-700 text-[0.6rem] font-semibold text-slate-100">
-                  {conversation.initials ||
-                    conversation.name?.slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <PresenceIndicator
-                state={
-                  conversation.otherUserId
-                    ? userPresence[conversation.otherUserId] || "offline"
-                    : "offline"
-                }
-                customStatus={conversation.customStatus}
-                testId={`presence-dot-${conversation.id}`}
-              />
-              <span className="truncate">{conversation.name}</span>
+              <span className="relative size-7 shrink-0">
+                <Avatar className="size-7 rounded-md border border-white/10">
+                  <AvatarFallback className="rounded-md bg-slate-700 text-[0.6rem] font-semibold text-slate-100">
+                    {conversation.initials || conversation.name?.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <PresenceIndicator
+                  state={conversation.otherUserId ? userPresence[conversation.otherUserId] || "offline" : "offline"}
+                  testId={`presence-dot-${conversation.id}`}
+                  className="absolute right-0 bottom-0"
+                />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="truncate">
+                    {conversation.name === "You" ? `${user?.name || "You"} (you)` : conversation.name}
+                  </span>
+                  {conversation.lastMessage && conversation.lastMessageAt && (
+                    <time className="text-[0.65rem] text-[var(--chat-sidebar-muted,#94a3b8)]">
+                      {new Date(conversation.lastMessageAt).toLocaleDateString(undefined, { weekday: "long" })}
+                    </time>
+                  )}
+                </span>
+                {conversation.lastMessage && (
+                  <span className="mt-0.5 block truncate text-xs text-[var(--chat-sidebar-muted,#94a3b8)]">
+                    {conversation.lastMessageIsMine ? "You" : conversation.name}: {conversation.lastMessage}
+                  </span>
+                )}
+              </span>
               {(conversation.unread || 0) > 0 && (
                 <span
                   data-testid={`unread-badge-${conversation.id}`}
@@ -436,7 +392,7 @@ export function ConversationList({
           <button
             type="button"
             onClick={() => setStarredOpen((open) => !open)}
-            className="group/row flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-slate-100"
+            className="group/row flex items-center gap-1 text-sm font-medium text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-slate-100"
             aria-expanded={starredOpen}
           >
             <SectionIcon icon={IconStar} open={starredOpen} />

@@ -30,23 +30,3 @@ func (q *Queries) WithTx(tx pgx.Tx) *Queries {
 		db: tx,
 	}
 }
-
-type txBeginner interface {
-	Begin(context.Context) (pgx.Tx, error)
-}
-
-func (q *Queries) InTx(ctx context.Context, fn func(*Queries) error) error {
-	beginner, ok := q.db.(txBeginner)
-	if !ok {
-		return pgx.ErrTxClosed
-	}
-	tx, err := beginner.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-	if err := fn(q.WithTx(tx)); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}

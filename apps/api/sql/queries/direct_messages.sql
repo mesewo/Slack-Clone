@@ -16,12 +16,29 @@ LIMIT 1;
 -- name: ListDirectConversationsForUser :many
 SELECT dc.id, dc.created_by, dc.created_at,
   u.id AS other_user_id, u.display_name AS other_display_name, u.email AS other_email,
-  u.presence_status AS other_presence_status
+  u.presence_status AS other_presence_status,
+  COALESCE(latest.content, '') AS last_message,
+  COALESCE(latest.created_at, dc.created_at) AS last_message_at,
+  COALESCE(latest.is_mine, FALSE) AS last_message_is_mine
 FROM direct_conversations dc
 JOIN direct_conversation_members mine ON mine.conversation_id = dc.id AND mine.user_id = $1
-JOIN direct_conversation_members other ON other.conversation_id = dc.id AND other.user_id <> $1
+JOIN direct_conversation_members other ON other.conversation_id = dc.id AND (
+  other.user_id <> $1 OR NOT EXISTS (
+    SELECT 1 FROM direct_conversation_members other_member
+    WHERE other_member.conversation_id = dc.id AND other_member.user_id <> $1
+  )
+)
 JOIN users u ON u.id = other.user_id
-ORDER BY dc.created_at DESC;
+LEFT JOIN LATERAL (
+  SELECT dm.content, dm.created_at, (dm.user_id = $1) AS is_mine
+  FROM direct_messages dm
+  WHERE dm.conversation_id = dc.id
+    AND dm.deleted_at IS NULL
+    AND dm.parent_id IS NULL
+  ORDER BY dm.created_at DESC
+  LIMIT 1
+) latest ON TRUE
+ORDER BY COALESCE(latest.created_at, dc.created_at) DESC;
 
 -- name: IsDirectConversationMember :one
 SELECT EXISTS (

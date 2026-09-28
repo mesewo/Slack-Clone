@@ -84,7 +84,7 @@ export default function ActivityPage() {
               Workspace activity
             </p>
             <h1 className="mt-1 text-2xl font-semibold">Activity</h1>
-            {caughtUp && <p className="text-muted-foreground mt-2 flex items-center gap-2 text-sm"><Icons.circleCheck className="size-4 text-emerald-500" />All caught up</p>}
+            {/* {caughtUp && <p className="text-muted-foreground mt-2 flex items-center gap-2 text-sm"><Icons.circleCheck className="size-4 text-emerald-500" />All caught up</p>} */}
           </div>
           <Button variant="outline" size="sm" onClick={markAllAsRead}>
             Mark all as read

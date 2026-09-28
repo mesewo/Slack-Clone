@@ -62,6 +62,9 @@ export interface DirectConversation {
   other_display_name: string;
   other_email: string;
   other_presence_status?: string;
+  last_message: string;
+  last_message_at: string;
+  last_message_is_mine: boolean;
 }
 
 export interface DirectUser {
