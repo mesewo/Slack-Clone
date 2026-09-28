@@ -1,8 +1,8 @@
 "use client";
 
-import { Icons } from "@/components/icons";
 import { useTheme } from "next-themes";
 import * as React from "react";
+import { IconMoon } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,14 +58,14 @@ export function ThemeModeToggle() {
       <TooltipTrigger
         render={
           <Button
-            variant="secondary"
+            variant="ghost"
             size="icon"
-            className="group/toggle size-8"
+            className="size-9 rounded-full bg-white/20 text-white/85 hover:bg-white/30 hover:text-white"
             onClick={handleThemeToggle}
           />
         }
       >
-        <Icons.brightness />
+        <IconMoon className="size-5" />
         <span className="sr-only">Toggle theme</span>
       </TooltipTrigger>
       <TooltipContent>

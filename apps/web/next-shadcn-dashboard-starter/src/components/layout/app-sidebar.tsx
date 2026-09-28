@@ -36,7 +36,7 @@ import { useFilteredNavGroups } from "@/hooks/use-nav";
 import { logout } from "@/lib/auth";
 import { useAuth } from "@/lib/auth";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 import { Icons } from "../icons";
 import { OrgSwitcher } from "../org-switcher";
@@ -47,8 +47,14 @@ import { cn } from "@/lib/utils";
 import { IconX } from "@tabler/icons-react";
 import { WorkspaceFilesDialog } from "@/features/workspace/components/WorkspaceFilesDialog";
 
+const railBtn = "group/rail h-auto flex-col gap-1 py-1.5 hover:bg-transparent";
+const railIcon = (active?: boolean) =>
+  cn("flex size-9 items-center justify-center rounded-lg transition-colors group-hover/rail:bg-white/15", active && "bg-white/25");
+const railLabel = "text-[11px] font-semibold leading-none";
+
 export default function AppSidebar() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const isWorkspaceRoute = pathname.startsWith("/home");
   const { isOpen } = useMediaQuery();
   const router = useRouter();
@@ -68,6 +74,13 @@ export default function AppSidebar() {
   // hydration mismatch on workspace routes.
   const isActivityActive = Boolean(
     routeWorkspaceId && pathname === `/home/${routeWorkspaceId}/activity`,
+  );
+  const isDmActive = /\/dms(?:\/|$)/.test(pathname) || searchParams.get("dmOnly") === "1";
+  const isHomeActive = Boolean(
+    routeWorkspaceId &&
+      searchParams.get("dmOnly") !== "1" &&
+      (pathname === `/home/${routeWorkspaceId}` ||
+        pathname.startsWith(`/home/${routeWorkspaceId}/channels/`)),
   );
   const openDirectMessages = () => {
     if (!activeWorkspaceId) {
@@ -144,7 +157,8 @@ export default function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Home"
-                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                isActive={isHomeActive}
+                className={railBtn}
                 onClick={() => {
                   const last = activeWorkspaceId
                     ? window.localStorage.getItem(
@@ -160,22 +174,19 @@ export default function AppSidebar() {
                   );
                 }}
               >
-                <Icons.home className="size-6" />
-                <span className="text-[10px] font-medium leading-none">
-                  Home
-                </span>
+                <span className={railIcon(isHomeActive)}><Icons.home className="size-6" /></span>
+                <span className={railLabel}>Home</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton
                 tooltip="Direct messages"
-                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                isActive={isDmActive}
+                className={railBtn}
                 onClick={openDirectMessages}
               >
-                <Icons.chat className="size-6" />
-                <span className="text-[10px] font-medium leading-none">
-                  DMs
-                </span>
+                <span className={railIcon(isDmActive)}><Icons.chat className="size-6" /></span>
+                <span className={railLabel}>DMs</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -183,20 +194,20 @@ export default function AppSidebar() {
                 tooltip="Activity"
                 isActive={isActivityActive}
                 aria-current={isActivityActive ? "page" : undefined}
-                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
+                className={railBtn}
                 onClick={() => router.push(activityPath)}
               >
-                <span className={cn("flex size-10 items-center justify-center rounded-lg transition-colors", isActivityActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "group-hover/menu-button:bg-sidebar-accent/80")}>
+                <span className={railIcon(isActivityActive)}>
                   <Icons.activity className="size-6" />
                 </span>
-                <span className="text-[10px] font-medium leading-none">Activity</span>
+                <span className={railLabel}>Activity</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
               <Popover open={moreOpen} onOpenChange={setMoreOpen}>
-                <PopoverTrigger render={<SidebarMenuButton tooltip="More" aria-label="More" className="h-auto flex-col gap-1 py-2 [&_svg]:size-7" />}>
-                  <Icons.dots className="size-6" />
-                  <span className="text-[10px] font-medium leading-none">More</span>
+                <PopoverTrigger render={<SidebarMenuButton tooltip="More" aria-label="More" className={railBtn} />}>
+                  <span className={railIcon()}><Icons.dots className="size-6" /></span>
+                  <span className={railLabel}>More</span>
                 </PopoverTrigger>
                 <PopoverContent side="right" align="start" className="w-64 p-1">
                   <button type="button" onClick={() => { setMoreOpen(false); window.dispatchEvent(new Event("workspace:open-files")); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.page className="size-5" />Files</button>
@@ -206,20 +217,20 @@ export default function AppSidebar() {
               </Popover>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton
-                tooltip="Admin"
-                className="h-auto flex-col gap-1 py-2 [&_svg]:size-7"
-                onClick={() =>
-                  activeWorkspaceId
-                    ? router.push(`/home/${activeWorkspaceId}/admin`)
-                    : toast.info("Open a workspace first.")
-                }
-              >
-                <Icons.settings className="size-6" />
-                <span className="text-[10px] font-medium leading-none">
-                  Admin
-                </span>
-              </SidebarMenuButton>
+              <Popover>
+                <PopoverTrigger render={<SidebarMenuButton tooltip="Admin" className={railBtn} />}>
+                  <span className={railIcon()}><Icons.settings className="size-6" /></span>
+                  <span className={railLabel}>Admin</span>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="end" className="w-72 p-1">
+                  <div className="px-3 py-2 text-sm font-semibold">Admin Tools</div>
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm"><span>Current plan: Free</span><button type="button" className="text-primary hover:underline" onClick={() => toast.info("Billing is coming soon.")}>Manage billing</button></div>
+                  {["Workspace settings", "Edit workspace"].map((label) => <button key={label} type="button" onClick={() => toast.info(`${label} are coming soon.`)} className="hover:bg-accent flex w-full rounded-md px-3 py-2 text-left text-sm">{label}</button>)}
+                  <div className="border-border my-1 border-t" />
+                  <button type="button" onClick={() => activeWorkspaceId ? router.push(`/home/${activeWorkspaceId}/admin`) : toast.info("Open a workspace first.")} className="hover:bg-accent flex w-full rounded-md px-3 py-2 text-left text-sm">Manage members</button>
+                  {["Apps & workflows", "Workspace analytics"].map((label) => <button key={label} type="button" onClick={() => toast.info(`${label} are coming soon.`)} className="hover:bg-accent flex w-full rounded-md px-3 py-2 text-left text-sm">{label}</button>)}
+                </PopoverContent>
+              </Popover>
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
@@ -299,19 +310,19 @@ export default function AppSidebar() {
       </SidebarContent>
       <SidebarFooter
         className={cn(
-          "mt-auto min-h-0 gap-0 border-t-0 p-0 pb-0",
+          "min-h-0 gap-0 border-t-0 p-0 pt-2",
           isWorkspaceRoute
             ? "border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)]"
             : "border-sidebar-border/70 bg-sidebar/90",
         )}
       >
-        <SidebarMenu className="gap-1">
+        <SidebarMenu className="gap-2">
           <SidebarMenuItem className="px-1 pt-1.5 dark:pt-2">
             <Popover open={createOpen} onOpenChange={setCreateOpen}>
-                <PopoverTrigger render={<SidebarMenuButton tooltip="Create" aria-label="Create" className="mx-auto flex size-10 items-center justify-center rounded-full bg-zinc-300 text-zinc-800 shadow-md transition-colors hover:bg-zinc-400 dark:bg-zinc-300 dark:text-zinc-800 dark:hover:bg-zinc-400" />}>
+                <PopoverTrigger render={<SidebarMenuButton tooltip="Create" aria-label="Create" className="mx-auto flex size-9 items-center justify-center rounded-full bg-white/20 p-0 text-white/85 shadow-none transition-colors hover:bg-white/30 hover:text-white" />}>
                 <span className="relative flex size-6 items-center justify-center">
-                  <Icons.add className={cn("absolute size-6 transition-all duration-200", createOpen ? "rotate-45 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100")} />
-                  <IconX className={cn("absolute size-6 transition-all duration-200", createOpen ? "rotate-0 scale-100 opacity-100" : "-rotate-45 scale-0 opacity-0")} />
+                  <Icons.add className={cn("absolute size-5 transition-all duration-200", createOpen ? "rotate-45 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100")} />
+                  <IconX className={cn("absolute size-5 transition-all duration-200", createOpen ? "rotate-0 scale-100 opacity-100" : "-rotate-45 scale-0 opacity-0")} />
                 </span>
               </PopoverTrigger>
               <PopoverContent side="right" align="end" className="w-64 p-1">
@@ -324,19 +335,22 @@ export default function AppSidebar() {
           <SidebarMenuItem className="flex items-center justify-center px-1 py-1.5 dark:py-2.5">
             <ThemeModeToggle />
           </SidebarMenuItem>
-          <SidebarMenuItem className="p-0">
+          <SidebarMenuItem className="pt-1">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <SidebarMenuButton className="h-auto min-h-0 py-1 data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80" />
+                  <SidebarMenuButton className="mx-auto size-9 min-h-0 p-0 data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground hover:bg-sidebar-accent/80" />
                 }
               >
                 {user && (
-                  <UserAvatarProfile
-                    className="h-9 w-9 rounded-lg"
-                    showInfo={false}
-                    user={user}
-                  />
+                  <span className="relative">
+                    <UserAvatarProfile
+                      className="size-9 rounded-lg"
+                      showInfo={false}
+                      user={user}
+                    />
+                    <span className="absolute -right-0.5 -bottom-0.5 size-3 rounded-full border-2 border-[var(--chat-sidebar-bg)] bg-emerald-500" />
+                  </span>
                 )}
               </DropdownMenuTrigger>
               <DropdownMenuContent

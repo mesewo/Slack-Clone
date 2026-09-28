@@ -15,6 +15,7 @@ import { usePathname, useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import {
   IconHash,
+  IconListSearch,
   IconMessage,
   IconMessageCircle,
   IconStar,
@@ -144,6 +145,21 @@ export function ConversationList({
           )}
         </div>
         <div className="flex items-center gap-2">
+          {dmOnly && (
+            <button
+              type="button"
+              onClick={() => setUnreadsOnly((value) => !value)}
+              role="switch"
+              aria-checked={unreadsOnly}
+              aria-label="Show unread direct messages only"
+              className="flex items-center gap-1.5 rounded-md px-1 py-1 text-xs text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
+            >
+              <span>Unreads</span>
+              <span className={cn("flex h-5 w-9 items-center rounded-full p-0.5 transition-colors", unreadsOnly ? "bg-emerald-500" : "bg-white/20")}>
+                <span className={cn("size-4 rounded-full bg-white shadow-sm transition-transform", unreadsOnly && "translate-x-4")} />
+              </span>
+            </button>
+          )}
           <Popover>
             <PopoverTrigger
               render={
@@ -184,7 +200,7 @@ export function ConversationList({
         <label htmlFor="messenger-search" className="sr-only">
           Find a conversation...
         </label>
-        <Icons.search
+        <IconListSearch
           className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
           aria-hidden="true"
         />
@@ -194,7 +210,7 @@ export function ConversationList({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={dmOnly ? "Find a DM..." : "Find a conversation..."}
-          className="w-full rounded-xl border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] bg-slate-950/25 pl-10 text-sm text-slate-100 placeholder:text-[var(--chat-sidebar-muted,#94a3b8)] focus-visible:ring-2 focus-visible:ring-slate-300/40"
+          className="w-full rounded-lg border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] bg-slate-950/25 pl-10 text-sm text-slate-100 placeholder:text-[var(--chat-sidebar-muted,#94a3b8)] focus-visible:ring-2 focus-visible:ring-slate-300/40"
         />
       </div>
 
@@ -227,24 +243,8 @@ export function ConversationList({
         </nav>
       )}
 
-      {dmOnly && (
-        <button
-          type="button"
-          onClick={() => setUnreadsOnly((value) => !value)}
-          role="switch"
-          aria-checked={unreadsOnly}
-          aria-label="Show unread direct messages only"
-          className="flex items-center gap-2 rounded-md px-1 py-1 text-left text-xs text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
-        >
-          <span>Unreads</span>
-          <span className={cn("flex h-5 w-9 items-center rounded-full p-0.5 transition-colors", unreadsOnly ? "bg-emerald-500" : "bg-white/20")}>
-            <span className={cn("size-4 rounded-full bg-white shadow-sm transition-transform", unreadsOnly && "translate-x-4")} />
-          </span>
-        </button>
-      )}
-
       <div
-        className="space-y-1"
+        className={cn("space-y-1", dmOnly && "border-b border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] pb-3")}
         aria-label="Conversation list"
         role="list"
       >
@@ -336,7 +336,7 @@ export function ConversationList({
           </div>
         )}
 
-        {directMessagesOpen &&
+        {(dmOnly || directMessagesOpen) &&
           visibleDirectMessages.map((conversation) => (
             <button
               key={conversation.id}

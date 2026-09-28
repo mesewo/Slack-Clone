@@ -52,7 +52,7 @@ export function OrgSwitcher() {
       <DropdownMenuTrigger
         render={
           <SidebarMenuButton tooltip="Workspace">
-            <div className="bg-muted text-foreground flex size-8 shrink-0 items-center justify-center rounded-md text-sm font-semibold">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/25 text-lg font-bold text-white">
               {active?.name?.trim()?.charAt(0)?.toUpperCase() || "?"}
             </div>
 

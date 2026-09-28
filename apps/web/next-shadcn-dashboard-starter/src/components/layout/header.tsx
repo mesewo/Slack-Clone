@@ -11,16 +11,9 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "../ui/sheet";
 import { Icons } from "../icons";
 import { useParams, usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 type NavigationHistoryEntry = {
   id: string;
@@ -128,64 +121,21 @@ export default function Header() {
             </DropdownMenuContent>
           </DropdownMenu>
           <div className="min-w-0 flex-1">
-            <SearchInput />
+            <SearchInput workspaceMode={isWorkspaceRoute} />
           </div>
         </div>
         <div className="absolute right-0">
-          <Sheet>
-            <SheetTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  aria-label="Open help"
-                  title="Help"
-                />
-              }
-            >
-              <Icons.help className="size-4" />
-            </SheetTrigger>
-            <SheetContent side="right" className="w-[min(28rem,92vw)]">
-              <SheetHeader>
-                <SheetTitle>How to use this workspace</SheetTitle>
-                <SheetDescription>
-                  Everything you need to find your way around the Slack clone.
-                </SheetDescription>
-              </SheetHeader>
-              <div className="space-y-5 overflow-y-auto px-4 pb-6 text-sm">
-                {[
-                  ["Home", "Returns to your last channel or direct message."],
-                  [
-                    "Direct messages",
-                    "Browse real DMs, search people, and open a conversation.",
-                  ],
-                  [
-                    "Activity",
-                    "Review notifications, mentions, and thread activity in one place.",
-                  ],
-                  [
-                    "Create",
-                    "Start a message or channel, invite people, or try coming-soon tools.",
-                  ],
-                  [
-                    "Workspace menu",
-                    "Use the avatar at the top of the rail to switch or create workspaces.",
-                  ],
-                  [
-                    "Composer",
-                    "Use Aa for formatting, @ for mentions, the paperclip for files, and the arrow for scheduled sending.",
-                  ],
-                ].map(([title, description]) => (
-                  <div key={title}>
-                    <p className="font-medium">{title}</p>
-                    <p className="text-muted-foreground mt-1">{description}</p>
-                  </div>
-                ))}
-              </div>
-            </SheetContent>
-          </Sheet>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            aria-label="Help"
+            title="Help"
+            onClick={() => toast.info("Help is coming soon.")}
+          >
+            <Icons.help className="size-4" />
+          </Button>
         </div>
       </div>
     </header>
