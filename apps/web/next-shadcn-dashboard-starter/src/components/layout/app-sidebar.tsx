@@ -69,7 +69,7 @@ export default function AppSidebar() {
     );
     router.push(
       last?.startsWith("dm:")
-        ? `/home/${activeWorkspaceId}/dms/${last.slice(3)}`
+        ? `/home/${activeWorkspaceId}/dms/${last.slice(3)}?dmOnly=1`
         : `/home/${activeWorkspaceId}?dmOnly=1`,
     );
   };
@@ -115,7 +115,7 @@ export default function AppSidebar() {
     >
       <SidebarHeader
         className={cn(
-          "h-[70px] shrink-0 border-sidebar-border/70 px-2 py-3",
+          "h-14 shrink-0 border-sidebar-border/70 px-2 py-3",
           isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "bg-sidebar/90",
         )}
         aria-hidden="true"

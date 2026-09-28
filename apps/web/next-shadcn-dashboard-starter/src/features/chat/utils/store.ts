@@ -591,6 +591,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           parent_id: null,
           reply_count: 0,
           author_name: "You",
+          attachments: sent.attachments,
         });
       } else {
         await messageService.send(channelId, text.trim(), attachmentIds);

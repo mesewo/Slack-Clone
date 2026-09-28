@@ -51,7 +51,7 @@ export default function Header() {
   }, [pathname, workspaceId]);
   return (
     <header
-      className={`text-sidebar-foreground sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-3 shadow-[0_1px_0_rgba(0,0,0,0.16)] md:px-4 ${isWorkspaceRoute ? "border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)]" : "border-sidebar-border bg-sidebar"}`}
+      className={`text-sidebar-foreground sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 px-3 md:px-4 ${isWorkspaceRoute ? "bg-[var(--chat-sidebar-bg)]" : "border-b border-sidebar-border bg-sidebar shadow-[0_1px_0_rgba(0,0,0,0.16)]"}`}
     >
       <div className="relative flex min-w-0 flex-1 items-center justify-center">
         <div className="flex min-w-0 w-[min(100%,48rem)] items-center gap-2">

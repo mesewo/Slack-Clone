@@ -126,6 +126,8 @@
   }
 }
 
+@keyframes loader-slide { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+
 /* ============================================================
    shadcn chat utilities — scroll-fade + shimmer
    Verbatim from shadcn/tailwind.css (shipped by `npx shadcn init`).

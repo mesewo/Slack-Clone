@@ -12,6 +12,7 @@ import { workspaceService } from "@/features/workspace/services/workspaceService
 import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 import { useRealtimeTyping } from "@/features/chat/hooks/use-realtime-connection";
+import { AppLoader } from "@/components/ui/app-loader";
 
 export function WorkspaceChatView() {
   const { user } = useAuth();
@@ -134,18 +135,12 @@ export function WorkspaceChatView() {
 
   if (!user) {
     return (
-      <div className="flex h-full min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
-        Loading conversation...
-      </div>
+      <AppLoader />
     );
   }
 
   if (selectedRouteId && (!routeConversation || selectedConversationId !== selectedRouteId)) {
-    return (
-      <div className="flex h-full min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
-        Loading conversation...
-      </div>
-    );
+    return <AppLoader />;
   }
 
   if (!activeConversation) {

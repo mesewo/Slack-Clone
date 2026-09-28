@@ -13,6 +13,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface CreateChannelDialogProps {
   existingChannelNames: string[];
@@ -72,6 +73,8 @@ export function CreateChannelDialog({
     try {
       await onCreateChannel(normalized, channelType);
       handleOpenChange(false);
+    } catch {
+      toast.error("Couldn't create the channel. Try again.");
     } finally {
       setSubmitting(false);
     }

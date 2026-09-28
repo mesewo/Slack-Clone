@@ -58,7 +58,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="bg-background relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
+    <div className="relative flex h-full min-h-0 min-w-0 flex-1 bg-[var(--chat-sidebar-bg)] pr-1 pb-1">
+      <div className="bg-background relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-[var(--chat-sidebar-border)]">
       <aside className="hidden h-full w-72 shrink-0 flex-col border-r border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] text-sidebar-foreground lg:flex">
         <WorkspaceConversationSidebar
           onNewMessage={openNewMessage}
@@ -113,6 +114,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
       </main>
+      </div>
     </div>
   );
 }

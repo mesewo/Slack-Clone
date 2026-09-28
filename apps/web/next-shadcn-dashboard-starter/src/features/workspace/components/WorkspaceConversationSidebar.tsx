@@ -22,7 +22,6 @@ export function WorkspaceConversationSidebar({
   );
   const selectConversation = useChatStore((state) => state.selectConversation);
   const createChannel = useChatStore((state) => state.createChannel);
-  const createDM = useChatStore((state) => state.createDM);
 
   function openConversation(id: string) {
     onBeforeNavigate();
@@ -62,19 +61,6 @@ export function WorkspaceConversationSidebar({
         onCreateChannel={async (name, type) => {
           await createChannel(name, type);
           toast.success("Channel created");
-        }}
-        onCreateDM={async (userId) => {
-          const id = await createDM(userId);
-          if (!id) {
-            toast.error("Failed to open direct message");
-            return;
-          }
-          onBeforeNavigate();
-          const dmOnly = searchParams.get("dmOnly") === "1";
-          router.push(
-            `/home/${params.workspaceId}/dms/${id.slice(3)}${dmOnly ? "?dmOnly=1" : ""}`,
-          );
-          toast.success("Direct message opened");
         }}
         dmOnly={searchParams.get("dmOnly") === "1"}
       />

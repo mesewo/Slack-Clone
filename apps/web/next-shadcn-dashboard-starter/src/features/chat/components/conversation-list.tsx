@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, ChangeEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icons } from "@/components/icons";
 import { motion } from "motion/react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -11,18 +11,13 @@ import type { Conversation } from "../utils/types";
 import { useChatStore } from "../utils/store";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { CreateChannelDialog } from "./create-channel-dialog";
+import { usePathname, useRouter, useParams } from "next/navigation";
 import {
-  messageService,
-  type DirectUser,
-  type ThreadSummary,
-} from "@/features/workspace/services/messageService";
-import { useRouter, useParams } from "next/navigation";
-import { useAuth } from "@/lib/auth";
-import { IconMessageCircle } from "@tabler/icons-react";
-import {
-  workspaceService,
-  type WorkspaceMember,
-} from "@/features/workspace/services/workspaceService";
+  IconHash,
+  IconMessage,
+  IconMessageCircle,
+  IconStar,
+} from "@tabler/icons-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SectionIcon } from "./section-icon";
 // import { useParams } from "next/navigation";
 
 interface ConversationListProps {
@@ -39,7 +35,6 @@ interface ConversationListProps {
   onSelect: (id: string) => void;
   onNewMessage: () => void;
   onCreateChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
-  onCreateDM: (userId: string) => Promise<void>;
   workspaceName?: string;
   dmOnly?: boolean;
 }
@@ -50,7 +45,6 @@ export function ConversationList({
   onSelect,
   onNewMessage,
   onCreateChannel,
-  onCreateDM,
   workspaceName,
   dmOnly = false,
 }: ConversationListProps) {
@@ -63,24 +57,10 @@ export function ConversationList({
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
   const [starredOpen, setStarredOpen] = useState(true);
   const [starredHintVisible, setStarredHintVisible] = useState(true);
-  const [directoriesOpen, setDirectoriesOpen] = useState(false);
-  const [threadsOpen, setThreadsOpen] = useState(false);
-  const [threads, setThreads] = useState<ThreadSummary[]>([]);
-  const [directoryTab, setDirectoryTab] = useState("People");
   const [search, setSearch] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [channelName, setChannelName] = useState("");
-  const [channelType, setChannelType] = useState<"PUBLIC" | "PRIVATE">(
-    "PUBLIC",
-  );
-  const [dmOpen, setDmOpen] = useState(false);
-  const [dmUsers, setDmUsers] = useState<DirectUser[]>([]);
-  const [directoryMembers, setDirectoryMembers] = useState<WorkspaceMember[]>(
-    [],
-  );
-  const [directorySearch, setDirectorySearch] = useState("");
   const [unreadsOnly, setUnreadsOnly] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   // const { logout } = useAuth();
 
   const handleSignOut = async () => {
@@ -92,49 +72,6 @@ export function ConversationList({
       router.replace("/workspaces");
     // }
   };
-
-  useEffect(() => {
-    if (!dmOpen) return;
-    let isMounted = true;
-    messageService
-      .listDMUsers()
-      .then((data) => {
-        if (isMounted) setDmUsers(data || []);
-      })
-      .catch(() => {
-        if (isMounted) setDmUsers([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [dmOpen]);
-
-  useEffect(() => {
-    if (!threadsOpen) return;
-    let isMounted = true;
-    messageService.listThreads().then((items) => {
-      if (isMounted) setThreads(items);
-    }).catch(() => {
-      if (isMounted) setThreads([]);
-    });
-    return () => { isMounted = false; };
-  }, [threadsOpen]);
-
-  useEffect(() => {
-    if (!directoriesOpen || !workspaceId) return;
-    let isMounted = true;
-    workspaceService
-      .listMembers(workspaceId)
-      .then((result) => {
-        if (isMounted) setDirectoryMembers(result?.members || []);
-      })
-      .catch(() => {
-        if (isMounted) setDirectoryMembers([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, [directoriesOpen, workspaceId]);
 
   const filtered = useMemo(() => {
     if (!search.trim()) return conversations;
@@ -166,36 +103,6 @@ export function ConversationList({
         Number(right.name === "You") - Number(left.name === "You"),
     );
   }, [directMessages, unreadsOnly]);
-
-  const handleSelectDMUsers = async (event: ChangeEvent<HTMLSelectElement>) => {
-    const selectedOptions = Array.from(
-      event.target.selectedOptions,
-      (opt) => opt.value,
-    );
-    if (selectedOptions.length === 0) return;
-
-    try {
-      for (const userId of selectedOptions) {
-        await onCreateDM(userId);
-      }
-      setDmOpen(false);
-    } catch {
-      toast.error("Failed to initiate direct message");
-    }
-  };
-
-  const handleCreateChannelSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!channelName.trim()) return;
-    try {
-      await onCreateChannel(channelName.trim(), channelType);
-      setChannelName("");
-      setCreateOpen(false);
-    } catch {
-      toast.error("Failed to create channel");
-    }
-  };
-
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-transparent p-3 text-slate-100 lg:p-4">
@@ -272,40 +179,6 @@ export function ConversationList({
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pt-3 pr-1">
-      {createOpen && !dmOnly && (
-        <form
-          onSubmit={handleCreateChannelSubmit}
-          className="space-y-2 rounded-lg border border-white/10 bg-slate-900/40 p-2"
-        >
-          <Input
-            value={channelName}
-            onChange={(event) => setChannelName(event.target.value)}
-            placeholder="channel-name"
-            aria-label="Channel name"
-            autoFocus
-          />
-          <div className="flex items-center gap-2">
-            <select
-              value={channelType}
-              onChange={(event) =>
-                setChannelType(event.target.value as "PUBLIC" | "PRIVATE")
-              }
-              className="h-8 flex-1 rounded border border-white/10 bg-slate-950 px-2 text-xs text-slate-100"
-            >
-              <option value="PUBLIC">Public</option>
-              <option value="PRIVATE">Private</option>
-            </select>
-            <button
-              type="submit"
-              disabled={!channelName.trim()}
-              className="h-8 rounded bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50"
-            >
-              Create
-            </button>
-          </div>
-        </form>
-      )}
-
       <div className="relative">
         <label htmlFor="messenger-search" className="sr-only">
           Find a conversation...
@@ -328,11 +201,9 @@ export function ConversationList({
         <nav aria-label="Conversation shortcuts" className="space-y-0.5">
           <button
             type="button"
-            onClick={() => setThreadsOpen((open) => !open)}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--chat-sidebar-muted,#94a3b8)] transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white"
-            aria-expanded={threadsOpen}
+            onClick={() => router.push(`/home/${workspaceId}/threads`)}
+            className={cn("flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white", pathname === `/home/${workspaceId}/threads` ? "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white" : "text-[var(--chat-sidebar-muted,#94a3b8)]")}
           >
-            <Icons.chevronRight className={cn("size-3 shrink-0 transition-transform", threadsOpen && "rotate-90")} />
             <IconMessageCircle className="size-4 shrink-0" />
             <span>Threads</span>
           </button>
@@ -347,55 +218,12 @@ export function ConversationList({
 
           <button
             type="button"
-            onClick={() => setDirectoriesOpen((open) => !open)}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--chat-sidebar-muted,#94a3b8)] transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white"
-            aria-expanded={directoriesOpen}
+            onClick={() => router.push(`/home/${workspaceId}/directories`)}
+            className={cn("flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white", pathname === `/home/${workspaceId}/directories` ? "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white" : "text-[var(--chat-sidebar-muted,#94a3b8)]")}
           >
             <Icons.search className="size-4 shrink-0" /> Directories
           </button>
         </nav>
-      )}
-
-      {!dmOnly && threadsOpen && (
-        <div className="max-h-56 space-y-1 overflow-y-auto rounded-md pl-3" aria-label="Threads">
-          {threads.length ? threads.map((thread) => (
-            <button key={`${thread.kind}-${thread.id}`} type="button" onClick={() => {
-              if (!workspaceId) return;
-              router.push(thread.kind === "dm" ? `/home/${workspaceId}/dms/${thread.conversation_id}` : `/home/${workspaceId}/channels/${thread.channel_id}`);
-            }} className="hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] block w-full rounded-md px-2 py-2 text-left">
-              <span className="block truncate text-xs font-medium">{thread.title}</span>
-              <span className="text-[var(--chat-sidebar-muted,#94a3b8)] mt-0.5 block truncate text-[0.68rem]">{thread.preview}</span>
-            </button>
-          )) : <p className="text-[var(--chat-sidebar-muted,#94a3b8)] px-2 py-2 text-xs">No threads yet.</p>}
-        </div>
-      )}
-
-      {!dmOnly && directoriesOpen && (
-        <div className="space-y-2 rounded-lg border border-white/10 bg-slate-900/40 p-2" aria-label="Directories">
-          <div className="flex flex-wrap gap-1">
-            {["People", "Channels", "User groups", "External", "Invitations"].map((tab) => (
-              <button key={tab} type="button" onClick={() => setDirectoryTab(tab)} className={cn("rounded px-1.5 py-1 text-[0.65rem]", directoryTab === tab ? "bg-slate-700 text-white" : "text-slate-400 hover:bg-slate-800")}>{tab}</button>
-            ))}
-          </div>
-          {directoryTab === "People" && <>
-            <Input value={directorySearch} onChange={(event) => setDirectorySearch(event.target.value)} placeholder="Search people" aria-label="Search people" className="h-8 text-xs" />
-            <div className="max-h-48 space-y-1 overflow-y-auto">
-              {directoryMembers.filter((member) => `${member.display_name || ""} ${member.email || ""}`.toLowerCase().includes(directorySearch.toLowerCase())).map((member) => (
-                <button key={member.user_id} type="button" onClick={() => { void onCreateDM(member.user_id).catch(() => undefined); setDirectoriesOpen(false); }} className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-slate-800">
-                  <Avatar className="size-6 rounded-md"><AvatarFallback className="rounded-md bg-primary/15 text-[0.55rem] font-semibold text-primary">{(member.display_name || member.email || "U").slice(0, 2).toUpperCase()}</AvatarFallback></Avatar>
-                  <span className="min-w-0 flex-1 truncate text-xs">{member.display_name || member.email}</span>
-                  <PresenceIndicator state={member.presence_status === "active" ? "active" : "offline"} />
-                </button>
-              ))}
-              {directoryMembers.length === 0 && <p className="px-2 py-2 text-xs text-slate-400">No people found.</p>}
-            </div>
-          </>}
-          {directoryTab === "Channels" && <div className="max-h-48 space-y-1 overflow-y-auto">
-            {channels.map((conversation) => <button key={conversation.id} type="button" onClick={() => { onSelect(conversation.id); setDirectoriesOpen(false); }} className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs hover:bg-slate-800">{conversation.name}</button>)}
-            {channels.length === 0 && <p className="px-2 py-2 text-xs text-slate-400">No channels found.</p>}
-          </div>}
-          {!(["People", "Channels"].includes(directoryTab)) && <p className="px-2 py-2 text-xs text-slate-400">This directory is not available in this workspace yet.</p>}
-        </div>
       )}
 
       {dmOnly && (
@@ -424,29 +252,29 @@ export function ConversationList({
             <button
               type="button"
               onClick={() => setChannelsOpen((open) => !open)}
-              className="flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
+              className="group/row flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
               aria-expanded={channelsOpen}
             >
-              <Icons.chevronRight
-                className={cn(
-                  "size-3 transition-transform",
-                  channelsOpen && "rotate-90",
-                )}
-              />
+              <SectionIcon icon={IconHash} open={channelsOpen} />
               Channels
             </button>
             <span className="text-[0.65rem] text-[var(--chat-sidebar-muted,#94a3b8)]">
               {channels.length}
             </span>
-            <button
-              type="button"
-              onClick={() => setCreateOpen((open) => !open)}
-              className="rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]"
-              aria-label="Create channel"
-              title="Create channel"
-            >
-              <Icons.add className="size-4" />
-            </button>
+            <CreateChannelDialog
+              existingChannelNames={channels.map((channel) => channel.name)}
+              onCreateChannel={onCreateChannel}
+              trigger={
+                <button
+                  type="button"
+                  className="rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]"
+                  aria-label="Create channel"
+                  title="Create channel"
+                >
+                  <Icons.add className="size-4" />
+                </button>
+              }
+            />
           </div>
         )}
 
@@ -547,46 +375,21 @@ export function ConversationList({
             <button
               type="button"
               onClick={() => setDirectMessagesOpen((open) => !open)}
-              className="flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
+              className="group/row flex items-center gap-1 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-white"
               aria-expanded={directMessagesOpen}
             >
-              <Icons.chevronRight
-                className={cn(
-                  "size-3 transition-transform",
-                  directMessagesOpen && "rotate-90",
-                )}
-              />
+              <SectionIcon icon={IconMessage} open={directMessagesOpen} />
               Direct messages
             </button>
             <button
               type="button"
-              onClick={() => setDmOpen((open) => !open)}
+              onClick={onNewMessage}
               className="rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]"
               aria-label="Start direct message"
+              title="New message"
             >
               <Icons.add className="size-4" />
             </button>
-          </div>
-        )}
-
-        {directMessagesOpen && dmOpen && (
-          <div className="my-1 rounded-lg border border-white/10 bg-slate-900/40 p-2">
-            <label className="mb-2 block text-[0.65rem] font-medium uppercase tracking-[0.12em] text-slate-400">
-              To:
-            </label>
-            <select
-              defaultValue={[]}
-              multiple
-              size={Math.min(dmUsers.length || 1, 6)}
-              onChange={handleSelectDMUsers}
-              className="h-24 w-full rounded border border-white/10 bg-slate-950 px-2 py-1 text-xs text-slate-100"
-            >
-              {dmUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.display_name || user.email}
-                </option>
-              ))}
-            </select>
           </div>
         )}
 
@@ -633,15 +436,10 @@ export function ConversationList({
           <button
             type="button"
             onClick={() => setStarredOpen((open) => !open)}
-            className="flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-slate-100"
+            className="group/row flex items-center gap-1 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[var(--chat-sidebar-muted,#94a3b8)] hover:text-slate-100"
             aria-expanded={starredOpen}
           >
-            <Icons.chevronRight
-              className={cn(
-                "size-3 transition-transform",
-                starredOpen && "rotate-90",
-              )}
-            />
+            <SectionIcon icon={IconStar} open={starredOpen} />
             Starred
           </button>
         </div>
