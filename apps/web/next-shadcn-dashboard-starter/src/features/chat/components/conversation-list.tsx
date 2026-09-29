@@ -465,7 +465,7 @@ export function ConversationList({
           </button>
         </div>
 
-        {!dmOnly && starredOpen && visibleStarredConversations.length > 0 && visibleStarredConversations.map((conversation) => (
+        {starredOpen && visibleStarredConversations.filter((conversation) => !dmOnly || conversation.kind === "dm").map((conversation) => (
           <button key={`starred-${conversation.id}`} type="button" onClick={() => onSelect(conversation.id)} className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]">
             {conversation.kind === "dm" ? <IconMessage className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" /> : <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />}
             <span className="truncate">{conversation.kind === "dm" ? conversation.name : conversation.name.replace(/^#\s*/, "")}</span>

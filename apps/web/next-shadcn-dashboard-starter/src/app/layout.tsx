@@ -1,4 +1,5 @@
 import Providers from "@/components/layout/providers";
+import { ResponsiveGuard } from "@/components/responsive-guard";
 import { Toaster } from "@/components/ui/sonner";
 import { fontVariables } from "@/components/themes/font.config";
 import { DEFAULT_THEME, THEMES } from "@/components/themes/theme.config";
@@ -83,21 +84,23 @@ export default async function RootLayout({
           fontVariables,
         )}
       >
-        <NextTopLoader color="var(--primary)" showSpinner={false} />
-        <NuqsAdapter>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-            enableColorScheme
-          >
-            <Providers activeThemeValue={themeToApply}>
-              <Toaster />
-              {children}
-            </Providers>
-          </ThemeProvider>
-        </NuqsAdapter>
+        <ResponsiveGuard>
+          <NextTopLoader color="var(--primary)" showSpinner={false} />
+          <NuqsAdapter>
+            <ThemeProvider
+              attribute="class"
+              defaultTheme="system"
+              enableSystem
+              disableTransitionOnChange
+              enableColorScheme
+            >
+              <Providers activeThemeValue={themeToApply}>
+                <Toaster />
+                {children}
+              </Providers>
+            </ThemeProvider>
+          </NuqsAdapter>
+        </ResponsiveGuard>
       </body>
     </html>
   );

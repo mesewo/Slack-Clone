@@ -34,22 +34,46 @@ export function PinnedMessagesPanel({
   };
 
   return (
-    <aside className="border-border bg-background fixed inset-y-14 right-0 z-50 flex w-[min(22rem,90vw)] flex-col border-l shadow-xl">
+    <aside className="border-border bg-background absolute right-0 top-14 z-30 flex h-[calc(100%-3.5rem)] w-[min(22rem,90vw)] flex-col border-l shadow-xl">
       <div className="border-border flex items-center justify-between border-b p-4">
         <h2 className="font-semibold">Pinned messages</h2>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close pinned messages">
           <IconX className="size-4" />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
         {error ? (
           <p className="text-muted-foreground text-sm">Unable to load pinned messages.</p>
         ) : items.length ? items.map((item) => (
-          <button key={item.id} type="button" onClick={() => jumpToMessage(item.message_id)} className="border-border hover:bg-muted block w-full rounded-lg border p-3 text-left">
-            <p className="line-clamp-3 whitespace-pre-wrap text-sm">{item.content || "Attachment"}</p>
-            <p className="text-muted-foreground mt-2 text-xs">Pinned by {item.pinned_by_name} · {new Date(item.created_at).toLocaleDateString()}</p>
-            <span className="text-primary mt-2 block text-xs">Jump to message</span>
-          </button>
+          <div key={item.id} className="group border-border flex items-start gap-2 border-b py-3">
+            <button type="button" onClick={() => jumpToMessage(item.message_id)} className="hover:bg-muted min-w-0 flex-1 rounded-md px-2 py-1 text-left">
+              <span className="flex items-center gap-2">
+                <span className="bg-primary/15 text-primary flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold">
+                  {item.pinned_by_name.slice(0, 1).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">{item.pinned_by_name}</span>
+                <time className="text-muted-foreground shrink-0 text-xs">
+                  {new Date(item.message_created_at).toLocaleDateString()}
+                </time>
+              </span>
+              <span className="mt-2 block line-clamp-3 whitespace-pre-wrap text-sm">
+                {item.content || "Attachment"}
+              </span>
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-1 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              aria-label={`Unpin message by ${item.pinned_by_name}`}
+              onClick={async () => {
+                await pinService.unpin(item.message_id, scope);
+                setItems((current) => current.filter((entry) => entry.id !== item.id));
+              }}
+            >
+              Unpin
+            </Button>
+          </div>
         )) : (
           <p className="text-muted-foreground text-sm">No pinned messages yet.</p>
         )}
