@@ -14,6 +14,7 @@ import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { useChatStore } from "../utils/store";
+import { pinService, type PinnedMessage } from "@/features/workspace/services/pinService";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -76,6 +77,7 @@ export function ChatArea({
   const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState<PinnedMessage[]>([]);
   const isAtBottomRef = useRef(true);
   const isJumpingToLatestRef = useRef(false);
   const mentionSuggestions = Array.from(
@@ -85,6 +87,35 @@ export function ChatArea({
       ...conversation.messages.map((message) => message.author),
     ]),
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const scope = conversation.kind === "dm"
+      ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
+      : { channel_id: conversation.id };
+    setPinnedMessages([]);
+    void pinService.list(scope).then((items) => {
+      if (!cancelled) setPinnedMessages(items);
+    }).catch(() => {
+      if (!cancelled) setPinnedMessages([]);
+    });
+    return () => { cancelled = true; };
+  }, [conversation.id, conversation.kind, conversation.dmId]);
+
+  const togglePin = async (messageId: string) => {
+    const scope = conversation.kind === "dm"
+      ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
+      : { channel_id: conversation.id };
+    const wasPinned = pinnedMessages.some((item) => item.message_id === messageId);
+    try {
+      if (wasPinned) await pinService.unpin(messageId, scope);
+      else await pinService.pin(messageId, scope);
+      setPinnedMessages(await pinService.list(scope));
+    } catch {
+      // The message action reports the failed request through its toast.
+      throw new Error("Couldn't update pinned message");
+    }
+  };
 
   useEffect(() => {
     const query = search.trim();
@@ -273,6 +304,21 @@ export function ChatArea({
             conversation={conversation}
             canManageChannel={canManageChannel}
           />
+          {pinnedMessages[0] && (
+            <button
+              type="button"
+              onClick={() => jumpToMessage(pinnedMessages[0].message_id)}
+              className="border-border bg-muted/35 hover:bg-muted/60 mx-3 flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left sm:mx-4"
+              title="Jump to the most recently pinned message"
+            >
+              <Icons.bookmark className="text-primary size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="text-muted-foreground block text-[0.65rem] font-medium">Pinned by {pinnedMessages[0].pinned_by_name}</span>
+                <span className="block truncate text-xs">{pinnedMessages[0].content || "Attachment"}</span>
+              </span>
+              {pinnedMessages.length > 1 && <span className="text-muted-foreground shrink-0 text-[0.65rem]">+{pinnedMessages.length - 1}</span>}
+            </button>
+          )}
           <div className="relative px-3 sm:px-4">
             <Icons.search
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 sm:left-6"
@@ -412,6 +458,9 @@ export function ChatArea({
                       onEdit={onEditMessage}
                       onDelete={onDeleteMessage}
                       onToggleThreadSubscription={onToggleThreadSubscription}
+                      isPinned={pinnedMessages.some((item) => item.message_id === message.id)}
+                      onTogglePin={togglePin}
+                      pinTargetLabel={conversation.kind === "dm" ? "conversation" : "channel"}
                       compact={compact}
                     />
                   </div>

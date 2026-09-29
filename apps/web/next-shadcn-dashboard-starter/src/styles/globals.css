@@ -11,6 +11,8 @@
 @custom-variant data-vertical (&[data-orientation='vertical']);
 
 :root {
+  --shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.12);
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.18);
   --chat-sidebar-bg: #4a154b;
   --chat-sidebar-hover: #611f69;
   --chat-sidebar-active: #7c2f7f;

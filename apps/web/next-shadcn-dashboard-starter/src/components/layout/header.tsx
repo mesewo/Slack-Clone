@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Icons } from "../icons";
+import { SidebarTrigger } from "../ui/sidebar";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -49,6 +50,7 @@ export default function Header() {
       <div className="relative flex min-w-0 flex-1 items-center justify-center">
         <div className="flex min-w-0 w-[min(100%,48rem)] items-center gap-2">
           <div className="flex shrink-0 items-center gap-1">
+            <SidebarTrigger className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground md:hidden" />
             <Button
               type="button"
               variant="ghost"

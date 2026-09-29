@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SectionIcon } from "./section-icon";
+import { starService, type StarredConversation } from "@/features/workspace/services/starService";
 // import { useParams } from "next/navigation";
 
 interface ConversationListProps {
@@ -59,11 +60,58 @@ export function ConversationList({
   const [directMessagesOpen, setDirectMessagesOpen] = useState(true);
   const [starredOpen, setStarredOpen] = useState(true);
   const [starredHintVisible, setStarredHintVisible] = useState(true);
+  const [starredConversations, setStarredConversations] = useState<StarredConversation[]>([]);
+  const [starsLoaded, setStarsLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [unreadsOnly, setUnreadsOnly] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+    void starService.list().then((items) => {
+      if (!cancelled) setStarredConversations(items);
+    }).catch(() => {
+      if (!cancelled) setStarredConversations([]);
+    }).finally(() => {
+      if (!cancelled) setStarsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, [workspaceId]);
+
+  const getStarTarget = (conversation: Conversation) => ({
+    kind: conversation.kind === "dm" ? "dm" as const : "channel" as const,
+    id: conversation.kind === "dm" ? conversation.dmId || conversation.id.replace(/^dm:/, "") : conversation.id,
+  });
+  const isStarred = (conversation: Conversation) => {
+    const { kind, id } = getStarTarget(conversation);
+    return starredConversations.some((item) =>
+      kind === "channel" ? item.channel_id === id : item.conversation_id === id,
+    );
+  };
+  const toggleStar = async (conversation: Conversation) => {
+    const { kind, id } = getStarTarget(conversation);
+    const wasStarred = isStarred(conversation);
+    try {
+      if (wasStarred) await starService.unstar(kind, id);
+      else await starService.star(kind, id);
+      setStarredConversations(await starService.list());
+      toast.success(wasStarred ? "Removed from Starred" : "Added to Starred");
+    } catch {
+      toast.error("Couldn't update Starred");
+    }
+  };
+
+  const visibleStarredConversations = useMemo(() =>
+    (Array.isArray(starredConversations) ? starredConversations : []).flatMap((star) => {
+      const conversation = conversations.find((item) =>
+        star.channel_id
+          ? item.kind !== "dm" && item.id === star.channel_id
+          : item.kind === "dm" && (item.dmId || item.id.replace(/^dm:/, "")) === star.conversation_id,
+      );
+      return conversation ? [conversation] : [];
+    }), [conversations, starredConversations]);
 
   const handleSignOut = async () => {
     // try {
@@ -176,7 +224,7 @@ export function ConversationList({
             <PopoverContent
               side="bottom"
               align="end"
-              className="w-60 gap-0 border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] bg-[var(--chat-sidebar-bg,#1a1d21)] p-1 text-slate-100"
+              className="w-60 gap-0 border-[var(--chat-sidebar-border,rgba(255,255,255,0.1))] bg-[var(--chat-sidebar-bg,#1a1d21)] p-1 text-slate-100 shadow-[var(--shadow-menu)]"
             >
               <div className="rounded px-3 py-2 text-sm">Preferences</div>
               <div className="rounded px-3 py-2 text-sm">Notification schedule</div>
@@ -284,18 +332,21 @@ export function ConversationList({
             const isUnread = (conversation.unread || 0) > 0;
 
             return (
-              <motion.button
+              <motion.div
                 key={conversation.id}
+                className="group relative"
+                role="listitem"
+              >
+              <button
                 type="button"
                 onClick={() => onSelect(conversation.id)}
                 aria-current={isActive ? "true" : undefined}
                 className={cn(
-                  "group relative flex h-7 w-full items-center gap-2 rounded-md border border-transparent px-2 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/50",
+                  "flex h-7 w-full items-center gap-2 rounded-md border border-transparent px-2 pr-8 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/50",
                   isActive
                     ? "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white"
                     : "text-slate-200 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
                 )}
-                role="listitem"
               >
                 <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />
                 <span className={cn("min-w-0 flex-1 truncate", isUnread ? "font-bold" : "font-normal")}>
@@ -309,7 +360,14 @@ export function ConversationList({
                     {conversation.unread}
                   </span>
                 )}
-              </motion.button>
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<button type="button" aria-label={`More actions for ${conversation.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-100 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.08))] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"><Icons.ellipsis className="size-4" /></button>} />
+                <DropdownMenuContent align="end" className="shadow-[var(--shadow-menu)]">
+                  <DropdownMenuItem onClick={() => void toggleStar(conversation)}>{isStarred(conversation) ? "Unstar conversation" : "Star conversation"}</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              </motion.div>
             );
           })}
 
@@ -338,12 +396,12 @@ export function ConversationList({
 
         {(dmOnly || directMessagesOpen) &&
           visibleDirectMessages.map((conversation) => (
+            <div key={conversation.id} className="group relative">
             <button
-              key={conversation.id}
               type="button"
               onClick={() => onSelect(conversation.id)}
               className={cn(
-                "flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
+                "flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 pr-8 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
                 selectedId === conversation.id &&
                   "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white",
               )}
@@ -386,6 +444,13 @@ export function ConversationList({
                 </span>
               )}
             </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<button type="button" aria-label={`More actions for ${conversation.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-100 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.08))] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"><Icons.ellipsis className="size-4" /></button>} />
+              <DropdownMenuContent align="end" className="shadow-[var(--shadow-menu)]">
+                <DropdownMenuItem onClick={() => void toggleStar(conversation)}>{isStarred(conversation) ? "Unstar conversation" : "Star conversation"}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
           ))}
 
         <div className="mt-4 flex items-center justify-between px-1">
@@ -400,7 +465,14 @@ export function ConversationList({
           </button>
         </div>
 
-        {!dmOnly && starredOpen && starredHintVisible && (
+        {!dmOnly && starredOpen && visibleStarredConversations.length > 0 && visibleStarredConversations.map((conversation) => (
+          <button key={`starred-${conversation.id}`} type="button" onClick={() => onSelect(conversation.id)} className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]">
+            {conversation.kind === "dm" ? <IconMessage className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" /> : <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />}
+            <span className="truncate">{conversation.kind === "dm" ? conversation.name : conversation.name.replace(/^#\s*/, "")}</span>
+          </button>
+        ))}
+
+        {!dmOnly && starredOpen && starsLoaded && visibleStarredConversations.length === 0 && starredHintVisible && (
           <div className="flex items-center gap-2 px-2 py-2 text-xs text-[var(--chat-sidebar-muted,#94a3b8)]">
             <span className="flex-1 indent-4">
               Drag and drop important stuff here

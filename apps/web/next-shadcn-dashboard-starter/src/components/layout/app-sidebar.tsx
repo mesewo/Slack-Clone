@@ -209,7 +209,7 @@ export default function AppSidebar() {
                   <span className={railIcon()}><Icons.dots className="size-6" /></span>
                   <span className={railLabel}>More</span>
                 </PopoverTrigger>
-                <PopoverContent side="right" align="start" className="w-64 p-1">
+                <PopoverContent side="right" align="start" className="w-64 p-1 shadow-[var(--shadow-menu)]">
                   <button type="button" onClick={() => { setMoreOpen(false); window.dispatchEvent(new Event("workspace:open-files")); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.page className="size-5" />Files</button>
                   <button type="button" onClick={() => { setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/saved` : "/workspaces"); }} className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm ${pathname === `/home/${activeWorkspaceId}/saved` ? "bg-accent" : "hover:bg-accent"}`}><Icons.bookmark className="size-5" />Saved items</button>
                   <button type="button" onClick={() => { setMoreOpen(false); toast.info("Agents & tools are coming soon."); }} className="hover:bg-accent flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.settings className="size-5" />Agents &amp; tools</button>
@@ -222,7 +222,7 @@ export default function AppSidebar() {
                   <span className={railIcon()}><Icons.settings className="size-6" /></span>
                   <span className={railLabel}>Admin</span>
                 </PopoverTrigger>
-                <PopoverContent side="right" align="end" className="w-72 p-1">
+                <PopoverContent side="right" align="end" className="w-72 p-1 shadow-[var(--shadow-menu)]">
                   <div className="px-3 py-2 text-sm font-semibold">Admin Tools</div>
                   <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm"><span>Current plan: Free</span><button type="button" className="text-primary hover:underline" onClick={() => toast.info("Billing is coming soon.")}>Manage billing</button></div>
                   {["Workspace settings", "Edit workspace"].map((label) => <button key={label} type="button" onClick={() => toast.info(`${label} are coming soon.`)} className="hover:bg-accent flex w-full rounded-md px-3 py-2 text-left text-sm">{label}</button>)}
@@ -325,7 +325,7 @@ export default function AppSidebar() {
                   <IconX className={cn("absolute size-5 transition-all duration-200", createOpen ? "rotate-0 scale-100 opacity-100" : "-rotate-45 scale-0 opacity-0")} />
                 </span>
               </PopoverTrigger>
-              <PopoverContent side="right" align="end" className="w-64 p-1">
+              <PopoverContent side="right" align="end" className="w-64 p-1 shadow-[var(--shadow-menu)]">
                 {[["Message", openDirectMessages], ["Channel", () => router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}` : "/home")], ["Huddle", () => toast.info("Huddles are coming soon.")], ["Canvas", () => toast.info("Canvas is coming soon.")], ["List", () => toast.info("Lists are coming soon.")], ["Workflow", () => toast.info("Workflows are coming soon.")]].map(([label, action]) => <button key={label as string} type="button" onClick={action as () => void} className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm">{label as string}</button>)}
                 <div className="border-border my-1 border-t" />
                 <button type="button" onClick={() => activeWorkspaceId ? router.push(`/home/${activeWorkspaceId}/admin`) : toast.info("Open a workspace first.")} className="hover:bg-accent flex w-full items-center rounded-md px-3 py-2 text-left text-sm">Invite people</button>

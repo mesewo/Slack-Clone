@@ -11,6 +11,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ChannelMembersPanel } from "./ChannelMembersPanel";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { useChatStore } from "../utils/store";
+import { PinnedMessagesPanel } from "./PinnedMessagesPanel";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -27,6 +28,7 @@ export function ChatHeader({
 }: ChatHeaderProps & { canManageChannel?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
   const [starred, setStarred] = useState(false);
   const [muted, setMuted] = useState(false);
   const router = useRouter();
@@ -183,7 +185,10 @@ export function ChatHeader({
             )}
             <button
               type="button"
-              onClick={() => toast.info("Pinned items are coming soon")}
+              onClick={() => {
+                setMenuOpen(false);
+                setPinnedOpen(true);
+              }}
               className="hover:bg-accent w-full rounded-lg px-3 py-2 text-left text-xs"
             >
               Pinned items
@@ -231,6 +236,14 @@ export function ChatHeader({
             onClose={() => setMembersOpen(false)}
           />
         )}
+      {pinnedOpen && (
+        <PinnedMessagesPanel
+          scope={conversation.kind === "dm"
+            ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
+            : { channel_id: conversation.id }}
+          onClose={() => setPinnedOpen(false)}
+        />
+      )}
     </header>
   );
 }
