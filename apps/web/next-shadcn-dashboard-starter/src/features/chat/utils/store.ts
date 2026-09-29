@@ -143,6 +143,9 @@ function toDMConversation(
     dmId: dm.id,
     otherUserId: dm.other_user_id,
     customStatus: dm.other_presence_status || null,
+    lastMessage: dm.last_message || "",
+    lastMessageAt: dm.last_message_at,
+    lastMessageIsMine: dm.last_message_is_mine,
   };
 }
 
@@ -176,7 +179,7 @@ type ChatState = {
   markConversationRead: (id: string) => Promise<void>;
   setDraft: (text: string) => void;
   createChannel: (name: string, type: "PUBLIC" | "PRIVATE") => Promise<void>;
-  createDM: (userId: string) => Promise<void>;
+  createDM: (userId: string) => Promise<string | null>;
   refreshDMs: () => Promise<void>;
   sendMessage: (text: string, attachmentIds?: string[]) => Promise<void>;
   editMessage: (messageId: string, content: string) => Promise<void>;
@@ -524,7 +527,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const result = await messageService.createDM(userId);
     const dms = await messageService.listDMs();
     const dm = dms.find((item) => item.id === result.id);
-    if (!dm) return;
+    if (!dm) return null;
     const conversation = toDMConversation(dm, get().currentUserId ?? undefined);
     set((state) => ({
       conversations: [
@@ -534,6 +537,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       selectedConversationId: conversation.id,
     }));
     window.localStorage.setItem(lastConversationKey, conversation.id);
+    return conversation.id;
   },
 
   refreshDMs: async () => {
@@ -590,6 +594,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           parent_id: null,
           reply_count: 0,
           author_name: "You",
+          attachments: sent.attachments,
         });
       } else {
         await messageService.send(channelId, text.trim(), attachmentIds);
@@ -632,7 +637,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }));
 
     try {
-      await messageService.edit(channelId, messageId, content.trim());
+      if (channelId.startsWith("dm:")) {
+        await messageService.editDM(
+          channelId.slice(3),
+          messageId,
+          content.trim(),
+        );
+      } else {
+        await messageService.edit(channelId, messageId, content.trim());
+      }
     } catch (error) {
       set((state) => ({
         conversations: state.conversations.map((conversation) =>
@@ -666,7 +679,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     get().removeIncomingMessage(channelId, messageId);
     try {
-      await messageService.delete(channelId, messageId);
+      if (channelId.startsWith("dm:")) {
+        await messageService.deleteDM(channelId.slice(3), messageId);
+      } else {
+        await messageService.delete(channelId, messageId);
+      }
     } catch (error) {
       set((state) => ({
         conversations: state.conversations.map((item) =>

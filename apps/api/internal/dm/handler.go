@@ -32,6 +32,9 @@ type ConversationResponse struct {
 	OtherDisplayName    string    `json:"other_display_name"`
 	OtherEmail          string    `json:"other_email"`
 	OtherPresenceStatus string    `json:"other_presence_status"`
+	LastMessage         string    `json:"last_message"`
+	LastMessageAt       time.Time `json:"last_message_at"`
+	LastMessageIsMine   bool      `json:"last_message_is_mine"`
 }
 type MessageResponse struct {
 	ID             uuid.UUID            `json:"id"`
@@ -108,7 +111,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		seen[item.ID] = struct{}{}
-		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus})
+		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus, LastMessage: item.LastMessage, LastMessageAt: item.LastMessageAt, LastMessageIsMine: item.LastMessageIsMine})
 	}
 	if _, exists := seen[selfID]; !exists {
 		if self, userErr := h.Queries.GetUserByID(r.Context(), userID); userErr == nil {
@@ -571,4 +574,111 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := currentUser(r)
+	if !ok {
+		writeError(w, 401, "not authenticated")
+		return
+	}
+	conversationID, err := uuid.Parse(chi.URLParam(r, "conversationID"))
+	if err != nil {
+		writeError(w, 400, "invalid conversation id")
+		return
+	}
+	messageID, err := uuid.Parse(chi.URLParam(r, "messageID"))
+	if err != nil {
+		writeError(w, 400, "invalid message id")
+		return
+	}
+	member, err := h.Queries.IsDirectConversationMember(r.Context(), database.IsDirectConversationMemberParams{ConversationID: conversationID, UserID: userID})
+	if err != nil || !member {
+		writeError(w, 403, "not a member of this conversation")
+		return
+	}
+	msg, err := h.Queries.GetDirectMessageByID(r.Context(), messageID)
+	if err != nil {
+		writeError(w, 404, "message not found")
+		return
+	}
+	if msg.ConversationID != conversationID {
+		writeError(w, 400, "message does not belong to this conversation")
+		return
+	}
+	if !msg.UserID.Valid || msg.UserID.UUID != userID {
+		writeError(w, 403, "you can only delete your own messages")
+		return
+	}
+	if err := h.Queries.DeleteDirectMessage(r.Context(), messageID); err != nil {
+		writeError(w, 500, "failed to delete message")
+		return
+	}
+	if h.GatewayClient != nil {
+		payload, _ := json.Marshal(events.MessageDeletedPayload{MessageID: messageID.String()})
+		event, _ := json.Marshal(events.WSEvent{Type: events.EventMessageDeleted, ChannelID: "dm:" + conversationID.String(), Payload: payload})
+		_, _ = h.GatewayClient.Broadcast(r.Context(), &chatpb.BroadcastRequest{ChannelId: "dm:" + conversationID.String(), Payload: event})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) EditMessage(w http.ResponseWriter, r *http.Request) {
+	userID, ok := currentUser(r)
+	if !ok {
+		writeError(w, 401, "not authenticated")
+		return
+	}
+	conversationID, err := uuid.Parse(chi.URLParam(r, "conversationID"))
+	if err != nil {
+		writeError(w, 400, "invalid conversation id")
+		return
+	}
+	messageID, err := uuid.Parse(chi.URLParam(r, "messageID"))
+	if err != nil {
+		writeError(w, 400, "invalid message id")
+		return
+	}
+	member, err := h.Queries.IsDirectConversationMember(r.Context(), database.IsDirectConversationMemberParams{ConversationID: conversationID, UserID: userID})
+	if err != nil || !member {
+		writeError(w, 403, "not a member of this conversation")
+		return
+	}
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		writeError(w, 400, "content is required")
+		return
+	}
+
+	msg, err := h.Queries.GetDirectMessageByID(r.Context(), messageID)
+	if err != nil {
+		writeError(w, 404, "message not found")
+		return
+	}
+	if msg.ConversationID != conversationID {
+		writeError(w, 400, "message does not belong to this conversation")
+		return
+	}
+	if !msg.UserID.Valid || msg.UserID.UUID != userID {
+		writeError(w, 403, "you can only edit your own messages")
+		return
+	}
+
+	if err := h.Queries.UpdateDirectMessage(r.Context(), messageID, req.Content); err != nil {
+		writeError(w, 500, "failed to edit message")
+		return
+	}
+
+	if h.GatewayClient != nil {
+		payload, _ := json.Marshal(events.MessageEditedPayload{MessageID: messageID.String(), Content: req.Content})
+		event, _ := json.Marshal(events.WSEvent{Type: events.EventMessageEdited, ChannelID: "dm:" + conversationID.String(), Payload: payload})
+		_, _ = h.GatewayClient.Broadcast(r.Context(), &chatpb.BroadcastRequest{ChannelId: "dm:" + conversationID.String(), Payload: event})
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

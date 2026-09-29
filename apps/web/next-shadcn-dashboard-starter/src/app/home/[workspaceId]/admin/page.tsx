@@ -99,7 +99,7 @@ export default function WorkspaceAdminPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
+    <div className="mx-auto max-w-4xl space-y-6 p-6 md:p-8 overflow-y-auto overscroll-contain">
       <div>
         <div className="flex items-center gap-2">
           <IconShield className="size-5" />

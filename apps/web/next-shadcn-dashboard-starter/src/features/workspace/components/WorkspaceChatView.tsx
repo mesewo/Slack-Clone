@@ -12,6 +12,8 @@ import { workspaceService } from "@/features/workspace/services/workspaceService
 import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 import { useRealtimeTyping } from "@/features/chat/hooks/use-realtime-connection";
+import { AppLoader } from "@/components/ui/app-loader";
+import { IconMessageCircle } from "@tabler/icons-react";
 
 export function WorkspaceChatView() {
   const { user } = useAuth();
@@ -70,6 +72,9 @@ export function WorkspaceChatView() {
   }, [params.workspaceId]);
 
   const activeConversation = getActiveConversation();
+  const routeConversation = conversations.find(
+    (conversation) => conversation.id === selectedRouteId,
+  );
   const handleMarkRead = useCallback(() => {
     if (selectedConversationId)
       void markConversationRead(selectedConversationId);
@@ -131,23 +136,34 @@ export function WorkspaceChatView() {
 
   if (!user) {
     return (
-      <div className="flex h-full min-h-[24rem] items-center justify-center text-sm text-muted-foreground">
-        Loading conversation...
-      </div>
+      <AppLoader />
     );
+  }
+
+  if (selectedRouteId && (!routeConversation || selectedConversationId !== selectedRouteId)) {
+    return <AppLoader />;
   }
 
   if (!activeConversation) {
     return (
-      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black text-white">
-        <div className="relative flex flex-col items-center gap-5 text-center">
-          <div className="absolute inset-0 -z-0 animate-pulse rounded-full bg-purple-700/20 blur-3xl" />
-          <div className="z-10 flex size-20 items-center justify-center rounded-3xl border border-purple-400/30 bg-purple-950/70 shadow-[0_0_60px_rgba(97,31,105,0.45)]">
-            <span className="size-3 animate-ping rounded-full bg-purple-300" />
-          </div>
-          <div className="z-10">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-background text-foreground">
+        <div className="flex flex-col items-center gap-5 text-center">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 120 108"
+            className="size-32 drop-shadow-[0_18px_20px_rgba(76,29,149,0.24)]"
+            fill="none"
+          >
+            <path d="M17 15a12 12 0 0 1 12-12h65a12 12 0 0 1 12 12v48a12 12 0 0 1-12 12H53L31 95V75h-2a12 12 0 0 1-12-12V15Z" fill="#6D28D9" />
+            <path d="M17 15a12 12 0 0 1 12-12h65a12 12 0 0 1 12 12v8H17v-8Z" fill="#E9D5FF" />
+            <path d="M106 23v40a12 12 0 0 1-12 12H53L31 95V77l20-17h43a12 12 0 0 0 12-12V23Z" fill="#4C1D95" />
+            <circle cx="43" cy="44" r="4" fill="#F5F3FF" />
+            <circle cx="60" cy="44" r="4" fill="#F5F3FF" />
+            <circle cx="77" cy="44" r="4" fill="#F5F3FF" />
+          </svg>
+          <div>
             <h1 className="text-xl font-semibold">Open to chat</h1>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="text-muted-foreground mt-1 text-sm">
               Choose a channel or direct message from the sidebar.
             </p>
           </div>

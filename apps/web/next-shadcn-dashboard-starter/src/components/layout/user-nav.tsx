@@ -51,7 +51,14 @@ export function UserNav() {
             Profile
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => router.push("/dashboard/notifications")}
+            onClick={() => {
+              const workspaceId = window.localStorage.getItem("active_workspace_id");
+              router.push(
+                workspaceId
+                  ? `/home/${workspaceId}/notifications`
+                  : "/workspaces",
+              );
+            }}
           >
             Notifications
           </DropdownMenuItem>

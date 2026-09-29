@@ -195,6 +195,7 @@ interface MessageComposerProps {
   onTyping?: () => void;
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   contactName: string;
+  isSelfDM?: boolean;
   quickReplies: string[];
   attachments: Attachment[];
   onAddAttachments: (files: FileList) => void;
@@ -401,7 +402,7 @@ export function MessageComposer({
                   form?.requestSubmit();
                 }
               }}
-              data-placeholder={`Message ${contactName} (Enter to send, Shift+Enter for newline)`}
+              data-placeholder={`Message ${contactName}`}
               className={`text-foreground empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)] min-h-[2.5rem] w-full ${expanded ? "max-h-[50vh]" : "max-h-[20rem]"} overflow-y-auto border-none bg-transparent text-sm outline-none sm:min-h-[3rem]`}
               aria-label={"Message " + contactName}
             />

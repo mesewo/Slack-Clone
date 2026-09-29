@@ -62,6 +62,9 @@ export interface DirectConversation {
   other_display_name: string;
   other_email: string;
   other_presence_status?: string;
+  last_message: string;
+  last_message_at: string;
+  last_message_is_mine: boolean;
 }
 
 export interface DirectUser {
@@ -293,7 +296,19 @@ export const messageService = {
   async delete(channelId: string, messageId: string): Promise<void> {
     await apiClient.delete(`/api/channels/${channelId}/messages/${messageId}`);
   },
+  async editDM(
+    conversationId: string,
+    messageId: string,
+    content: string,
+  ): Promise<void> {
+    await apiClient.patch(`/api/dms/${conversationId}/messages/${messageId}`, {
+      content,
+    });
+  },
 
+  async deleteDM(conversationId: string, messageId: string): Promise<void> {
+    await apiClient.delete(`/api/dms/${conversationId}/messages/${messageId}`);
+  },
   async list(
     channelId: string,
     opts?: { before?: string; limit?: number },

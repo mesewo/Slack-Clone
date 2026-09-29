@@ -83,37 +83,39 @@ export default function NotificationsPage() {
   };
 
   return (
-    <PageContainer
-      pageTitle="Notifications"
-      pageDescription="View and manage all your notifications."
-      pageHeaderAction={
-        count > 0 ? (
-          <Button variant="outline" size="sm" onClick={markAllAsRead}>
-            Mark all as read
-          </Button>
-        ) : undefined
-      }
-    >
-      <Tabs defaultValue="all">
-        <TabsList>
-          <TabsTrigger value="all">All ({notifications.length})</TabsTrigger>
-          <TabsTrigger value="unread">
-            Unread ({unreadNotifications.length})
-          </TabsTrigger>
-          <TabsTrigger value="read">
-            Read ({readNotifications.length})
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="all" className="mt-4">
-          {renderList(notifications)}
-        </TabsContent>
-        <TabsContent value="unread" className="mt-4">
-          {renderList(unreadNotifications)}
-        </TabsContent>
-        <TabsContent value="read" className="mt-4">
-          {renderList(readNotifications)}
-        </TabsContent>
-      </Tabs>
-    </PageContainer>
+    <div className=" overflow-y-auto overscroll-contain">
+      <PageContainer
+        pageTitle="Notifications"
+        pageDescription="View and manage all your notifications."
+        pageHeaderAction={
+          count > 0 ? (
+            <Button variant="outline" size="sm" onClick={markAllAsRead}>
+              Mark all as read
+            </Button>
+          ) : undefined
+        }
+      >
+        <Tabs defaultValue="all">
+          <TabsList>
+            <TabsTrigger value="all">All ({notifications.length})</TabsTrigger>
+            <TabsTrigger value="unread">
+              Unread ({unreadNotifications.length})
+            </TabsTrigger>
+            <TabsTrigger value="read">
+              Read ({readNotifications.length})
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="all" className="mt-4">
+            {renderList(notifications)}
+          </TabsContent>
+          <TabsContent value="unread" className="mt-4">
+            {renderList(unreadNotifications)}
+          </TabsContent>
+          <TabsContent value="read" className="mt-4">
+            {renderList(readNotifications)}
+          </TabsContent>
+        </Tabs>
+      </PageContainer>
+    </div>
   );
 }

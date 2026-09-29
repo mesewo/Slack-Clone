@@ -116,3 +116,20 @@ func (q *Queries) SearchDirectMessages(ctx context.Context, conversationID uuid.
 	}
 	return items, rows.Err()
 }
+
+func (q *Queries) GetDirectMessageByID(ctx context.Context, id uuid.UUID) (DirectMessage, error) {
+	var item DirectMessage
+	err := q.db.QueryRow(ctx, `SELECT id, conversation_id, user_id, content, created_at, updated_at, deleted_at, parent_id, reply_count FROM direct_messages WHERE id = $1 AND deleted_at IS NULL`, id).
+		Scan(&item.ID, &item.ConversationID, &item.UserID, &item.Content, &item.CreatedAt, &item.UpdatedAt, &item.DeletedAt, &item.ParentID, &item.ReplyCount)
+	return item, err
+}
+
+func (q *Queries) DeleteDirectMessage(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, `UPDATE direct_messages SET deleted_at = now() WHERE id = $1`, id)
+	return err
+}
+
+func (q *Queries) UpdateDirectMessage(ctx context.Context, id uuid.UUID, content string) error {
+	_, err := q.db.Exec(ctx, `UPDATE direct_messages SET content = $2, updated_at = now() WHERE id = $1`, id, content)
+	return err
+}

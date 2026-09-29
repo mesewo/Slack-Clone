@@ -4,6 +4,7 @@ import type {
   NotificationAction,
 } from "@/components/ui/notification-card";
 import { apiClient } from "@/lib/axios";
+import { useChatStore } from "@/features/chat/utils/store";
 
 export type Notification = {
   id: string;
@@ -30,6 +31,7 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
   notifications: [],
   load: async () => {
     try {
+      const workspaceId = window.localStorage.getItem("active_workspace_id");
       const response = await apiClient.get<
         Array<{
           id: string;
@@ -40,9 +42,23 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
           read_at?: string | null;
           entity_id?: string | null;
         }>
-      >("/api/notifications");
+      >("/api/notifications", {
+        params: workspaceId ? { workspace_id: workspaceId } : undefined,
+      });
+      const chatState = useChatStore.getState();
+      const conversations =
+        chatState.workspace?.id === workspaceId ? chatState.conversations : [];
+      const workspaceEntityIds = new Set(
+        conversations.flatMap((conversation) =>
+          conversation.kind === "dm"
+            ? [conversation.dmId, conversation.id.replace(/^dm:/, "")]
+            : [conversation.id],
+        ),
+      );
       set({
-        notifications: response.data.map((item) => ({
+        notifications: response.data.filter((item) =>
+          item.entity_id ? workspaceEntityIds.has(item.entity_id) : false,
+        ).map((item) => ({
           id: item.id,
           title: item.title,
           body: item.body,

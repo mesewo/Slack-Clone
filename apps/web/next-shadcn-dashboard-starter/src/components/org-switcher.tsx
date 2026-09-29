@@ -16,11 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+import { SidebarMenuButton } from "@/components/ui/sidebar";
 
 const activeWorkspaceKey = "active_workspace_id";
 
@@ -44,6 +40,7 @@ export function OrgSwitcher() {
 
   const active =
     workspaces.find((workspace) => workspace.id === activeId) || workspaces[0];
+
   const selectWorkspace = (workspace: Workspace) => {
     setActiveId(workspace.id);
     window.localStorage.setItem(activeWorkspaceKey, workspace.id);
@@ -51,42 +48,48 @@ export function OrgSwitcher() {
   };
 
   return (
-    <SidebarMenu>
-      <SidebarMenuItem>
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={<SidebarMenuButton tooltip="Workspace" />}
-          >
-            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex size-8 shrink-0 items-center justify-center rounded-lg">
-              <Icons.galleryVerticalEnd className="size-4" />
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <SidebarMenuButton tooltip="Workspace">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/25 text-lg font-bold text-white">
+              {active?.name?.trim()?.charAt(0)?.toUpperCase() || "?"}
             </div>
+
             <span className="sr-only">
               {active?.name || "Select workspace"}
             </span>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-64" align="start">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
-            </DropdownMenuGroup>
-            {workspaces.map((workspace) => (
-              <DropdownMenuItem
-                key={workspace.id}
-                onClick={() => selectWorkspace(workspace)}
-              >
-                <Icons.galleryVerticalEnd className="mr-2 size-4" />
-                <span className="truncate">{workspace.name}</span>
-                {workspace.id === activeId && (
-                  <Icons.check className="ml-auto size-4" />
-                )}
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/workspaces")}>
-              <Icons.add className="mr-2 size-4" /> Create workspace
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </SidebarMenuItem>
-    </SidebarMenu>
+          </SidebarMenuButton>
+        }
+      />
+
+      <DropdownMenuContent className="w-64" align="start">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Workspaces</DropdownMenuLabel>
+        </DropdownMenuGroup>
+
+        {workspaces.map((workspace) => (
+          <DropdownMenuItem
+            key={workspace.id}
+            onClick={() => selectWorkspace(workspace)}
+          >
+            <Icons.galleryVerticalEnd className="mr-2 size-4" />
+
+            <span className="truncate">{workspace.name}</span>
+
+            {workspace.id === activeId && (
+              <Icons.check className="ml-auto size-4" />
+            )}
+          </DropdownMenuItem>
+        ))}
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem onClick={() => router.push("/workspaces")}>
+          <Icons.add className="mr-2 size-4" />
+          Create workspace
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
