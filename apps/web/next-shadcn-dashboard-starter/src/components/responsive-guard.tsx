@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { IconDeviceMobileMessage } from "@tabler/icons-react";
 
 const DESIGN_WIDTH = 1280;
+const MIN_SCALE = 0.75;
 
 export function ResponsiveGuard({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
@@ -16,14 +17,20 @@ export function ResponsiveGuard({ children }: { children: ReactNode }) {
       const mobile =
         window.matchMedia("(pointer: coarse)").matches ||
         /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-      setIsMobile(mobile);
-
       if (mobile) {
+        setIsMobile(true);
         document.body.style.zoom = "1";
         return;
       }
 
       const scale = Math.min(1, window.innerWidth / DESIGN_WIDTH);
+      if (scale < MIN_SCALE) {
+        setIsMobile(true);
+        document.body.style.zoom = "1";
+        return;
+      }
+
+      setIsMobile(false);
       document.body.style.zoom = String(scale);
     };
 
@@ -52,8 +59,7 @@ export function ResponsiveGuard({ children }: { children: ReactNode }) {
         <h1 className="max-w-sm text-xl font-semibold">
           The Slack Clone mobile app is coming soon.
         </h1>
-        {/* TODO: Replace with the project's repository URL when package.json has one. */}
-        <a className="text-primary text-sm underline underline-offset-4" href="#">
+        <a className="text-primary text-sm underline underline-offset-4" href="https://github.com/mesewo/slack-clone">
           View the repository
         </a>
       </main>

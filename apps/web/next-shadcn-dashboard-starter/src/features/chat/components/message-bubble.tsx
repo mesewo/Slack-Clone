@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import type { Message } from "../utils/types";
 import { productivityService } from "@/features/workspace/services/productivityService";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RichMessageEditor } from "./RichMessageEditor";
 
 const reactionChoices = Array.from(
   new Set([
@@ -445,11 +446,13 @@ export function MessageBubble({
         )}
         {isEditing ? (
           <div className="mt-2 space-y-2">
-            <textarea
-              value={editDraft}
-              onChange={(event) => setEditDraft(event.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-border bg-background p-2 text-[0.875rem] text-foreground outline-none ring-0 placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+            <RichMessageEditor
+              initialValue={message.text}
+              onChange={setEditDraft}
+              autoFocus
+              placeholder="Edit message"
+              ariaLabel="Edit message"
+              showToolbar
             />
             <div className="flex justify-end gap-2">
               <button

@@ -362,7 +362,7 @@ export function ConversationList({
                 )}
               </button>
               <DropdownMenu>
-                <DropdownMenuTrigger render={<button type="button" aria-label={`More actions for ${conversation.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-100 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.08))] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"><Icons.ellipsis className="size-4" /></button>} />
+                <DropdownMenuTrigger render={<button type="button" aria-label={`More actions for ${conversation.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-100 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"><Icons.ellipsis className="size-4" /></button>} />
                 <DropdownMenuContent align="end" className="shadow-[var(--shadow-menu)]">
                   <DropdownMenuItem onClick={() => void toggleStar(conversation)}>{isStarred(conversation) ? "Unstar conversation" : "Star conversation"}</DropdownMenuItem>
                 </DropdownMenuContent>
@@ -445,7 +445,7 @@ export function ConversationList({
               )}
             </button>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<button type="button" aria-label={`More actions for ${conversation.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-100 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.08))] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"><Icons.ellipsis className="size-4" /></button>} />
+              <DropdownMenuTrigger render={<button type="button" aria-label={`More actions for ${conversation.name}`} className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-100 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))] hover:text-white sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100"><Icons.ellipsis className="size-4" /></button>} />
               <DropdownMenuContent align="end" className="shadow-[var(--shadow-menu)]">
                 <DropdownMenuItem onClick={() => void toggleStar(conversation)}>{isStarred(conversation) ? "Unstar conversation" : "Star conversation"}</DropdownMenuItem>
               </DropdownMenuContent>

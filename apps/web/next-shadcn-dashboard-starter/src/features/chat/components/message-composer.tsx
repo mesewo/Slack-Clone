@@ -4,11 +4,18 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { FilePreview } from "@/components/ui/file-preview";
+import { RichMessageEditor, type RichMessageEditorHandle } from "./RichMessageEditor";
 import type { Attachment } from "../utils/types";
 import { toast } from "sonner";
 
 // File upload validation constants
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+function toLocalDateTimeValue(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
 const ALLOWED_FILE_TYPES = {
   images: [
     "image/jpeg",
@@ -18,6 +25,7 @@ const ALLOWED_FILE_TYPES = {
     "image/svg+xml",
   ],
   videos: ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"],
+  audio: ["audio/webm", "audio/ogg", "audio/mp4", "audio/wav", "audio/mpeg"],
   documents: [
     "application/pdf",
     "application/msword",
@@ -34,6 +42,7 @@ const validateFiles = (
   const supportedMimes = [
     ...ALLOWED_FILE_TYPES.images,
     ...ALLOWED_FILE_TYPES.videos,
+    ...ALLOWED_FILE_TYPES.audio,
     ...ALLOWED_FILE_TYPES.documents,
   ];
 
@@ -135,60 +144,6 @@ const emojiAliases: Record<string, string> = {
   "💡": "idea lightbulb",
 };
 
-function escapeHtml(text: string) {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function markdownToHtml(text: string) {
-  return escapeHtml(text)
-    .replace(/^&gt; (.*)$/gm, "<blockquote>$1</blockquote>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/__(.+?)__/g, "<u>$1</u>")
-    .replace(/~~(.+?)~~/g, "<s>$1</s>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/\n/g, "<br>");
-}
-
-function nodeToMarkdown(node: Node): string {
-  if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
-  if (node.nodeName === "BR") return "\n";
-
-  const content = Array.from(node.childNodes).map(nodeToMarkdown).join("");
-  switch (node.nodeName) {
-    case "STRONG":
-    case "B":
-      return `**${content}**`;
-    case "EM":
-    case "I":
-      return `*${content}*`;
-    case "U":
-      return `__${content}__`;
-    case "S":
-    case "DEL":
-      return `~~${content}~~`;
-    case "CODE":
-      return `\`${content}\``;
-    case "BLOCKQUOTE":
-      return content
-        .split("\n")
-        .map((line) => `> ${line}`)
-        .join("\n");
-    case "PRE":
-      return `\`${content}\``;
-    case "DIV":
-    case "P":
-      return `${content}\n`;
-    default:
-      return content;
-  }
-}
-
 interface MessageComposerProps {
   draft: string;
   onDraftChange: (text: string) => void;
@@ -220,75 +175,80 @@ export function MessageComposer({
   onSchedule,
 }: MessageComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const editorRef = useRef<HTMLDivElement>(null);
-  const renderedDraftRef = useRef<string | null>(null);
+  const editorRef = useRef<RichMessageEditorHandle>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
+  const [minimumScheduledFor, setMinimumScheduledFor] = useState("");
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
 
-  const mentionMatch = draft.match(/(^|\s)@([\w-]*)$/);
-  const mentionQuery = mentionMatch?.[2].toLowerCase() ?? "";
-  const visibleMentions = mentionMatch
-    ? mentionSuggestions.filter((suggestion) =>
-        suggestion.toLowerCase().startsWith(mentionQuery),
-      )
-    : [];
+  useEffect(() => () => {
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
-  useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || renderedDraftRef.current === draft) return;
-    editor.innerHTML = markdownToHtml(draft);
-    renderedDraftRef.current = draft;
-  }, [draft]);
+  const startAudioRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      toast.error("Audio recording is not supported by this browser.");
+      return;
+    }
 
-  const syncDraft = () => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    const nextDraft = nodeToMarkdown(editor).replace(/\n+$/, "");
-    renderedDraftRef.current = nextDraft;
-    onDraftChange(nextDraft);
-    onTyping?.();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const options = MediaRecorder.isTypeSupported("audio/webm")
+        ? { mimeType: "audio/webm" }
+        : undefined;
+      const recorder = new MediaRecorder(stream, options);
+      const chunks: BlobPart[] = [];
+      recordingStreamRef.current = stream;
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        if (blob.size > 0) {
+          const extension = blob.type.includes("ogg")
+            ? "ogg"
+            : blob.type.includes("mp4")
+              ? "mp4"
+              : "webm";
+          const file = new File([blob], `audio-clip-${Date.now()}.${extension}`, { type: blob.type });
+          const transfer = new DataTransfer();
+          transfer.items.add(file);
+          onAddAttachments(transfer.files);
+        }
+        stream.getTracks().forEach((track) => track.stop());
+        recordingStreamRef.current = null;
+        recorderRef.current = null;
+        setIsRecording(false);
+        setAttachOpen(false);
+      };
+      recorder.start();
+      setIsRecording(true);
+    } catch {
+      toast.error("Couldn't access your microphone.");
+    }
   };
 
-  const applyFormat = (command: string, value?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(command, false, value);
-    syncDraft();
+  const stopAudioRecording = () => {
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
   };
 
   const insertEmoji = (emoji: string) => {
-    const editor = editorRef.current;
-    if (!editor) {
-      onDraftChange(`${draft}${emoji} `);
-      return;
-    }
-    editor.focus();
-    document.execCommand("insertText", false, `${emoji} `);
-    syncDraft();
+    editorRef.current?.insertText(`${emoji} `);
     setEmojiOpen(false);
-  };
-
-  const insertMention = (mention: string) => {
-    const editor = editorRef.current;
-    if (!editor || !mentionMatch) return;
-    editor.focus();
-    const selection = window.getSelection();
-    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
-    if (range) {
-      range.deleteContents();
-      range.insertNode(document.createTextNode(`@${mention} `));
-      range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    } else {
-      document.execCommand("insertText", false, `@${mention} `);
-    }
-    syncDraft();
   };
 
   return (
@@ -327,105 +287,18 @@ export function MessageComposer({
               {attachments.length === 1 ? "" : "s"}...
             </div>
           )}
-          {formatterOpen && (
-            <div className="mb-1.5 flex flex-wrap items-center gap-0.5 p-0 sm:mb-2">
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyFormat("bold")}
-                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-bold transition"
-                aria-label="Bold"
-              >
-                B
-              </button>
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyFormat("italic")}
-                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] italic transition"
-                aria-label="Italic"
-              >
-                I
-              </button>
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyFormat("underline")}
-                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] underline transition"
-                aria-label="Underline"
-              >
-                U
-              </button>
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyFormat("strikeThrough")}
-                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] line-through transition"
-                aria-label="Strikethrough"
-              >
-                S
-              </button>
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyFormat("formatBlock", "pre")}
-                className="hover:bg-accent text-foreground/70 hover:text-foreground rounded-md px-1.5 py-0.5 text-[0.7rem] font-mono transition"
-                aria-label="Inline code"
-              >
-                {"</>"}
-              </button>
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => applyFormat("formatBlock", "blockquote")}
-                className="hover:bg-accent text-foreground/80 hover:text-foreground rounded-md px-2 py-1 text-xs"
-                aria-label="Quote"
-              >
-                Quote
-              </button>
-            </div>
-          )}
-          <div className="relative">
-            <div
-              ref={editorRef}
-              id="messenger-editor"
-              contentEditable
-              suppressContentEditableWarning
-              role="textbox"
-              aria-multiline="true"
-              tabIndex={0}
-              onInput={syncDraft}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  const form = event.currentTarget.closest("form");
-                  form?.requestSubmit();
-                }
-              }}
-              data-placeholder={`Message ${contactName}`}
-              className={`text-foreground empty:before:text-muted-foreground/60 empty:before:content-[attr(data-placeholder)] min-h-[2.5rem] w-full ${expanded ? "max-h-[50vh]" : "max-h-[20rem]"} overflow-y-auto border-none bg-transparent text-sm outline-none sm:min-h-[3rem]`}
-              aria-label={"Message " + contactName}
-            />
-            {visibleMentions.length > 0 && (
-              <div className="border-border/70 bg-popover absolute right-0 bottom-full z-30 mb-2 w-56 rounded-xl border p-1 shadow-xl">
-                <p className="text-muted-foreground px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em]">
-                  Mention someone
-                </p>
-                {visibleMentions.slice(0, 6).map((mention) => (
-                  <button
-                    key={mention}
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => insertMention(mention)}
-                    className="hover:bg-accent flex w-full items-center rounded-lg px-2 py-1.5 text-left text-xs"
-                  >
-                    <span className="text-primary mr-1">@</span>
-                    {mention}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <RichMessageEditor
+            ref={editorRef}
+            initialValue={draft}
+            onChange={onDraftChange}
+            onTyping={onTyping}
+            autoFocus={false}
+            showToolbar={formatterOpen}
+            placeholder={`Message ${contactName}`}
+            ariaLabel={`Message ${contactName}`}
+            expanded={expanded}
+            mentionSuggestions={mentionSuggestions}
+          />
           <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 sm:gap-1.5">
             <input
               ref={fileInputRef}
@@ -445,7 +318,7 @@ export function MessageComposer({
             <div className="relative">
               <Button
                 type="button"
-                className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white size-8 rounded-xl border transition"
+                className="text-slate-300 hover:text-white size-8 rounded-md p-1 transition"
                 aria-label="Attach content"
                 title="Attach content"
                 aria-expanded={attachOpen}
@@ -455,6 +328,16 @@ export function MessageComposer({
               </Button>
               {attachOpen && (
                 <div className="border-border bg-popover absolute bottom-10 left-0 z-30 w-48 rounded-xl border p-1 shadow-xl">
+                  {isRecording ? (
+                    <div className="flex items-center gap-2 rounded-lg px-2 py-2 text-xs" role="status" aria-live="polite">
+                      <span className="size-2 animate-pulse rounded-full bg-red-500" />
+                      <span className="flex-1">Recording voice clip</span>
+                      <button type="button" onClick={stopAudioRecording} className="text-muted-foreground hover:text-foreground rounded p-1" aria-label="Stop voice clip recording" title="Stop recording">
+                        <Icons.close className="size-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
                   {[
                     ["image/*", "Images", "Choose images"],
                     ["video/*", "Videos", "Choose videos"],
@@ -475,6 +358,14 @@ export function MessageComposer({
                       <span aria-label={ariaLabel}>{label}</span>
                     </button>
                   ))}
+                      <button type="button" onClick={() => void startAudioRecording()} className="hover:bg-accent flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs">
+                        <Icons.microphone className="size-3.5" />Voice clip
+                      </button>
+                      <button type="button" onClick={() => toast.info("Video recording is coming soon.")} className="hover:bg-accent flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs">
+                        <Icons.video className="size-3.5" />Video clip
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -482,7 +373,7 @@ export function MessageComposer({
               <button
                 type="button"
                 onClick={() => setEmojiOpen((current) => !current)}
-                className="text-slate-300 hover:bg-white/10 hover:text-white rounded-md px-2 py-1 text-sm"
+                className="text-slate-300 hover:text-[#f2c744] rounded-md px-2 py-1 text-sm transition-colors"
                 aria-label="Insert emoji"
               >
                 😊
@@ -531,7 +422,7 @@ export function MessageComposer({
             <button
               type="button"
               onClick={() => setFormatterOpen((open) => !open)}
-              className="text-slate-300 hover:bg-white/10 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
+              className="text-slate-300 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
               aria-label="Toggle formatting toolbar"
               title="Show or hide formatting tools"
             >
@@ -540,11 +431,9 @@ export function MessageComposer({
             <button
               type="button"
               onClick={() => {
-                editorRef.current?.focus();
-                document.execCommand("insertText", false, "@");
-                syncDraft();
+                editorRef.current?.insertText("@");
               }}
-              className="text-slate-300 hover:bg-white/10 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
+              className="text-slate-300 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
               aria-label="Mention a user"
               title="Mention a user"
             >
@@ -553,7 +442,7 @@ export function MessageComposer({
             <div className="relative">
               <Button
                 type="button"
-                className="border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white size-8 rounded-xl border transition"
+                className="text-slate-300 hover:text-white size-8 rounded-md p-1 transition"
                 aria-label="More composer options"
                 title="More composer options"
                 aria-expanded={moreOpen}
@@ -606,9 +495,20 @@ export function MessageComposer({
             <Button
               type="button"
               className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-7 rounded-l-none rounded-r-2xl border-l border-primary-foreground/30 px-0 sm:h-11"
-              aria-label="Schedule message"
-              title="Schedule message"
-              onClick={() => setScheduleOpen((open) => !open)}
+              aria-label="Schedule for later"
+              title="Schedule for later"
+              aria-expanded={scheduleOpen}
+              disabled={isUploading || !draft.trim()}
+              onClick={() => {
+                if (!scheduleOpen) {
+                  const minimum = new Date();
+                  minimum.setMinutes(minimum.getMinutes() + 2, 0, 0);
+                  const minimumValue = toLocalDateTimeValue(minimum);
+                  setMinimumScheduledFor(minimumValue);
+                  setScheduledFor(minimumValue);
+                }
+                setScheduleOpen((open) => !open);
+              }}
             >
               <Icons.chevronDown className="size-3.5" />
             </Button>
@@ -629,6 +529,7 @@ export function MessageComposer({
               <input
                 type="datetime-local"
                 value={scheduledFor}
+                min={minimumScheduledFor}
                 onChange={(event) => setScheduledFor(event.target.value)}
                 className="border-border bg-background mt-2 w-full rounded-md border px-2 py-1 text-xs"
               />
@@ -636,11 +537,27 @@ export function MessageComposer({
                 type="button"
                 size="sm"
                 className="mt-2 w-full"
-                disabled={!scheduledFor || !draft.trim() || !onSchedule}
+                disabled={
+                  !scheduledFor ||
+                  new Date(scheduledFor).getTime() <= Date.now() ||
+                  !draft.trim() ||
+                  !onSchedule
+                }
                 onClick={async () => {
-                  await onSchedule?.(new Date(scheduledFor).toISOString());
-                  setScheduleOpen(false);
-                  setScheduledFor("");
+                  const scheduledTime = new Date(scheduledFor);
+                  if (!Number.isFinite(scheduledTime.getTime()) || scheduledTime.getTime() <= Date.now()) {
+                    toast.error("Choose a future time to schedule this message.");
+                    return;
+                  }
+                  try {
+                    await onSchedule?.(scheduledTime.toISOString());
+                    setScheduleOpen(false);
+                    setScheduledFor("");
+                  } catch (cause) {
+                    const message = (cause as { response?: { data?: { error?: string } } })
+                      .response?.data?.error;
+                    toast.error(message || "Couldn't schedule the message. Please choose a future time and try again.");
+                  }
                 }}
               >
                 Schedule
