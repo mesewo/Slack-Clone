@@ -4,10 +4,7 @@ import { ThemeProvider as NextThemesProvider, ThemeProviderProps } from 'next-th
 
 export default function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   return (
-    <NextThemesProvider
-      {...props}
-      scriptProps={{ ...props.scriptProps, type: "application/json" }}
-    >
+    <NextThemesProvider {...props}>
       {children}
     </NextThemesProvider>
   );

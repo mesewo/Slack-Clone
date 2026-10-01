@@ -84,23 +84,21 @@ export default async function RootLayout({
           fontVariables,
         )}
       >
-        <ResponsiveGuard>
-          <NextTopLoader color="var(--primary)" showSpinner={false} />
-          <NuqsAdapter>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="system"
-              enableSystem
-              disableTransitionOnChange
-              enableColorScheme
-            >
-              <Providers activeThemeValue={themeToApply}>
-                <Toaster />
-                {children}
-              </Providers>
-            </ThemeProvider>
-          </NuqsAdapter>
-        </ResponsiveGuard>
+        <NextTopLoader color="var(--primary)" showSpinner={false} />
+        <NuqsAdapter>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+            enableColorScheme
+          >
+            <Providers activeThemeValue={themeToApply}>
+              <Toaster />
+              <ResponsiveGuard>{children}</ResponsiveGuard>
+            </Providers>
+          </ThemeProvider>
+        </NuqsAdapter>
       </body>
     </html>
   );

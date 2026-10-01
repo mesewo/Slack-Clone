@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/resizable";
 
 const CHAT_LIST_WIDTH_KEY = "slack_chatlist_width";
+type DownloadProgressItem = { id: string; filename: string; status: "downloading" | "complete" | "failed"; progress: number };
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -29,6 +30,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const [chatListWidth, setChatListWidth] = useState(24);
   const [chatListWidthLoaded, setChatListWidthLoaded] = useState(false);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgressItem[]>([]);
+  const [downloadPanelDismissed, setDownloadPanelDismissed] = useState(false);
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -52,6 +55,23 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       // Keep the default width when storage is unavailable.
     }
     setChatListWidthLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    const onProgress = (event: Event) => {
+      const detail = (event as CustomEvent<DownloadProgressItem>).detail;
+      if (!detail?.id) return;
+      setDownloadPanelDismissed(false);
+      setDownloadProgress((current) => {
+        const next = [...current.filter((item) => item.id !== detail.id), detail];
+        return next.slice(-6);
+      });
+      if (detail.status !== "downloading") {
+        window.setTimeout(() => setDownloadProgress((current) => current.filter((item) => item.id !== detail.id)), 2400);
+      }
+    };
+    window.addEventListener("workspace:download-progress", onProgress);
+    return () => window.removeEventListener("workspace:download-progress", onProgress);
   }, []);
 
   useEffect(() => {
@@ -214,6 +234,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           />
         </SheetContent>
       </Sheet>
+      {downloadProgress.length > 0 && !downloadPanelDismissed && <section aria-label="File downloads" aria-live="polite" className="absolute right-5 bottom-5 z-50 w-[min(22rem,calc(100%-2rem))] rounded-xl border bg-popover p-3 text-popover-foreground shadow-xl">
+        <div className="mb-2 flex items-center justify-between"><h2 className="text-sm font-semibold">Downloads</h2><button type="button" onClick={() => setDownloadPanelDismissed(true)} aria-label="Dismiss download progress" className="text-muted-foreground rounded px-2 py-1 text-xs hover:bg-muted">Hide</button></div>
+        <div className="space-y-3">{downloadProgress.map((item) => <div key={item.id} className="min-w-0"><div className="mb-1 flex items-center gap-2 text-xs"><span className="min-w-0 flex-1 truncate">{item.filename}</span><span className="text-muted-foreground shrink-0">{item.status === "downloading" ? `${item.progress}%` : item.status === "complete" ? "Done" : "Failed"}</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className={`h-full rounded-full transition-[width] ${item.status === "failed" ? "bg-destructive" : "bg-primary"} ${item.progress === 0 && item.status === "downloading" ? "w-1/4 animate-pulse" : ""}`} style={{ width: item.progress > 0 ? `${item.progress}%` : undefined }} /></div></div>)}</div>
+      </section>}
       </div>
     </div>
   );

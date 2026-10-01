@@ -46,10 +46,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { IconX } from "@tabler/icons-react";
 import { WorkspaceFilesDialog } from "@/features/workspace/components/WorkspaceFilesDialog";
+import { useNotificationStore } from "@/features/notifications/utils/store";
+import { useChatStore } from "@/features/chat/utils/store";
 
 const railBtn = "group/rail h-auto flex-col gap-1 py-1.5 hover:bg-transparent data-active:bg-transparent data-active:text-sidebar-foreground";
 const railIcon = (active?: boolean) =>
-  cn("flex size-9 items-center justify-center rounded-lg text-white transition-colors group-hover/rail:bg-white/15", active && "bg-zinc-500/55 text-white");
+  cn("flex size-9 items-center justify-center rounded-lg text-white transition-colors group-hover/rail:bg-white/15 [&_svg]:size-5", active && "bg-zinc-500/55 text-white");
 const railLabel = "text-[11px] font-semibold leading-none";
 
 export default function AppSidebar() {
@@ -62,6 +64,13 @@ export default function AppSidebar() {
   const routeWorkspaceId = pathname.match(/^\/home\/([^/]+)/)?.[1] ?? null;
   const [createOpen, setCreateOpen] = React.useState(false);
   const [moreOpen, setMoreOpen] = React.useState(false);
+  const [activityOpen, setActivityOpen] = React.useState(false);
+  const [morePinned, setMorePinned] = React.useState(false);
+  const moreCloseTimer = React.useRef<number | null>(null);
+  const notifications = useNotificationStore((state) => state.notifications);
+  const loadNotifications = useNotificationStore((state) => state.load);
+  const conversations = useChatStore((state) => state.conversations);
+  const markAllNotificationsRead = useNotificationStore((state) => state.markAllAsRead);
   const activeWorkspaceId =
     typeof window === "undefined"
       ? null
@@ -109,6 +118,9 @@ export default function AppSidebar() {
   };
   const organization = null;
   const filteredGroups = useFilteredNavGroups(navGroups);
+  React.useEffect(() => {
+    if (conversations.length > 0) void loadNotifications();
+  }, [conversations, loadNotifications]);
   const sidebarGroups = filteredGroups
     .map((group) => ({
       ...group,
@@ -150,7 +162,7 @@ export default function AppSidebar() {
         )}
       >
         <SidebarGroup className="py-0">
-          <SidebarMenu className="gap-1">
+          <SidebarMenu className="gap-2">
             <SidebarMenuItem>
               <OrgSwitcher />
             </SidebarMenuItem>
@@ -189,30 +201,44 @@ export default function AppSidebar() {
                 <span className={railLabel}>DMs</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
+            <SidebarMenuItem className="dark:hidden">
+              <Popover open={activityOpen} onOpenChange={setActivityOpen}>
+              <PopoverTrigger render={<SidebarMenuButton
                 tooltip="Activity"
                 isActive={isActivityActive}
                 aria-current={isActivityActive ? "page" : undefined}
                 className={railBtn}
+                onMouseEnter={() => setActivityOpen(true)}
+                onMouseLeave={() => { moreCloseTimer.current = window.setTimeout(() => setActivityOpen(false), 180); }}
                 onClick={() => router.push(activityPath)}
-              >
+              />}>
                 <span className={railIcon(isActivityActive)}>
                   <Icons.activity className="size-6" />
                 </span>
                 <span className={railLabel}>Activity</span>
-              </SidebarMenuButton>
+              </PopoverTrigger>
+              <PopoverContent side="right" align="start" className="w-80 p-0" onMouseEnter={() => { if (moreCloseTimer.current) window.clearTimeout(moreCloseTimer.current); }} onMouseLeave={() => { moreCloseTimer.current = window.setTimeout(() => setActivityOpen(false), 180); }}>
+                <div className="flex items-center justify-between border-b px-4 py-3">
+                  <span className="text-sm font-semibold">Activity</span>
+                  <div className="flex items-center gap-2"><span className="rounded-full bg-muted px-2 py-1 text-xs font-medium">Unread {notifications.filter((item) => item.status === "unread").length}</span><button type="button" onClick={markAllNotificationsRead} className="text-xs font-medium text-primary hover:underline">Mark all read</button></div>
+                </div>
+                <div className="max-h-72 overflow-y-auto p-2">
+                  {notifications.filter((item) => item.status === "unread").slice(0, 6).map((item) => <div key={item.id} className="rounded-md px-3 py-2 hover:bg-muted"><p className="text-sm font-medium">{item.title}</p><p className="text-muted-foreground mt-0.5 line-clamp-2 text-xs">{item.body}</p></div>)}
+                  {notifications.filter((item) => item.status === "unread").length === 0 && <p className="text-muted-foreground px-3 py-7 text-center text-sm">You are all caught up.</p>}
+                </div>
+              </PopoverContent>
+              </Popover>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <Popover open={moreOpen} onOpenChange={setMoreOpen}>
-                <PopoverTrigger render={<SidebarMenuButton tooltip="More" aria-label="More" className={railBtn} />}>
+              <Popover open={moreOpen} onOpenChange={(open) => { setMoreOpen(open); if (!open) setMorePinned(false); }}>
+                <PopoverTrigger render={<SidebarMenuButton tooltip="More" aria-label="More" className={railBtn} onMouseEnter={() => { if (moreCloseTimer.current) window.clearTimeout(moreCloseTimer.current); setMoreOpen(true); }} onMouseLeave={() => { if (!morePinned) moreCloseTimer.current = window.setTimeout(() => setMoreOpen(false), 180); }} onClick={(event) => { event.preventDefault(); if (morePinned) { setMorePinned(false); setMoreOpen(false); } else { setMorePinned(true); setMoreOpen(true); } }} />}>
                   <span className={railIcon()}><Icons.dots className="size-6" /></span>
                   <span className={railLabel}>More</span>
                 </PopoverTrigger>
-                <PopoverContent side="right" align="start" className="w-64 p-1 shadow-[var(--shadow-menu)]">
-                  <button type="button" onClick={() => { setMoreOpen(false); window.dispatchEvent(new Event("workspace:open-files")); }} className="hover:bg-accent/60 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.page className="size-5" />Files</button>
-                  <button type="button" onClick={() => { setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/saved` : "/workspaces"); }} className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm ${pathname === `/home/${activeWorkspaceId}/saved` ? "bg-accent" : "hover:bg-accent/60"}`}><Icons.bookmark className="size-5" />Saved items</button>
-                  <button type="button" onClick={() => { setMoreOpen(false); toast.info("Agents & tools are coming soon."); }} className="hover:bg-accent/60 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.settings className="size-5" />Agents &amp; tools</button>
+                <PopoverContent side="right" align="start" className="w-64 p-1 shadow-[var(--shadow-menu)]" onMouseEnter={() => { if (moreCloseTimer.current) window.clearTimeout(moreCloseTimer.current); }} onMouseLeave={() => { if (!morePinned) moreCloseTimer.current = window.setTimeout(() => setMoreOpen(false), 180); }}>
+                  <button type="button" onClick={() => { setMorePinned(false); setMoreOpen(false); window.dispatchEvent(new Event("workspace:open-files")); }} className="hover:bg-accent/60 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.page className="size-5" />Files</button>
+                  <button type="button" onClick={() => { setMorePinned(false); setMoreOpen(false); router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/saved` : "/workspaces"); }} className={`flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm ${pathname === `/home/${activeWorkspaceId}/saved` ? "bg-accent" : "hover:bg-accent/60"}`}><Icons.bookmark className="size-5" />Saved items</button>
+                  <button type="button" onClick={() => { setMorePinned(false); setMoreOpen(false); toast.info("Agents & tools are coming soon."); }} className="hover:bg-accent/60 flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm"><Icons.settings className="size-5" />Agents &amp; tools</button>
                 </PopoverContent>
               </Popover>
             </SidebarMenuItem>
@@ -316,7 +342,7 @@ export default function AppSidebar() {
             : "border-sidebar-border/70 bg-sidebar/90",
         )}
       >
-        <SidebarMenu className="gap-2">
+        <SidebarMenu className="gap-3">
           <SidebarMenuItem className="px-1 pt-1.5 dark:pt-2">
             <Popover open={createOpen} onOpenChange={setCreateOpen}>
                 <PopoverTrigger render={<SidebarMenuButton tooltip="Create" aria-label="Create" className="mx-auto flex size-9 items-center justify-center rounded-full bg-white/20 p-0 text-white/85 shadow-none transition-colors hover:bg-white/30 hover:text-white" />}>
@@ -335,7 +361,7 @@ export default function AppSidebar() {
           <SidebarMenuItem className="flex items-center justify-center px-1 py-1.5 dark:py-2.5">
             <ThemeModeToggle />
           </SidebarMenuItem>
-          <SidebarMenuItem className="pt-1">
+          <SidebarMenuItem className="pt-3">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={

@@ -299,7 +299,7 @@ export function MessageComposer({
             expanded={expanded}
             mentionSuggestions={mentionSuggestions}
           />
-          <div className="mt-2 flex flex-wrap items-center gap-1 border-t border-white/10 pt-2 sm:gap-1.5">
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-white/10 pt-2 sm:gap-2">
             <input
               ref={fileInputRef}
               aria-label="Add attachments"
@@ -373,6 +373,18 @@ export function MessageComposer({
             <div className="relative">
               <button
                 type="button"
+                onClick={() => setFormatterOpen((open) => !open)}
+                className={`flex size-8 items-center justify-center rounded-md px-1 text-sm font-bold tracking-tight transition-colors hover:bg-muted hover:text-foreground ${formatterOpen ? "bg-muted text-foreground" : "text-foreground/80"}`}
+                aria-label="Toggle formatting toolbar"
+                aria-pressed={formatterOpen}
+                title="Show or hide formatting tools"
+              >
+                Aa
+              </button>
+            </div>
+            <div className="relative">
+              <button
+                type="button"
                 onClick={() => setEmojiOpen((current) => !current)}
                 className="flex size-8 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-[#f2c744]"
                 aria-label="Insert emoji"
@@ -421,15 +433,6 @@ export function MessageComposer({
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setFormatterOpen((open) => !open)}
-              className="flex size-8 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
-              aria-label="Toggle formatting toolbar"
-              title="Show or hide formatting tools"
-            >
-              <Icons.text className="size-5" aria-hidden="true" />
-            </button>
             <button
               type="button"
               onClick={() => {

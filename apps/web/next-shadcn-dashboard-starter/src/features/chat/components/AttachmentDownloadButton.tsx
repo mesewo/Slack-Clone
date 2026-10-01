@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { IconCheck, IconChevronDown } from "@tabler/icons-react";
+import { useEffect, useState } from "react";
+import { IconArrowDown } from "@tabler/icons-react";
 
 export function AttachmentDownloadButton({
   id,
@@ -9,6 +9,7 @@ export function AttachmentDownloadButton({
   filename,
   contentType,
   className = "",
+  overlay = false,
   onImagePreview,
 }: {
   id: string;
@@ -16,6 +17,7 @@ export function AttachmentDownloadButton({
   filename: string;
   contentType?: string;
   className?: string;
+  overlay?: boolean;
   onImagePreview?: (blob: Blob) => void;
 }) {
   const [progress, setProgress] = useState(0);
@@ -23,10 +25,20 @@ export function AttachmentDownloadButton({
     "idle",
   );
 
+  useEffect(() => {
+    try {
+      const downloaded = JSON.parse(localStorage.getItem("slack_downloaded_files") || "[]") as string[];
+      if (downloaded.includes(`${id}:${url}`)) setState("complete");
+    } catch {
+      // Keep the download available when browser storage is disabled.
+    }
+  }, [id, url]);
+
   async function download() {
     if (state === "downloading") return;
     setState("downloading");
     setProgress(0);
+    reportProgress("downloading", 0);
     try {
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok || !response.body) throw new Error("Download failed");
@@ -40,7 +52,11 @@ export function AttachmentDownloadButton({
         if (!value) continue;
         chunks.push(value);
         received += value.byteLength;
-        if (total > 0) setProgress(Math.round((received / total) * 100));
+        if (total > 0) {
+          const nextProgress = Math.round((received / total) * 100);
+          setProgress(nextProgress);
+          reportProgress("downloading", nextProgress);
+        }
       }
       const blob = new Blob(chunks as BlobPart[], { type: contentType });
 
@@ -53,7 +69,8 @@ export function AttachmentDownloadButton({
         onImagePreview(blob);
         setProgress(100);
         setState("complete");
-        window.setTimeout(() => setState("idle"), 1400);
+        reportProgress("complete", 100);
+        rememberDownload();
         return;
       }
 
@@ -68,19 +85,38 @@ export function AttachmentDownloadButton({
       URL.revokeObjectURL(objectUrl);
       setProgress(100);
       setState("complete");
-      window.setTimeout(() => setState("idle"), 1400);
+      reportProgress("complete", 100);
+      rememberDownload();
     } catch {
       setState("idle");
       setProgress(0);
+      reportProgress("failed", 0);
     }
   }
+
+  function reportProgress(status: "downloading" | "complete" | "failed", value: number) {
+    window.dispatchEvent(new CustomEvent("workspace:download-progress", {
+      detail: { id, filename, status, progress: value },
+    }));
+  }
+
+  function rememberDownload() {
+    try {
+      const downloaded = JSON.parse(localStorage.getItem("slack_downloaded_files") || "[]") as string[];
+      localStorage.setItem("slack_downloaded_files", JSON.stringify([...new Set([...downloaded, `${id}:${url}`])]));
+    } catch {
+      // The completed state still stays visible for this mounted attachment.
+    }
+  }
+
+  if (state === "complete") return null;
 
   return (
     <button
       type="button"
       onClick={() => void download()}
       disabled={state === "downloading"}
-      className={`relative inline-flex size-8 items-center justify-center rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur hover:bg-background disabled:cursor-wait ${className}`}
+      className={`${overlay ? "absolute inset-0 z-10 flex h-full w-full rounded-xl bg-black/25 text-white hover:bg-black/40" : "relative inline-flex size-8 rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur hover:bg-background"} items-center justify-center transition-colors disabled:cursor-wait ${className}`}
       aria-label={
         state === "downloading"
           ? `Downloading ${filename}`
@@ -88,9 +124,7 @@ export function AttachmentDownloadButton({
       }
       title={`Download ${filename}`}
     >
-      {state === "complete" ? (
-        <IconCheck className="size-4 text-emerald-600" />
-      ) : state === "downloading" ? (
+      {state === "downloading" ? (
         <svg
           viewBox="0 0 36 36"
           className="size-6 -rotate-90"
@@ -101,7 +135,7 @@ export function AttachmentDownloadButton({
             cy="18"
             r="15"
             fill="none"
-            stroke="currentColor"
+            stroke={overlay ? "white" : "currentColor"}
             strokeOpacity="0.2"
             strokeWidth="3"
           />
@@ -110,7 +144,7 @@ export function AttachmentDownloadButton({
             cy="18"
             r="15"
             fill="none"
-            stroke="currentColor"
+            stroke={overlay ? "white" : "currentColor"}
             strokeWidth="3"
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 15}
@@ -118,7 +152,9 @@ export function AttachmentDownloadButton({
           />
         </svg>
       ) : (
-        <IconChevronDown className="size-5" />
+        <span className={`flex size-10 items-center justify-center rounded-full shadow-lg ring-1 ${overlay ? "bg-black/55 ring-white/70" : "bg-muted ring-border"}`}>
+          <IconArrowDown className="size-6" />
+        </span>
       )}
       {state === "downloading" && <span className="sr-only">{progress}%</span>}
     </button>

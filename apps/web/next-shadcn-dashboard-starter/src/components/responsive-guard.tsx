@@ -2,11 +2,14 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { IconDeviceMobileMessage } from "@tabler/icons-react";
+import { usePathname } from "next/navigation";
+import { WorkspaceLoading } from "@/components/layout/workspace-loading";
 
 const DESIGN_WIDTH = 1280;
 const MIN_SCALE = 0.75;
 
 export function ResponsiveGuard({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -50,7 +53,8 @@ export function ResponsiveGuard({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  if (!mounted) return null;
+  if (!mounted && pathname.startsWith("/home/")) return <WorkspaceLoading />;
+  if (!mounted) return <>{children}</>;
 
   if (isMobile) {
     return (
