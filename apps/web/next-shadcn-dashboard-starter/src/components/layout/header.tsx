@@ -14,7 +14,11 @@ import {
 import { Icons } from "../icons";
 import { SidebarTrigger } from "../ui/sidebar";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import { toast } from "sonner";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type NavigationHistoryEntry = {
   id: string;
@@ -127,17 +131,64 @@ export default function Header() {
           </div>
         </div>
         <div className="absolute right-0">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            aria-label="Help"
-            title="Help"
-            onClick={() => toast.info("Help is coming soon.")}
-          >
-            <Icons.help className="size-4" />
-          </Button>
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 shrink-0 text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  aria-label="About Slack Clone"
+                  title="About Slack Clone"
+                />
+              }
+            >
+              <Icons.help className="size-4" />
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="end" className="w-80 p-4 shadow-[var(--shadow-menu)]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold">Slack Clone</h2>
+                  <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                    An independent team collaboration app inspired by Slack.
+                    Built around channels, direct messages, and real-time teamwork.
+                  </p>
+                </div>
+                <a
+                  href="https://github.com/mesewo/slack-clone"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="View project on GitHub"
+                  className="text-muted-foreground hover:text-foreground shrink-0"
+                >
+                  <Icons.externalLink className="size-4" />
+                </a>
+              </div>
+              <div className="mt-3">
+                <h3 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">Built with</h3>
+                <p className="mt-1 text-xs">Next.js · Go · PostgreSQL · Kafka · WebSocket</p>
+              </div>
+              <div className="mt-3">
+                <h3 className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide">Features</h3>
+                <ul className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <li>Real-time messaging</li>
+                  <li>Threads and replies</li>
+                  <li>Reactions and saves</li>
+                  <li>Scheduled messages</li>
+                  <li>Starred and pinned items</li>
+                </ul>
+              </div>
+              <a
+                href="https://github.com/mesewo/slack-clone"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary mt-4 inline-flex items-center gap-1 text-xs font-medium hover:underline"
+              >
+                GitHub repository <Icons.externalLink className="size-3" />
+              </a>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
     </header>

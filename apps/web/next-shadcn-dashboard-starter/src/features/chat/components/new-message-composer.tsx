@@ -54,14 +54,15 @@ export function NewMessageComposer({ conversations, onClose }: NewMessageCompose
       .filter((conversation) => conversation.kind !== "dm" && match(`${conversation.name} ${conversation.title}`))
       .slice(0, 6)
       .forEach((conversation) => list.push({ key: conversation.id, type: "channel", conversation }));
-    users
-      .filter((user) => match(`${user.display_name} ${user.email}`))
-      .slice(0, 6)
+    const matchingUsers = users.filter((user) =>
+      match(`${user.display_name} ${user.email}`),
+    );
+    (query ? matchingUsers : matchingUsers.slice(0, 6))
       .forEach((user) => list.push({ key: user.id, type: "person", user }));
     return list;
   }, [conversations, to, users]);
 
-  const open = focused && !recipient && options.length > 0;
+  const open = focused && !recipient;
 
   function choose(option: Option) {
     if (option.type === "person") {
@@ -77,7 +78,7 @@ export function NewMessageComposer({ conversations, onClose }: NewMessageCompose
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (!open) return;
+    if (!open || options.length === 0) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setActive((index) => (index + 1) % options.length);
@@ -170,7 +171,11 @@ export function NewMessageComposer({ conversations, onClose }: NewMessageCompose
         </div>
         {open && (
           <div role="listbox" className="border-border bg-popover absolute inset-x-5 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-lg border p-1 shadow-xl sm:inset-x-8">
-            {options.map((option, index) => {
+            {options.length === 0 ? (
+              <p className="text-muted-foreground px-3 py-2 text-sm">
+                No matching people or conversations.
+              </p>
+            ) : options.map((option, index) => {
               const isActive = index === active;
               const name = option.type === "person"
                 ? option.user.display_name || option.user.email

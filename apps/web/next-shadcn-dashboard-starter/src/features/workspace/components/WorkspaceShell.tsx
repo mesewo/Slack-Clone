@@ -15,10 +15,20 @@ import {
 import { WorkspaceConversationSidebar } from "./WorkspaceConversationSidebar";
 import { useChatStore } from "@/features/chat/utils/store";
 import { NewMessageComposer } from "@/features/chat/components/new-message-composer";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
+
+const CHAT_LIST_WIDTH_KEY = "slack_chatlist_width";
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [newMessagePath, setNewMessagePath] = useState<string | null>(null);
+  const [chatListWidth, setChatListWidth] = useState(24);
+  const [chatListWidthLoaded, setChatListWidthLoaded] = useState(false);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const pathname = usePathname();
   const router = useRouter();
@@ -31,6 +41,26 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setNewMessagePath(null);
   }, [pathname]);
+
+  useEffect(() => {
+    try {
+      const savedWidth = Number(window.localStorage.getItem(CHAT_LIST_WIDTH_KEY));
+      if (Number.isFinite(savedWidth) && savedWidth >= 18 && savedWidth <= 35) {
+        setChatListWidth(savedWidth);
+      }
+    } catch {
+      // Keep the default width when storage is unavailable.
+    }
+    setChatListWidthLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktopLayout(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   const openNewMessage = () => {
     setMobileOpen(false);
@@ -60,12 +90,85 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative flex h-full min-h-0 min-w-0 flex-1 bg-[var(--chat-sidebar-bg)] pr-1 pb-1">
       <div className="bg-background relative flex h-full min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-[var(--chat-sidebar-border)]">
-      <aside className="hidden h-full w-72 shrink-0 flex-col border-r border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] text-sidebar-foreground lg:flex">
-        <WorkspaceConversationSidebar
-          onNewMessage={openNewMessage}
-          onBeforeNavigate={closeNewMessage}
+      <ResizablePanelGroup
+        key={`${chatListWidthLoaded ? "stored" : "default"}-${isDesktopLayout ? "desktop" : "mobile"}`}
+        orientation="horizontal"
+        className="min-h-0 min-w-0 flex-1"
+        defaultLayout={{ chatList: isDesktopLayout ? chatListWidth : 0, main: isDesktopLayout ? 100 - chatListWidth : 100 }}
+        resizeTargetMinimumSize={{ fine: 16, coarse: 24 }}
+        onLayoutChanged={(layout, meta) => {
+          const width = layout.chatList;
+          if (meta.isUserInteraction && isDesktopLayout && typeof width === "number" && Number.isFinite(width)) {
+            setChatListWidth(width);
+            try {
+              window.localStorage.setItem(CHAT_LIST_WIDTH_KEY, String(width));
+            } catch {
+              // Resizing still works if storage is unavailable.
+            }
+          }
+        }}
+      >
+        <ResizablePanel
+          id="chatList"
+          defaultSize={isDesktopLayout ? `${chatListWidth}%` : "0%"}
+          minSize={isDesktopLayout ? "18%" : "0%"}
+          maxSize={isDesktopLayout ? "35%" : "0%"}
+          collapsible
+          collapsedSize="0%"
+          className={`min-h-0 min-w-0 ${isDesktopLayout ? "" : "hidden"}`}
+        >
+          <aside className="flex h-full min-h-0 min-w-0 flex-col border-r border-[var(--chat-sidebar-border)] bg-[var(--chat-sidebar-bg)] text-sidebar-foreground">
+            <WorkspaceConversationSidebar
+              onNewMessage={openNewMessage}
+              onBeforeNavigate={closeNewMessage}
+            />
+          </aside>
+        </ResizablePanel>
+        <ResizableHandle
+          withHandle
+          className="group/resize z-10 hidden w-2 cursor-col-resize border-0 bg-transparent hover:bg-transparent lg:flex [&>div]:opacity-0 [&>div]:transition-opacity group-hover/resize:[&>div]:opacity-100"
         />
-      </aside>
+        <ResizablePanel
+          id="main"
+          defaultSize={isDesktopLayout ? `${100 - chatListWidth}%` : "100%"}
+          minSize={isDesktopLayout ? "65%" : "100%"}
+          className="min-h-0 min-w-0"
+        >
+          <main className="relative flex h-full min-h-0 min-w-0 overflow-hidden">
+            {pathname !== `/home/${workspaceId}` && !newMessageOpen && <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground"
+              aria-label="Close panel"
+              title="Close panel"
+              onClick={closePanel}
+            >
+              <Icons.close className="size-4" />
+            </Button>}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute left-2 top-2 z-20 lg:hidden"
+              aria-label="Open workspace navigation"
+              onClick={() => setMobileOpen(true)}
+            >
+              <IconMenu2 className="size-5" />
+            </Button>
+            <div className="flex min-h-0 min-w-0 flex-1">
+              {newMessageOpen ? (
+                <NewMessageComposer
+                  conversations={conversations}
+                  onClose={() => setNewMessagePath(null)}
+                />
+              ) : (
+                children
+              )}
+            </div>
+          </main>
+        </ResizablePanel>
+      </ResizablePanelGroup>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
         <SheetContent
           side="left"
@@ -81,39 +184,6 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           />
         </SheetContent>
       </Sheet>
-      <main className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        {pathname !== `/home/${workspaceId}` && !newMessageOpen && <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground"
-          aria-label="Close panel"
-          title="Close panel"
-          onClick={closePanel}
-        >
-          <Icons.close className="size-4" />
-        </Button>}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute left-2 top-2 z-20 lg:hidden"
-          aria-label="Open workspace navigation"
-          onClick={() => setMobileOpen(true)}
-        >
-          <IconMenu2 className="size-5" />
-        </Button>
-        <div className="flex min-h-0 min-w-0 flex-1">
-          {newMessageOpen ? (
-            <NewMessageComposer
-              conversations={conversations}
-              onClose={() => setNewMessagePath(null)}
-            />
-          ) : (
-            children
-          )}
-        </div>
-      </main>
       </div>
     </div>
   );

@@ -378,33 +378,24 @@ export default function WorkspacesPage() {
           </div>
         </section>
 
-        <footer className="border-border/70 text-muted-foreground mt-14 flex flex-wrap items-center justify-between gap-3 border-t pt-5 text-xs">
-          <span>Slack Clone · Built for focused team conversations</span>
-          <span className="flex items-center gap-4">
-            <a
-              className="hover:text-foreground"
-              href="https://github.com/mesewo/slack-clone"
-              target="_blank"
-              rel="noreferrer"
-            >
-              GitHub
-            </a>
-            <a
-              className="hover:text-foreground"
-              href="https://x.com"
-              target="_blank"
-              rel="noreferrer"
-            >
-              X
-            </a>
-            <button
-              type="button"
-              className="hover:text-foreground"
-              onClick={() => toast.info("Documentation is coming soon.")}
-            >
-              Docs
-            </button>
-          </span>
+        <footer className="border-border/70 text-muted-foreground mt-14 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t pt-5 text-xs">
+          <button
+            type="button"
+            className="hover:text-foreground"
+            onClick={() => toast.info("Privacy Policy is coming soon.")}
+          >
+            Privacy Policy
+          </button>
+          <button
+            type="button"
+            className="hover:text-foreground"
+            onClick={() => toast.info("Terms of Service are coming soon.")}
+          >
+            Terms of Service
+          </button>
+          <button type="button" className="hover:text-foreground">
+            English <Icons.chevronDown className="ml-1 inline size-3" />
+          </button>
         </footer>
       </div>
     </div>

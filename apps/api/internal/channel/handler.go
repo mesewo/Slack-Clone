@@ -231,12 +231,32 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "channel not found")
 		return
 	}
-	if _, ok := auth.RequireRole(w, r, h.Queries, channel.WorkspaceID, "OWNER", "ADMIN"); !ok {
-		return
-	}
 	targetID, err := uuid.Parse(chi.URLParam(r, "userID"))
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "invalid user")
+		return
+	}
+	// Members may leave a channel themselves. Removing someone else remains
+	// restricted to workspace owners and admins.
+	if targetID != userID {
+		if _, ok := auth.RequireRole(w, r, h.Queries, channel.WorkspaceID, "OWNER", "ADMIN"); !ok {
+			return
+		}
+	} else if _, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{
+		WorkspaceID: channel.WorkspaceID,
+		UserID:      userID,
+	}); err != nil {
+		writeJSONError(w, http.StatusForbidden, "not a member of this workspace")
 		return
 	}
 	if err := h.Queries.RemoveChannelMember(r.Context(), database.RemoveChannelMemberParams{ChannelID: channelID, UserID: targetID}); err != nil {

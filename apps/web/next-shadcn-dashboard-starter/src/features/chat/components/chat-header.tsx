@@ -12,6 +12,8 @@ import { ChannelMembersPanel } from "./ChannelMembersPanel";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { useChatStore } from "../utils/store";
 import { PinnedMessagesPanel } from "./PinnedMessagesPanel";
+import { AlertModal } from "@/components/modal/alert-modal";
+import { channelService } from "@/features/workspace/services/channelService";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -29,11 +31,15 @@ export function ChatHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [pinnedOpen, setPinnedOpen] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [leavingChannel, setLeavingChannel] = useState(false);
   const [starred, setStarred] = useState(false);
   const [muted, setMuted] = useState(false);
   const router = useRouter();
   const params = useParams<{ workspaceId: string }>();
   const userPresence = useChatStore((state) => state.userPresence);
+  const currentUserId = useChatStore((state) => state.currentUserId);
+  const removeConversation = useChatStore((state) => state.removeConversation);
   const presence = conversation.otherUserId
     ? userPresence[conversation.otherUserId] || "offline"
     : "offline";
@@ -147,7 +153,10 @@ export function ChatHeader({
               <>
                 <button
                   type="button"
-                  onClick={() => toast.info("Leave channel is coming soon")}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setLeaveDialogOpen(true);
+                  }}
                   className="hover:bg-accent w-full rounded-lg px-3 py-2 text-left text-xs"
                 >
                   Leave channel
@@ -244,6 +253,32 @@ export function ChatHeader({
           onClose={() => setPinnedOpen(false)}
         />
       )}
+      <AlertModal
+        isOpen={leaveDialogOpen}
+        onClose={() => !leavingChannel && setLeaveDialogOpen(false)}
+        onConfirm={async () => {
+          if (!currentUserId) {
+            toast.error("Could not identify your account. Please sign in again.");
+            return;
+          }
+          setLeavingChannel(true);
+          try {
+            await channelService.removeMember(conversation.id, currentUserId);
+            removeConversation(conversation.id);
+            setLeaveDialogOpen(false);
+            toast.success("You left the channel");
+            router.push(`/home/${params.workspaceId}`);
+          } catch {
+            toast.error("Could not leave this channel. Please try again.");
+          } finally {
+            setLeavingChannel(false);
+          }
+        }}
+        loading={leavingChannel}
+        title="Leave channel?"
+        description={`You will no longer receive messages from ${conversation.name}. You can rejoin it later.`}
+        confirmLabel="Leave channel"
+      />
     </header>
   );
 }
