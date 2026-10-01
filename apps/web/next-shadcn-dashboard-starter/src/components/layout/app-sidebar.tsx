@@ -47,9 +47,9 @@ import { cn } from "@/lib/utils";
 import { IconX } from "@tabler/icons-react";
 import { WorkspaceFilesDialog } from "@/features/workspace/components/WorkspaceFilesDialog";
 
-const railBtn = "group/rail h-auto flex-col gap-1 py-1.5 hover:bg-transparent";
+const railBtn = "group/rail h-auto flex-col gap-1 py-1.5 hover:bg-transparent data-active:bg-transparent data-active:text-sidebar-foreground";
 const railIcon = (active?: boolean) =>
-  cn("flex size-9 items-center justify-center rounded-lg transition-colors group-hover/rail:bg-white/15", active && "bg-white/25");
+  cn("flex size-9 items-center justify-center rounded-lg text-white transition-colors group-hover/rail:bg-white/15", active && "bg-zinc-500/55 text-white");
 const railLabel = "text-[11px] font-semibold leading-none";
 
 export default function AppSidebar() {

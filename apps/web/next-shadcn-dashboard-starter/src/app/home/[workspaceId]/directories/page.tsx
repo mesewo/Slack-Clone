@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import PageContainer from "@/components/layout/page-container";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { useChatStore } from "@/features/chat/utils/store";
-import { workspaceService, type WorkspaceMember } from "@/features/workspace/services/workspaceService";
+import { useWorkspaceMembers } from "@/features/workspace/hooks/use-workspace-members";
 
 const tabs = ["People", "Channels", "User groups", "External", "Invitations"] as const;
 type DirectoryTab = (typeof tabs)[number];
@@ -15,23 +15,19 @@ type DirectoryTab = (typeof tabs)[number];
 export default function DirectoriesPage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const conversations = useChatStore((state) => state.conversations);
   const createDM = useChatStore((state) => state.createDM);
-  const [tab, setTab] = useState<DirectoryTab>("People");
+  const [tab, setTab] = useState<DirectoryTab>(() =>
+    searchParams.get("tab") === "Channels" ? "Channels" : "People",
+  );
   const [query, setQuery] = useState("");
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { members, loading } = useWorkspaceMembers(workspaceId);
   const [openingUserId, setOpeningUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void workspaceService.listMembers(workspaceId)
-      .then((result) => { if (!cancelled) setMembers(result.members ?? []); })
-      .catch(() => { if (!cancelled) setMembers([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [workspaceId]);
+    setTab(searchParams.get("tab") === "Channels" ? "Channels" : "People");
+  }, [searchParams]);
 
   const filteredMembers = useMemo(() => {
     const normalized = query.trim().toLowerCase();

@@ -358,24 +358,56 @@ func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "q is required")
 		return
 	}
-	channelID, err := uuid.Parse(r.URL.Query().Get("channel_id"))
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "valid channel_id is required")
-		return
-	}
 	userID, err := uuid.Parse(claims.UserID)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "invalid user in session")
 		return
 	}
-	isMember, err := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: channelID, UserID: userID})
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to verify channel membership")
+	channelIDParam := strings.TrimSpace(r.URL.Query().Get("channel_id"))
+	workspaceIDParam := strings.TrimSpace(r.URL.Query().Get("workspace_id"))
+	if channelIDParam == "" && workspaceIDParam == "" {
+		writeJSONError(w, http.StatusBadRequest, "channel_id or workspace_id is required")
 		return
 	}
-	if !isMember {
-		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
-		return
+
+	var channelIDs []string
+	channelNames := make(map[string]string)
+	workspaceSearch := channelIDParam == ""
+	if !workspaceSearch {
+		channelID, err := uuid.Parse(channelIDParam)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "valid channel_id is required")
+			return
+		}
+		isMember, err := h.Queries.IsChannelMember(r.Context(), database.IsChannelMemberParams{ChannelID: channelID, UserID: userID})
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to verify channel membership")
+			return
+		}
+		if !isMember {
+			writeJSONError(w, http.StatusForbidden, "not a member of this channel")
+			return
+		}
+		channelIDs = []string{channelID.String()}
+	} else {
+		workspaceID, err := uuid.Parse(workspaceIDParam)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "valid workspace_id is required")
+			return
+		}
+		channels, err := h.Queries.ListChannelsForUser(r.Context(), database.ListChannelsForUserParams{
+			UserID: userID, WorkspaceID: workspaceID,
+		})
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to list workspace channels")
+			return
+		}
+		channelIDs = make([]string, 0, len(channels))
+		for _, channel := range channels {
+			id := channel.ID.String()
+			channelIDs = append(channelIDs, id)
+			channelNames[id] = channel.Name
+		}
 	}
 	if h.Search == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
@@ -391,16 +423,31 @@ func (h *Handler) SearchMessages(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 	cursor := r.URL.Query().Get("cursor")
-	results, err := h.Search.SearchMessages(r.Context(), query, []string{channelID.String()}, limit, cursor)
+	results, nextCursor, err := h.Search.SearchMessages(r.Context(), query, channelIDs, limit, cursor)
 	if err != nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "search is unavailable")
 		return
 	}
-	if cursor != "" {
-		json.NewEncoder(w).Encode(map[string]any{"results": results, "next_cursor": cursor, "has_more": len(results) == limit})
+	if workspaceSearch {
+		type workspaceResult struct {
+			searchpkg.Result
+			Kind        string `json:"kind"`
+			ChannelName string `json:"channel_name"`
+		}
+		enriched := make([]workspaceResult, 0, len(results))
+		for _, result := range results {
+			enriched = append(enriched, workspaceResult{
+				Result: result, Kind: "channel", ChannelName: channelNames[result.ChannelID],
+			})
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"results": enriched, "next_cursor": nextCursor, "has_more": nextCursor != "",
+		})
 		return
 	}
-	json.NewEncoder(w).Encode(results)
+	json.NewEncoder(w).Encode(map[string]any{
+		"results": results, "next_cursor": nextCursor, "has_more": nextCursor != "",
+	})
 }
 
 func (h *Handler) ListThreadReplies(w http.ResponseWriter, r *http.Request) {

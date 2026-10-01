@@ -12,8 +12,6 @@ import type { Attachment, Conversation } from "../utils/types";
 import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
-import { PresenceIndicator } from "./PresenceIndicator";
-import { useChatStore } from "../utils/store";
 import { pinService, type PinnedMessage } from "@/features/workspace/services/pinService";
 
 interface ChatAreaProps {
@@ -65,11 +63,11 @@ export function ChatArea({
   typingUserCount,
   canManageChannel,
 }: ChatAreaProps) {
-  const userPresence = useChatStore((state) => state.userPresence);
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const newMessagesMarkerRef = useRef<HTMLDivElement | null>(null);
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
+  const conversationSearchRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
   const [searchCursor, setSearchCursor] = useState<string | undefined>();
@@ -87,6 +85,19 @@ export function ChatArea({
       ...conversation.messages.map((message) => message.author),
     ]),
   );
+
+  useEffect(() => {
+    const focusConversationSearch = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+      if (target instanceof HTMLInputElement && target !== conversationSearchRef.current) return;
+      event.preventDefault();
+      conversationSearchRef.current?.focus();
+    };
+    window.addEventListener("keydown", focusConversationSearch);
+    return () => window.removeEventListener("keydown", focusConversationSearch);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +147,7 @@ export function ChatArea({
               nextCursor: undefined,
               hasMore: false,
             }))
-        : messageService.search(conversation.id, query);
+        : messageService.search({ channelId: conversation.id, query });
     void searchRequest
       .then((page) => {
         if (!cancelled) {
@@ -171,9 +182,7 @@ export function ChatArea({
     setSearchLoadingMore(true);
     try {
       const page = await messageService.search(
-        conversation.id,
-        search.trim(),
-        searchCursor,
+        { channelId: conversation.id, query: search.trim(), cursor: searchCursor },
       );
       setSearchResults((current) => [...current, ...page.results]);
       setSearchCursor(page.nextCursor);
@@ -325,6 +334,7 @@ export function ChatArea({
               aria-hidden="true"
             />
             <Input
+              ref={conversationSearchRef}
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -380,12 +390,6 @@ export function ChatArea({
             )}
           </div>
           <div className="text-muted-foreground flex min-h-3 items-center gap-2 px-3 text-[0.7rem] sm:px-4">
-            {conversation.kind === "dm" && conversation.otherUserId && (
-              <PresenceIndicator
-                state={userPresence[conversation.otherUserId] || "offline"}
-                customStatus={conversation.customStatus}
-              />
-            )}
             {typingUserCount > 0 && (
               <span className="text-primary">
                 {typingUserCount === 1

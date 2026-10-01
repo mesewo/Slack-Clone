@@ -62,6 +62,36 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     return () => media.removeEventListener("change", update);
   }, []);
 
+  useEffect(() => {
+    const onWorkspaceShortcut = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || !event.shiftKey) return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target?.isContentEditable
+      ) return;
+
+      const key = event.key.toLowerCase();
+      const destinations: Record<string, string> = {
+        "1": `/home/${workspaceId}`,
+        "2": `/home/${workspaceId}?dmOnly=1`,
+        m: `/home/${workspaceId}/activity`,
+        t: `/home/${workspaceId}/threads`,
+        e: `/home/${workspaceId}/directories`,
+        l: `/home/${workspaceId}/directories?tab=Channels`,
+      };
+      const destination = destinations[key];
+      if (!destination) return;
+      event.preventDefault();
+      setNewMessagePath(null);
+      router.push(destination);
+    };
+    window.addEventListener("keydown", onWorkspaceShortcut);
+    return () => window.removeEventListener("keydown", onWorkspaceShortcut);
+  }, [router, workspaceId]);
+
   const openNewMessage = () => {
     setMobileOpen(false);
     setNewMessagePath(pathname);

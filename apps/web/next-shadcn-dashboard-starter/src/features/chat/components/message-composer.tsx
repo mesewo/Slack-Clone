@@ -7,6 +7,7 @@ import { FilePreview } from "@/components/ui/file-preview";
 import { RichMessageEditor, type RichMessageEditorHandle } from "./RichMessageEditor";
 import type { Attachment } from "../utils/types";
 import { toast } from "sonner";
+import { IconAt, IconMoodSmile } from "@tabler/icons-react";
 
 // File upload validation constants
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -179,7 +180,6 @@ export function MessageComposer({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [emojiSearch, setEmojiSearch] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
   const [minimumScheduledFor, setMinimumScheduledFor] = useState("");
@@ -318,13 +318,14 @@ export function MessageComposer({
             <div className="relative">
               <Button
                 type="button"
-                className="text-slate-300 hover:text-white size-8 rounded-md p-1 transition"
+                variant="ghost"
+                className="size-8 rounded-full bg-zinc-500/25 p-1 text-foreground/80 transition hover:bg-zinc-500/40 hover:text-foreground"
                 aria-label="Attach content"
                 title="Attach content"
                 aria-expanded={attachOpen}
                 onClick={() => setAttachOpen((open) => !open)}
               >
-                <Icons.add className="size-4" />
+                <Icons.add className="size-5" />
               </Button>
               {attachOpen && (
                 <div className="border-border bg-popover absolute bottom-10 left-0 z-30 w-48 rounded-xl border p-1 shadow-xl">
@@ -373,10 +374,11 @@ export function MessageComposer({
               <button
                 type="button"
                 onClick={() => setEmojiOpen((current) => !current)}
-                className="text-slate-300 hover:text-[#f2c744] rounded-md px-2 py-1 text-sm transition-colors"
+                className="flex size-8 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-[#f2c744]"
                 aria-label="Insert emoji"
+                title="Insert emoji"
               >
-                😊
+                <IconMoodSmile className="size-5" aria-hidden="true" />
               </button>
               {emojiOpen && (
                 <div className="absolute bottom-10 left-0 z-20 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
@@ -422,52 +424,23 @@ export function MessageComposer({
             <button
               type="button"
               onClick={() => setFormatterOpen((open) => !open)}
-              className="text-slate-300 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
+              className="flex size-8 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
               aria-label="Toggle formatting toolbar"
               title="Show or hide formatting tools"
             >
-              Aa
+              <Icons.text className="size-5" aria-hidden="true" />
             </button>
             <button
               type="button"
               onClick={() => {
                 editorRef.current?.insertText("@");
               }}
-              className="text-slate-300 hover:text-white rounded-md px-2 py-1 text-xs font-semibold"
+              className="flex size-8 items-center justify-center rounded-md text-foreground/80 transition-colors hover:text-foreground"
               aria-label="Mention a user"
               title="Mention a user"
             >
-              @
+              <IconAt className="size-5" aria-hidden="true" />
             </button>
-            <div className="relative">
-              <Button
-                type="button"
-                className="text-slate-300 hover:text-white size-8 rounded-md p-1 transition"
-                aria-label="More composer options"
-                title="More composer options"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen((open) => !open)}
-              >
-                <Icons.ellipsis className="size-3.5" />
-              </Button>
-              {moreOpen && (
-                <div className="border-border bg-popover absolute bottom-10 left-0 z-30 w-48 rounded-xl border p-1 shadow-xl">
-                  {["Poll", "Canvas", "Location", "Workflow"].map((label) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        toast.info(`${label} is not available yet`);
-                        setMoreOpen(false);
-                      }}
-                      className="text-muted-foreground hover:bg-accent hover:text-foreground w-full rounded-lg px-2 py-2 text-left text-xs"
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
             {quickReplies.map((reply) => (
               <button
                 key={reply}
@@ -565,7 +538,7 @@ export function MessageComposer({
             </div>
           )}
         </div>
-        <div className="pointer-events-none absolute right-3 top-0 flex -translate-y-1/2 gap-1 opacity-0 transition-opacity group-hover/composer:pointer-events-auto group-hover/composer:opacity-100">
+        {/* <div className="pointer-events-none absolute right-3 top-0 flex -translate-y-1/2 gap-1 opacity-0 transition-opacity group-hover/composer:pointer-events-auto group-hover/composer:opacity-100">
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
@@ -575,7 +548,7 @@ export function MessageComposer({
           >
             {expanded ? "⇅" : "↕"}
           </button>
-        </div>
+        </div> */}
       </div>
     </form>
   );

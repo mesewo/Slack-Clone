@@ -43,10 +43,10 @@ func TestSearchMessagesIntegrationLifecycle(t *testing.T) {
 						"hits": []map[string]any{{
 							"_id": "msg-1",
 							"_source": map[string]any{
-								"id":        "msg-1",
+								"id":         "msg-1",
 								"channel_id": "chan-1",
-								"content":   "hello world",
-								"author":    "alice",
+								"content":    "hello world",
+								"author":     "alice",
 								"created_at": "2024-01-02T00:00:00Z",
 							},
 						}},
@@ -72,7 +72,7 @@ func TestSearchMessagesIntegrationLifecycle(t *testing.T) {
 		}); err != nil {
 			t.Fatalf("index message: %v", err)
 		}
-		results, err := client.SearchMessages(context.Background(), "hello", []string{"chan-1"}, 10)
+		results, _, err := client.SearchMessages(context.Background(), "hello", []string{"chan-1"}, 10)
 		if err != nil {
 			t.Fatalf("search messages: %v", err)
 		}
@@ -108,12 +108,12 @@ func TestSearchMessagesIntegrationLifecycle(t *testing.T) {
 		}
 
 		rows := []database.ListMessagesForSearchRow{{
-			ID:        uuid.New(),
-			ChannelID: uuid.New(),
-			UserID:    uuid.NullUUID{Valid: true, UUID: uuid.New()},
+			ID:         uuid.New(),
+			ChannelID:  uuid.New(),
+			UserID:     uuid.NullUUID{Valid: true, UUID: uuid.New()},
 			AuthorName: pgtype.Text{String: "alice", Valid: true},
-			Content:   "reindexed content",
-			CreatedAt: time.Now(),
+			Content:    "reindexed content",
+			CreatedAt:  time.Now(),
 		}}
 		if err := client.Reindex(context.Background(), rows); err != nil {
 			t.Fatalf("reindex: %v", err)

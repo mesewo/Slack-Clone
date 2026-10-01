@@ -3,6 +3,7 @@ package search
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -102,7 +103,7 @@ func (c *Client) DeleteMessage(ctx context.Context, messageID string) error {
 	return nil
 }
 
-func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []string, limit int, cursor ...string) ([]Result, error) {
+func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []string, limit int, cursor ...string) ([]Result, string, error) {
 	searchBody := map[string]any{
 		"size": limit,
 		"query": map[string]any{
@@ -114,19 +115,27 @@ func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []
 		"sort": []any{map[string]any{"created_at": "desc"}, map[string]any{"id": "desc"}},
 	}
 	if len(cursor) > 0 && cursor[0] != "" {
-		searchBody["search_after"] = []any{cursor[0]}
+		decoded, err := base64.StdEncoding.DecodeString(cursor[0])
+		if err != nil {
+			return nil, "", fmt.Errorf("decode search cursor: %w", err)
+		}
+		var searchAfter []any
+		if err := json.Unmarshal(decoded, &searchAfter); err != nil {
+			return nil, "", fmt.Errorf("decode search cursor values: %w", err)
+		}
+		searchBody["search_after"] = searchAfter
 	}
 	body, err := json.Marshal(searchBody)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	status, response, err := c.request(ctx, http.MethodPost, "/"+indexName+"/_search", bytes.NewReader(body), "application/json")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if status >= 300 {
-		return nil, fmt.Errorf("search messages: %d: %s", status, response)
+		return nil, "", fmt.Errorf("search messages: %d: %s", status, response)
 	}
 
 	var parsed struct {
@@ -134,18 +143,31 @@ func (c *Client) SearchMessages(ctx context.Context, query string, channelIDs []
 			Hits []struct {
 				ID     string `json:"_id"`
 				Source Result `json:"_source"`
+				Sort   []any  `json:"sort"`
 			} `json:"hits"`
 		} `json:"hits"`
 	}
 	if err := json.Unmarshal([]byte(response), &parsed); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	results := make([]Result, 0, len(parsed.Hits.Hits))
 	for _, hit := range parsed.Hits.Hits {
 		hit.Source.ID = hit.ID
 		results = append(results, hit.Source)
 	}
-	return results, nil
+	nextCursor := ""
+	if limit > 0 && len(results) == limit {
+		sortValues := parsed.Hits.Hits[len(parsed.Hits.Hits)-1].Sort
+		if len(sortValues) == 0 {
+			return nil, "", fmt.Errorf("search response is missing sort values for a full page")
+		}
+		cursorJSON, err := json.Marshal(sortValues)
+		if err != nil {
+			return nil, "", fmt.Errorf("encode search cursor: %w", err)
+		}
+		nextCursor = base64.StdEncoding.EncodeToString(cursorJSON)
+	}
+	return results, nextCursor, nil
 }
 
 func ToDocument(message database.Message, author string) MessageDocument {

@@ -55,8 +55,7 @@ export function ChatHeader({
           {conversation.kind === "dm" && (
             <PresenceIndicator
               state={presence}
-              customStatus={conversation.customStatus}
-              className="absolute -bottom-1 left-1/2 -translate-x-1/2"
+              className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 [&>span:first-child]:border-2 [&>span:first-child]:border-background"
             />
           )}
         </div>

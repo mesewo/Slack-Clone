@@ -417,7 +417,7 @@ export function ConversationList({
                 <PresenceIndicator
                   state={conversation.otherUserId ? userPresence[conversation.otherUserId] || "offline" : "offline"}
                   testId={`presence-dot-${conversation.id}`}
-                  className="absolute right-0 bottom-0"
+                  className="absolute right-0 bottom-0 [&>span:first-child]:border-2 [&>span:first-child]:border-[var(--chat-sidebar-bg)]"
                 />
               </span>
               <span className="min-w-0 flex-1">
