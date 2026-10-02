@@ -1,6 +1,5 @@
 import {
   IconAdjustmentsHorizontal,
-  IconActivity,
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowRight,
@@ -55,9 +54,10 @@ import {
   IconLock,
   IconLogin,
   IconLogout,
-  IconMessage,
+  IconMessages,
   IconMinus,
   IconMoon,
+  IconMicrophone,
   IconMusic,
   IconPalette,
   IconPaperclip,
@@ -97,7 +97,7 @@ export type Icon = React.ComponentType<IconProps>;
 
 export const Icons = {
   // General
-  activity: IconActivity,
+  activity: IconBell,
   alertCircle: IconAlertCircle,
   warning: IconAlertTriangle,
   arrowRight: IconArrowRight,
@@ -149,10 +149,11 @@ export const Icons = {
   logo: IconCommand,
 
   // Communication
-  chat: IconMessage,
+  chat: IconMessages,
   notification: IconBell,
   bookmark: IconBookmark,
   phone: IconPhone,
+  microphone: IconMicrophone,
   video: IconVideo,
   send: IconSend,
   paperclip: IconPaperclip,

@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -29,7 +30,8 @@ func TestSearchMessagesCursor(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	results, err := client.SearchMessages(context.Background(), "hello", []string{"chan-1"}, 10, "2024-01-01T00:00:00Z")
+	cursorValues, _ := json.Marshal([]any{"2024-01-01T00:00:00Z", "msg-1"})
+	results, _, err := client.SearchMessages(context.Background(), "hello", []string{"chan-1"}, 10, base64.StdEncoding.EncodeToString(cursorValues))
 	if err != nil {
 		t.Fatalf("search failed: %v", err)
 	}
@@ -37,11 +39,60 @@ func TestSearchMessagesCursor(t *testing.T) {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
 	searchAfter, ok := received["search_after"].([]any)
-	if !ok || len(searchAfter) != 1 || searchAfter[0] != "2024-01-01T00:00:00Z" {
+	if !ok || len(searchAfter) != 2 || searchAfter[0] != "2024-01-01T00:00:00Z" || searchAfter[1] != "msg-1" {
 		t.Fatalf("search_after not propagated: %#v", received["search_after"])
 	}
 	if results[0].CreatedAt != time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC) {
 		t.Fatalf("created_at not decoded: %v", results[0].CreatedAt)
+	}
+}
+
+func TestSearchMessagesLoadsDistinctSecondPage(t *testing.T) {
+	var requests []map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		var request map[string]any
+		if err := json.Unmarshal(body, &request); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requests = append(requests, request)
+		w.Header().Set("Content-Type", "application/json")
+		if len(requests) == 1 {
+			_, _ = io.WriteString(w, `{"hits":{"hits":[{"_id":"message-3","_source":{"channel_id":"channel-1","content":"matching result 3","author":"alice","created_at":"2026-10-02T12:00:00Z"},"sort":["2026-10-02T12:00:00Z","message-3"]},{"_id":"message-2","_source":{"channel_id":"channel-1","content":"matching result 2","author":"alice","created_at":"2026-10-02T11:00:00Z"},"sort":["2026-10-02T11:00:00Z","message-2"]}]}}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"hits":{"hits":[{"_id":"message-1","_source":{"channel_id":"channel-1","content":"matching result 1","author":"alice","created_at":"2026-10-02T10:00:00Z"},"sort":["2026-10-02T10:00:00Z","message-1"]}]}}`)
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	first, cursor, err := client.SearchMessages(context.Background(), "matching", []string{"channel-1"}, 2)
+	if err != nil {
+		t.Fatalf("first search failed: %v", err)
+	}
+	if len(first) != 2 || cursor == "" {
+		t.Fatalf("expected a full first page and cursor, results=%d cursor=%q", len(first), cursor)
+	}
+
+	second, nextCursor, err := client.SearchMessages(context.Background(), "matching", []string{"channel-1"}, 2, cursor)
+	if err != nil {
+		t.Fatalf("second search failed: %v", err)
+	}
+	if len(second) != 1 || second[0].ID != "message-1" {
+		t.Fatalf("expected the next distinct result, got %#v", second)
+	}
+	if nextCursor != "" {
+		t.Fatalf("expected no cursor after the final page, got %q", nextCursor)
+	}
+	if second[0].ID == first[0].ID || second[0].ID == first[1].ID {
+		t.Fatalf("second page repeated a first-page result: first=%v second=%v", first, second)
+	}
+	searchAfter, ok := requests[1]["search_after"].([]any)
+	if !ok || len(searchAfter) != 2 || searchAfter[0] != "2026-10-02T11:00:00Z" || searchAfter[1] != "message-2" {
+		t.Fatalf("second page did not use the first page's final sort values: %#v", requests[1]["search_after"])
 	}
 }
 
@@ -63,11 +114,11 @@ func TestSearchMessagesUsesStableCompoundSort(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	first, err := client.SearchMessages(context.Background(), "same timestamp", []string{"chan-1"}, 10)
+	first, _, err := client.SearchMessages(context.Background(), "same timestamp", []string{"chan-1"}, 10)
 	if err != nil {
 		t.Fatalf("first search failed: %v", err)
 	}
-	second, err := client.SearchMessages(context.Background(), "same timestamp", []string{"chan-1"}, 10)
+	second, _, err := client.SearchMessages(context.Background(), "same timestamp", []string{"chan-1"}, 10)
 	if err != nil {
 		t.Fatalf("second search failed: %v", err)
 	}

@@ -44,6 +44,94 @@ type ThreadSummary struct {
 	LastActivity   time.Time  `json:"last_activity"`
 }
 
+type StarredConversationRow struct {
+	ID             uuid.UUID  `json:"id"`
+	ChannelID      *uuid.UUID `json:"channel_id,omitempty"`
+	ConversationID *uuid.UUID `json:"conversation_id,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+type PinnedMessageRow struct {
+	ID               uuid.UUID  `json:"id"`
+	MessageID        uuid.UUID  `json:"message_id"`
+	ChannelID        *uuid.UUID `json:"channel_id,omitempty"`
+	ConversationID   *uuid.UUID `json:"conversation_id,omitempty"`
+	Content          string     `json:"content"`
+	PinnedByName     string     `json:"pinned_by_name"`
+	CreatedAt        time.Time  `json:"created_at"`
+	MessageCreatedAt time.Time  `json:"message_created_at"`
+}
+
+func (q *Queries) ListStarredConversations(ctx context.Context, userID uuid.UUID) ([]StarredConversationRow, error) {
+	rows, err := q.db.Query(ctx, `SELECT id, channel_id, conversation_id, created_at FROM starred_conversations WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StarredConversationRow{}
+	for rows.Next() {
+		var item StarredConversationRow
+		if err := rows.Scan(&item.ID, &item.ChannelID, &item.ConversationID, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (q *Queries) StarConversation(ctx context.Context, userID uuid.UUID, channelID, conversationID *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, `INSERT INTO starred_conversations (user_id, channel_id, conversation_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, userID, channelID, conversationID)
+	return err
+}
+
+func (q *Queries) UnstarConversation(ctx context.Context, userID uuid.UUID, channelID, conversationID *uuid.UUID) error {
+	_, err := q.db.Exec(ctx, `DELETE FROM starred_conversations WHERE user_id = $1 AND channel_id IS NOT DISTINCT FROM $2 AND conversation_id IS NOT DISTINCT FROM $3`, userID, channelID, conversationID)
+	return err
+}
+
+func (q *Queries) ListPinnedMessages(ctx context.Context, channelID, conversationID uuid.UUID) ([]PinnedMessageRow, error) {
+	rows, err := q.db.Query(ctx, `
+		SELECT p.id, p.message_id, p.channel_id, NULL::uuid, m.content, u.display_name, p.created_at AS pinned_at, m.created_at AS message_created_at
+		FROM pinned_messages p JOIN messages m ON m.id = p.message_id JOIN users u ON u.id = p.pinned_by
+		WHERE p.channel_id = $1 AND m.deleted_at IS NULL
+		UNION ALL
+		SELECT p.id, p.message_id, NULL::uuid, p.conversation_id, dm.content, u.display_name, p.created_at AS pinned_at, dm.created_at AS message_created_at
+		FROM pinned_messages p JOIN direct_messages dm ON dm.id = p.message_id JOIN users u ON u.id = p.pinned_by
+		WHERE p.conversation_id = $2 AND dm.deleted_at IS NULL
+		ORDER BY pinned_at DESC`, channelID, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PinnedMessageRow{}
+	for rows.Next() {
+		var item PinnedMessageRow
+		if err := rows.Scan(&item.ID, &item.MessageID, &item.ChannelID, &item.ConversationID, &item.Content, &item.PinnedByName, &item.CreatedAt, &item.MessageCreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+func (q *Queries) PinMessage(ctx context.Context, messageID, channelID, conversationID, pinnedBy uuid.UUID) error {
+	if channelID != uuid.Nil {
+		_, err := q.db.Exec(ctx, `INSERT INTO pinned_messages (message_id, channel_id, pinned_by) SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM messages WHERE id = $1 AND channel_id = $2) AND NOT EXISTS (SELECT 1 FROM pinned_messages WHERE message_id = $1 AND channel_id = $2)`, messageID, channelID, pinnedBy)
+		return err
+	}
+	_, err := q.db.Exec(ctx, `INSERT INTO pinned_messages (message_id, conversation_id, pinned_by) SELECT $1, $2, $3 WHERE EXISTS (SELECT 1 FROM direct_messages WHERE id = $1 AND conversation_id = $2) AND NOT EXISTS (SELECT 1 FROM pinned_messages WHERE message_id = $1 AND conversation_id = $2)`, messageID, conversationID, pinnedBy)
+	return err
+}
+
+func (q *Queries) UnpinMessage(ctx context.Context, messageID, channelID, conversationID uuid.UUID) error {
+	if channelID != uuid.Nil {
+		_, err := q.db.Exec(ctx, `DELETE FROM pinned_messages WHERE message_id = $1 AND channel_id = $2`, messageID, channelID)
+		return err
+	}
+	_, err := q.db.Exec(ctx, `DELETE FROM pinned_messages WHERE message_id = $1 AND conversation_id = $2`, messageID, conversationID)
+	return err
+}
+
 func (q *Queries) ListThreadsForUser(ctx context.Context, userID uuid.UUID) ([]ThreadSummary, error) {
 	rows, err := q.db.Query(ctx, `
 		WITH channel_threads AS (
@@ -59,14 +147,23 @@ func (q *Queries) ListThreadsForUser(ctx context.Context, userID uuid.UUID) ([]T
 			GROUP BY parent.id, c.name
 		), dm_threads AS (
 			SELECT parent.id, 'dm' AS kind, NULL::uuid AS channel_id, parent.conversation_id,
-			       'Direct message' AS title, parent.content AS preview, parent.reply_count,
+			       CASE WHEN other.user_id IS NULL OR other.user_id = $1 THEN 'You'
+			            ELSE COALESCE(NULLIF(u.display_name, ''), u.email) END AS title,
+			       parent.content AS preview, parent.reply_count,
 			       GREATEST(parent.created_at, COALESCE(MAX(reply.created_at), parent.created_at)) AS last_activity
 			FROM direct_messages parent
 			JOIN direct_conversation_members member ON member.conversation_id = parent.conversation_id AND member.user_id = $1
+			LEFT JOIN direct_conversation_members other ON other.conversation_id = parent.conversation_id AND (
+				other.user_id <> $1 OR NOT EXISTS (
+					SELECT 1 FROM direct_conversation_members other_member
+					WHERE other_member.conversation_id = parent.conversation_id AND other_member.user_id <> $1
+				)
+			)
+			LEFT JOIN users u ON u.id = other.user_id
 			LEFT JOIN direct_messages reply ON reply.parent_id = parent.id AND reply.deleted_at IS NULL
 			WHERE parent.parent_id IS NULL
 			  AND (parent.user_id = $1 OR EXISTS (SELECT 1 FROM direct_messages mine WHERE mine.parent_id = parent.id AND mine.user_id = $1))
-			GROUP BY parent.id
+			GROUP BY parent.id, other.user_id, u.display_name, u.email
 		)
 		SELECT id, kind, channel_id, conversation_id, title, preview, reply_count, last_activity
 		FROM (SELECT * FROM channel_threads UNION ALL SELECT * FROM dm_threads) threads

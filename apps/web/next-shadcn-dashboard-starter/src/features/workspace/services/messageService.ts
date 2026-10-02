@@ -24,6 +24,8 @@ export interface MessageReaction {
 export interface MessageSearchResult {
   id: string;
   channel_id: string;
+  kind?: "channel" | "dm";
+  channel_name?: string;
   user_id?: string;
   author: string;
   content: string;
@@ -203,10 +205,13 @@ export const messageService = {
     return res.data;
   },
   async search(
-    channelId: string,
-    query: string,
-    cursor?: string,
+    opts:
+      | { workspaceId: string; query: string; cursor?: string }
+      | { channelId: string; query: string; cursor?: string },
   ): Promise<MessageSearchPage> {
+    const params = "workspaceId" in opts
+      ? { q: opts.query, workspace_id: opts.workspaceId, cursor: opts.cursor }
+      : { q: opts.query, channel_id: opts.channelId, cursor: opts.cursor };
     const res = await apiClient.get<
       | MessageSearchResult[]
       | {
@@ -215,7 +220,7 @@ export const messageService = {
           has_more?: boolean;
         }
     >("/api/search/messages", {
-      params: { q: query, channel_id: channelId, cursor },
+      params,
     });
     if (Array.isArray(res.data)) {
       return { results: res.data, hasMore: false };

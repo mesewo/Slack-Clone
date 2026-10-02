@@ -12,8 +12,7 @@ import type { Attachment, Conversation } from "../utils/types";
 import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
-import { PresenceIndicator } from "./PresenceIndicator";
-import { useChatStore } from "../utils/store";
+import { pinService, type PinnedMessage } from "@/features/workspace/services/pinService";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -64,11 +63,11 @@ export function ChatArea({
   typingUserCount,
   canManageChannel,
 }: ChatAreaProps) {
-  const userPresence = useChatStore((state) => state.userPresence);
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const newMessagesMarkerRef = useRef<HTMLDivElement | null>(null);
   const liveRegionRef = useRef<HTMLDivElement | null>(null);
+  const conversationSearchRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<MessageSearchResult[]>([]);
   const [searchCursor, setSearchCursor] = useState<string | undefined>();
@@ -76,6 +75,7 @@ export function ChatArea({
   const [searchLoadingMore, setSearchLoadingMore] = useState(false);
   const [searchError, setSearchError] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  const [pinnedMessages, setPinnedMessages] = useState<PinnedMessage[]>([]);
   const isAtBottomRef = useRef(true);
   const isJumpingToLatestRef = useRef(false);
   const mentionSuggestions = Array.from(
@@ -85,6 +85,48 @@ export function ChatArea({
       ...conversation.messages.map((message) => message.author),
     ]),
   );
+
+  useEffect(() => {
+    const focusConversationSearch = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+      if (target instanceof HTMLInputElement && target !== conversationSearchRef.current) return;
+      event.preventDefault();
+      conversationSearchRef.current?.focus();
+    };
+    window.addEventListener("keydown", focusConversationSearch);
+    return () => window.removeEventListener("keydown", focusConversationSearch);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const scope = conversation.kind === "dm"
+      ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
+      : { channel_id: conversation.id };
+    setPinnedMessages([]);
+    void pinService.list(scope).then((items) => {
+      if (!cancelled) setPinnedMessages(items);
+    }).catch(() => {
+      if (!cancelled) setPinnedMessages([]);
+    });
+    return () => { cancelled = true; };
+  }, [conversation.id, conversation.kind, conversation.dmId]);
+
+  const togglePin = async (messageId: string) => {
+    const scope = conversation.kind === "dm"
+      ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
+      : { channel_id: conversation.id };
+    const wasPinned = pinnedMessages.some((item) => item.message_id === messageId);
+    try {
+      if (wasPinned) await pinService.unpin(messageId, scope);
+      else await pinService.pin(messageId, scope);
+      setPinnedMessages(await pinService.list(scope));
+    } catch {
+      // The message action reports the failed request through its toast.
+      throw new Error("Couldn't update pinned message");
+    }
+  };
 
   useEffect(() => {
     const query = search.trim();
@@ -105,7 +147,7 @@ export function ChatArea({
               nextCursor: undefined,
               hasMore: false,
             }))
-        : messageService.search(conversation.id, query);
+        : messageService.search({ channelId: conversation.id, query });
     void searchRequest
       .then((page) => {
         if (!cancelled) {
@@ -140,9 +182,7 @@ export function ChatArea({
     setSearchLoadingMore(true);
     try {
       const page = await messageService.search(
-        conversation.id,
-        search.trim(),
-        searchCursor,
+        { channelId: conversation.id, query: search.trim(), cursor: searchCursor },
       );
       setSearchResults((current) => [...current, ...page.results]);
       setSearchCursor(page.nextCursor);
@@ -273,12 +313,28 @@ export function ChatArea({
             conversation={conversation}
             canManageChannel={canManageChannel}
           />
+          {pinnedMessages[0] && (
+            <button
+              type="button"
+              onClick={() => jumpToMessage(pinnedMessages[0].message_id)}
+              className="border-border bg-muted/35 hover:bg-muted/60 mx-3 flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left sm:mx-4"
+              title="Jump to the most recently pinned message"
+            >
+              <Icons.bookmark className="text-primary size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="text-muted-foreground block text-[0.65rem] font-medium">Pinned by {pinnedMessages[0].pinned_by_name}</span>
+                <span className="block truncate text-xs">{pinnedMessages[0].content || "Attachment"}</span>
+              </span>
+              {pinnedMessages.length > 1 && <span className="text-muted-foreground shrink-0 text-[0.65rem]">+{pinnedMessages.length - 1}</span>}
+            </button>
+          )}
           <div className="relative px-3 sm:px-4">
             <Icons.search
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 sm:left-6"
               aria-hidden="true"
             />
             <Input
+              ref={conversationSearchRef}
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
@@ -334,12 +390,6 @@ export function ChatArea({
             )}
           </div>
           <div className="text-muted-foreground flex min-h-3 items-center gap-2 px-3 text-[0.7rem] sm:px-4">
-            {conversation.kind === "dm" && conversation.otherUserId && (
-              <PresenceIndicator
-                state={userPresence[conversation.otherUserId] || "offline"}
-                customStatus={conversation.customStatus}
-              />
-            )}
             {typingUserCount > 0 && (
               <span className="text-primary">
                 {typingUserCount === 1
@@ -412,6 +462,9 @@ export function ChatArea({
                       onEdit={onEditMessage}
                       onDelete={onDeleteMessage}
                       onToggleThreadSubscription={onToggleThreadSubscription}
+                      isPinned={pinnedMessages.some((item) => item.message_id === message.id)}
+                      onTogglePin={togglePin}
+                      pinTargetLabel={conversation.kind === "dm" ? "conversation" : "channel"}
                       compact={compact}
                     />
                   </div>

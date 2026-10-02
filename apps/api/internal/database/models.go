@@ -123,6 +123,15 @@ type NotificationPreference struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
+type PinnedMessage struct {
+	ID             uuid.UUID     `json:"id"`
+	MessageID      uuid.UUID     `json:"message_id"`
+	ChannelID      uuid.NullUUID `json:"channel_id"`
+	ConversationID uuid.NullUUID `json:"conversation_id"`
+	PinnedBy       uuid.UUID     `json:"pinned_by"`
+	CreatedAt      time.Time     `json:"created_at"`
+}
+
 type SavedMessage struct {
 	UserID    uuid.UUID `json:"user_id"`
 	MessageID uuid.UUID `json:"message_id"`
@@ -138,6 +147,14 @@ type ScheduledMessage struct {
 	AttachmentIds  []uuid.UUID   `json:"attachment_ids"`
 	ScheduledFor   time.Time     `json:"scheduled_for"`
 	SentAt         *time.Time    `json:"sent_at"`
+	CreatedAt      time.Time     `json:"created_at"`
+}
+
+type StarredConversation struct {
+	ID             uuid.UUID     `json:"id"`
+	UserID         uuid.UUID     `json:"user_id"`
+	ChannelID      uuid.NullUUID `json:"channel_id"`
+	ConversationID uuid.NullUUID `json:"conversation_id"`
 	CreatedAt      time.Time     `json:"created_at"`
 }
 

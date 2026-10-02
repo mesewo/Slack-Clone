@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import type { Message } from "../utils/types";
 import { productivityService } from "@/features/workspace/services/productivityService";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RichMessageEditor } from "./RichMessageEditor";
 
 const reactionChoices = Array.from(
   new Set([
@@ -211,6 +212,15 @@ function renderFormattedText(text: string): React.ReactNode[] {
   });
 }
 
+async function copyTextToClipboard(value: string, successMessage: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(successMessage);
+  } catch {
+    toast.error("Clipboard access is unavailable.");
+  }
+}
+
 interface MessageBubbleProps {
   message: Message;
   onOpenThread: (message: Message) => void;
@@ -220,6 +230,9 @@ interface MessageBubbleProps {
   onEdit: (messageId: string, content: string) => void;
   onDelete: (messageId: string) => void;
   onToggleThreadSubscription?: (messageId: string) => void;
+  isPinned?: boolean;
+  onTogglePin?: (messageId: string) => Promise<void>;
+  pinTargetLabel?: string;
   compact?: boolean;
 }
 
@@ -232,6 +245,9 @@ export function MessageBubble({
   onEdit,
   onDelete,
   onToggleThreadSubscription,
+  isPinned = false,
+  onTogglePin,
+  pinTargetLabel = "channel",
   compact = false,
 }: MessageBubbleProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -352,7 +368,7 @@ export function MessageBubble({
             />}>
             😊
             </PopoverTrigger>
-            <PopoverContent side="top" align="end" sideOffset={8} className="w-64 p-2">
+            <PopoverContent side="top" align="end" sideOffset={8} className="w-64 p-2 shadow-[var(--shadow-popover)]">
               <button
                 type="button"
                 onClick={() => setReactionPickerOpen(false)}
@@ -404,13 +420,14 @@ export function MessageBubble({
             />}>
             <Icons.ellipsis className="size-3.5" />
             </PopoverTrigger>
-            <PopoverContent side="bottom" align={isUser ? "end" : "start"} sideOffset={6} className="min-w-52 p-1">
+            <PopoverContent side="bottom" align={isUser ? "end" : "start"} sideOffset={6} className="min-w-52 p-1 shadow-[var(--shadow-menu)]">
               <div role="menu" className="flex min-w-52 flex-col text-popover-foreground">
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); toggleSaved(); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">{isSaved ? "Remove saved item" : "Save this message for later"}</button>
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenThread(message); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">{message.replyCount ? `${message.replyCount} replies` : "Reply in thread"}</button>
                 <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onToggleThreadSubscription?.(message.id); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Follow thread</button>
-                <button type="button" role="menuitem" onClick={() => { void navigator.clipboard?.writeText(message.text); setMenuOpen(false); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Copy text</button>
-                <button type="button" role="menuitem" onClick={() => { void navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}#message-${message.id}`); toast.success("Message link copied"); setMenuOpen(false); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Copy link to message</button>
+                <button type="button" role="menuitem" onClick={() => { void copyTextToClipboard(message.text, "Text copied"); setMenuOpen(false); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Copy text</button>
+                <button type="button" role="menuitem" onClick={() => { void copyTextToClipboard(`${window.location.origin}${window.location.pathname}#message-${message.id}`, "Message link copied"); setMenuOpen(false); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Copy link to message</button>
+                {onTogglePin && <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); void onTogglePin(message.id).then(() => toast.success(isPinned ? "Message unpinned" : "Message pinned")).catch(() => toast.error("Couldn't update pinned message")); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">{isPinned ? `Unpin from ${pinTargetLabel}` : `Pin to ${pinTargetLabel}`}</button>}
                 {isUser && <>
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setIsEditing(true); }} className="rounded-md px-3 py-2 text-left text-popover-foreground hover:bg-accent hover:text-accent-foreground">Edit message</button>
                   <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setIsDeleteDialogOpen(true); }} className="rounded-md px-3 py-2 text-left text-destructive hover:bg-destructive/10">Delete message</button>
@@ -429,11 +446,13 @@ export function MessageBubble({
         )}
         {isEditing ? (
           <div className="mt-2 space-y-2">
-            <textarea
-              value={editDraft}
-              onChange={(event) => setEditDraft(event.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-border bg-background p-2 text-[0.875rem] text-foreground outline-none ring-0 placeholder:text-muted-foreground/70 focus-visible:ring-2 focus-visible:ring-ring/50"
+            <RichMessageEditor
+              initialValue={message.text}
+              onChange={setEditDraft}
+              autoFocus
+              placeholder="Edit message"
+              ariaLabel="Edit message"
+              showToolbar
             />
             <div className="flex justify-end gap-2">
               <button

@@ -276,14 +276,16 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 )}
 
                 {file.type.startsWith("image/") && file.url ? (
-                  <Image
-                    src={file.url}
-                    alt=""
-                    width={40}
-                    height={40}
-                    unoptimized
-                    className="mr-3 size-10 rounded-lg object-cover"
-                  />
+                  <button type="button" onClick={() => setPreviewFile(file)} aria-label={`Preview ${file.name}`} className="mr-3 shrink-0 cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-primary">
+                    <Image
+                      src={file.url}
+                      alt={file.name}
+                      width={64}
+                      height={64}
+                      unoptimized
+                      className="size-14 rounded-lg object-cover"
+                    />
+                  </button>
                 ) : (
                   <div
                     className={cn(
@@ -445,7 +447,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   url={file.url}
                   filename={file.name}
                   contentType={file.type}
-                  className="absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2"
+                  overlay
                   onImagePreview={
                     (isImage || isVideo) && maxAutoPreviewSize !== undefined
                       ? (blob) => handleImagePreview(blob, file)
@@ -497,7 +499,6 @@ export const FilePreview: FC<FilePreviewProps> = ({
               url={previewFile.url}
               filename={previewFile.name}
               contentType={previewFile.type}
-              className="self-end"
             />
           )}
         </DialogContent>

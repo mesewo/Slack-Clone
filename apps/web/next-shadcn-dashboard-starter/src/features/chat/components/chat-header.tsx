@@ -11,6 +11,9 @@ import { useParams, useRouter } from "next/navigation";
 import { ChannelMembersPanel } from "./ChannelMembersPanel";
 import { PresenceIndicator } from "./PresenceIndicator";
 import { useChatStore } from "../utils/store";
+import { PinnedMessagesPanel } from "./PinnedMessagesPanel";
+import { AlertModal } from "@/components/modal/alert-modal";
+import { channelService } from "@/features/workspace/services/channelService";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -27,11 +30,16 @@ export function ChatHeader({
 }: ChatHeaderProps & { canManageChannel?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [leavingChannel, setLeavingChannel] = useState(false);
   const [starred, setStarred] = useState(false);
   const [muted, setMuted] = useState(false);
   const router = useRouter();
   const params = useParams<{ workspaceId: string }>();
   const userPresence = useChatStore((state) => state.userPresence);
+  const currentUserId = useChatStore((state) => state.currentUserId);
+  const removeConversation = useChatStore((state) => state.removeConversation);
   const presence = conversation.otherUserId
     ? userPresence[conversation.otherUserId] || "offline"
     : "offline";
@@ -47,8 +55,7 @@ export function ChatHeader({
           {conversation.kind === "dm" && (
             <PresenceIndicator
               state={presence}
-              customStatus={conversation.customStatus}
-              className="absolute -bottom-1 left-1/2 -translate-x-1/2"
+              className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 [&>span:first-child]:border-2 [&>span:first-child]:border-background"
             />
           )}
         </div>
@@ -145,7 +152,10 @@ export function ChatHeader({
               <>
                 <button
                   type="button"
-                  onClick={() => toast.info("Leave channel is coming soon")}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setLeaveDialogOpen(true);
+                  }}
                   className="hover:bg-accent w-full rounded-lg px-3 py-2 text-left text-xs"
                 >
                   Leave channel
@@ -183,7 +193,10 @@ export function ChatHeader({
             )}
             <button
               type="button"
-              onClick={() => toast.info("Pinned items are coming soon")}
+              onClick={() => {
+                setMenuOpen(false);
+                setPinnedOpen(true);
+              }}
               className="hover:bg-accent w-full rounded-lg px-3 py-2 text-left text-xs"
             >
               Pinned items
@@ -231,6 +244,40 @@ export function ChatHeader({
             onClose={() => setMembersOpen(false)}
           />
         )}
+      {pinnedOpen && (
+        <PinnedMessagesPanel
+          scope={conversation.kind === "dm"
+            ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
+            : { channel_id: conversation.id }}
+          onClose={() => setPinnedOpen(false)}
+        />
+      )}
+      <AlertModal
+        isOpen={leaveDialogOpen}
+        onClose={() => !leavingChannel && setLeaveDialogOpen(false)}
+        onConfirm={async () => {
+          if (!currentUserId) {
+            toast.error("Could not identify your account. Please sign in again.");
+            return;
+          }
+          setLeavingChannel(true);
+          try {
+            await channelService.removeMember(conversation.id, currentUserId);
+            removeConversation(conversation.id);
+            setLeaveDialogOpen(false);
+            toast.success("You left the channel");
+            router.push(`/home/${params.workspaceId}`);
+          } catch {
+            toast.error("Could not leave this channel. Please try again.");
+          } finally {
+            setLeavingChannel(false);
+          }
+        }}
+        loading={leavingChannel}
+        title="Leave channel?"
+        description={`You will no longer receive messages from ${conversation.name}. You can rejoin it later.`}
+        confirmLabel="Leave channel"
+      />
     </header>
   );
 }

@@ -1,4 +1,5 @@
 import Providers from "@/components/layout/providers";
+import { ResponsiveGuard } from "@/components/responsive-guard";
 import { Toaster } from "@/components/ui/sonner";
 import { fontVariables } from "@/components/themes/font.config";
 import { DEFAULT_THEME, THEMES } from "@/components/themes/theme.config";
@@ -94,7 +95,7 @@ export default async function RootLayout({
           >
             <Providers activeThemeValue={themeToApply}>
               <Toaster />
-              {children}
+              <ResponsiveGuard>{children}</ResponsiveGuard>
             </Providers>
           </ThemeProvider>
         </NuqsAdapter>

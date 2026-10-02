@@ -16,6 +16,13 @@ export function PresenceIndicator({
   testId?: string;
 }) {
   const isDnd = state === "dnd";
+  const statusLabel = isDnd
+    ? "Active, do not disturb"
+    : state === "active"
+      ? "Active now"
+      : state === "away"
+        ? "Away"
+        : "Offline";
   const dotClass = isDnd
     ? "bg-rose-500"
     : state === "active"
@@ -29,8 +36,8 @@ export function PresenceIndicator({
       <span
         data-testid={testId}
         className={`relative inline-flex size-2.5 shrink-0 rounded-full ${dotClass} ${state === "away" ? "border-2 bg-transparent" : ""}`}
-        title={isDnd ? "Online, do not disturb" : state}
-        aria-label={isDnd ? "Online, do not disturb" : state}
+        title={statusLabel}
+        aria-label={statusLabel}
       >
         {isDnd && (
           <IconMoon className="absolute -right-1.5 -top-1.5 size-3 text-amber-500" />

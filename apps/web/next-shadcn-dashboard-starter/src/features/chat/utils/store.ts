@@ -174,6 +174,7 @@ type ChatState = {
 
   init: (userId: string, workspaceId?: string) => Promise<void>;
   selectConversation: (id: string) => void;
+  removeConversation: (id: string) => void;
   syncConversation: () => Promise<void>;
   loadOlderMessages: () => Promise<void>;
   markConversationRead: (id: string) => Promise<void>;
@@ -395,6 +396,30 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         });
       })
       .catch(() => set({ loadingMessages: false }));
+  },
+
+  removeConversation: (id) => {
+    const state = get();
+    if (state.workspace?.id) {
+      const workspaceKey = `${lastConversationKey}:${state.workspace.id}`;
+      if (window.localStorage.getItem(workspaceKey) === id) {
+        window.localStorage.removeItem(workspaceKey);
+      }
+    }
+    if (window.localStorage.getItem(lastConversationKey) === id) {
+      window.localStorage.removeItem(lastConversationKey);
+    }
+    set((state) => {
+      const drafts = { ...state.drafts };
+      delete drafts[id];
+      return {
+        conversations: state.conversations.filter((item) => item.id !== id),
+        drafts,
+        ...(state.selectedConversationId === id
+          ? { selectedConversationId: "", draft: "" }
+          : {}),
+      };
+    });
   },
 
   syncConversation: async () => {
