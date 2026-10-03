@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -188,12 +189,199 @@ func TestLiveGatewayInterruptionProcessOwned(t *testing.T) {
 
 	gateway = startManagedService(t, "gateway-restart", gatewayBinary, []string{"CORE_GRPC_ADDR=localhost:" + coreGRPC, "GATEWAY_GRPC_ADDR=localhost:" + gatewayGRPC, "GATEWAY_HTTP_ADDR=:" + gatewayHTTP, "FRONTEND_URL=http://localhost:3000"}, "localhost:"+gatewayGRPC)
 	defer gateway.stopGracefully(t, 5*time.Second)
+	reconnected := processConnect(t, gatewayHTTP, cookieB)
+	defer reconnected.Close()
+	reconnectPrefix := "process-after-gateway-restart-" + uuid.NewString()
+	reconnectEvent := processCreateUntilLiveDelivery(t, client, baseURL, cookieA, channelID, reconnectPrefix, reconnected)
+	if reconnectEvent.ChannelID != channelID || reconnectEvent.Payload.ChannelID != channelID {
+		t.Fatalf("unexpected post-Gateway-restart channel event: channel=%s payload_channel=%s", reconnectEvent.ChannelID, reconnectEvent.Payload.ChannelID)
+	}
+	if !processHistoryContains(t, client, baseURL, cookieA, channelID, reconnectEvent.Payload.Content) {
+		t.Fatal("post-restart live message was not persisted")
+	}
+
 	if !core.stopGracefully(t, 10*time.Second) {
 		t.Fatalf("core graceful shutdown failed: %s", core.logs())
 	}
-	t.Log("process-owned lifecycle verified; browser reconnect and history synchronization are covered by the separate frontend/browser harness")
+	t.Log("Gateway restart reconnect, subscription restoration, persisted history, and live delivery verified")
 	_ = workspaceID
 	_ = wsA
+}
+
+func TestCoreRestartPreservesEstablishedGatewayWebSocket(t *testing.T) {
+	if os.Getenv("SLACK_PROCESS_INTEGRATION") != "1" {
+		t.Skip("set SLACK_PROCESS_INTEGRATION=1 to run process-owned Core restart test")
+	}
+	coreBinary := buildRuntimeBinary(t, "core")
+	gatewayBinary := buildRuntimeBinary(t, "gateway")
+	coreHTTP, coreGRPC := "18280", "19291"
+	gatewayHTTP, gatewayGRPC := "18281", "19290"
+	coreEnv := []string{"CORE_HTTP_ADDR=:" + coreHTTP, "CORE_GRPC_ADDR=localhost:" + coreGRPC, "GATEWAY_GRPC_ADDR=localhost:" + gatewayGRPC}
+	gatewayEnv := []string{"CORE_GRPC_ADDR=localhost:" + coreGRPC, "GATEWAY_GRPC_ADDR=localhost:" + gatewayGRPC, "GATEWAY_HTTP_ADDR=:" + gatewayHTTP, "FRONTEND_URL=http://localhost:3000"}
+	gateway := startManagedService(t, "gateway-core-restart", gatewayBinary, gatewayEnv, "localhost:"+gatewayGRPC)
+	defer func() {
+		if gateway.cmd.ProcessState == nil {
+			_ = gateway.stopGracefully(t, 5*time.Second)
+		}
+	}()
+	core := startManagedService(t, "core-restart-before", coreBinary, coreEnv, "localhost:"+coreHTTP)
+	defer func() {
+		if core.cmd.ProcessState == nil {
+			_ = core.stopGracefully(t, 10*time.Second)
+		}
+	}()
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	baseURL := "http://localhost:" + coreHTTP
+	databaseURL := ""
+	for _, entry := range loadAPIEnv(t) {
+		if strings.HasPrefix(entry, "DATABASE_URL=") {
+			databaseURL = strings.TrimPrefix(entry, "DATABASE_URL=")
+			break
+		}
+	}
+	if databaseURL == "" {
+		t.Fatal("DATABASE_URL is required in apps/api/.env for test cleanup")
+	}
+	t.Setenv("DATABASE_URL", databaseURL)
+	cookie, userID, email := processRegister(t, client, baseURL, "Core restart "+uuid.NewString())
+	var workspaceID string
+	t.Cleanup(func() { liveCleanup(t, email, email, workspaceID) })
+	workspaceID = processCreateWorkspaceAt(t, client, baseURL, cookie, "Core restart "+uuid.NewString())
+	channelID := processCreateChannelAt(t, client, baseURL, cookie, workspaceID)
+	connection := processConnect(t, gatewayHTTP, cookie)
+	defer connection.Close()
+
+	initialContent := "before-core-restart-" + uuid.NewString()
+	processCreateMessage(t, client, baseURL, cookie, channelID, initialContent)
+	initialEvent := liveReadMessage(t, connection, initialContent)
+	if initialEvent.Payload.UserID != userID || initialEvent.ChannelID != channelID {
+		t.Fatalf("unexpected initial event user=%s channel=%s", initialEvent.Payload.UserID, initialEvent.ChannelID)
+	}
+
+	if !core.stopGracefully(t, 10*time.Second) {
+		t.Fatalf("Core did not stop gracefully: %s", core.logs())
+	}
+	core = startManagedService(t, "core-restart-after", coreBinary, coreEnv, "localhost:"+coreHTTP)
+
+	postRestartContent := "after-core-restart-" + uuid.NewString()
+	processCreateMessage(t, client, baseURL, cookie, channelID, postRestartContent)
+	postRestartEvent := liveReadMessage(t, connection, postRestartContent)
+	if postRestartEvent.Payload.UserID != userID || postRestartEvent.ChannelID != channelID {
+		t.Fatalf("unexpected post-restart event user=%s channel=%s", postRestartEvent.Payload.UserID, postRestartEvent.ChannelID)
+	}
+}
+
+func processCreateUntilLiveDelivery(t *testing.T, client *http.Client, baseURL, cookie, channelID, contentPrefix string, connection *websocket.Conn) liveMessageEvent {
+	t.Helper()
+	type readResult struct {
+		event   liveMessageEvent
+		content string
+		err     error
+	}
+	received := make(chan readResult, 1)
+	attemptsByContent := make(map[string]int)
+	go func() {
+		_ = connection.SetReadDeadline(time.Now().Add(20 * time.Second))
+		for {
+			_, data, err := connection.ReadMessage()
+			if err != nil {
+				received <- readResult{err: err}
+				return
+			}
+			var event liveMessageEvent
+			if json.Unmarshal(data, &event) == nil && event.Type == "message_created" && strings.HasPrefix(event.Payload.Content, contentPrefix) {
+				received <- readResult{event: event, content: event.Payload.Content}
+				return
+			}
+		}
+	}()
+
+	for attempt := 1; attempt <= 8; attempt++ {
+		content := fmt.Sprintf("%s-%d", contentPrefix, attempt)
+		attemptsByContent[content] = attempt
+		processCreateMessage(t, client, baseURL, cookie, channelID, content)
+		select {
+		case result := <-received:
+			if result.err != nil {
+				t.Fatalf("read post-restart WebSocket event: %v", result.err)
+			}
+			receivedAttempt, ok := attemptsByContent[result.content]
+			if !ok {
+				t.Fatalf("received unexpected post-restart event content %q", result.content)
+			}
+			if result.event.Payload.Content != result.content {
+				t.Fatalf("received event content %q does not match attempt content %q", result.event.Payload.Content, result.content)
+			}
+			t.Logf("post-Gateway-restart live event matched attempt %d content %q", receivedAttempt, result.content)
+			return result.event
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	t.Fatal("no live event arrived over the reconnected WebSocket after 8 message attempts")
+	return liveMessageEvent{}
+}
+
+func processRegister(t *testing.T, client *http.Client, baseURL, displayName string) (string, string, string) {
+	t.Helper()
+	email := "process-" + uuid.NewString() + "@example.test"
+	body := fmt.Sprintf(`{"email":%q,"password":"12345678","display_name":%q}`, email, displayName)
+	request, _ := http.NewRequest(http.MethodPost, baseURL+"/api/auth/register", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil || response.StatusCode != http.StatusCreated {
+		t.Fatalf("register failed: %v status=%v", err, responseStatus(response))
+	}
+	defer response.Body.Close()
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Cookies()) == 0 || result.ID == "" {
+		t.Fatal("registration returned no cookie or user ID")
+	}
+	return response.Cookies()[0].Name + "=" + response.Cookies()[0].Value, result.ID, email
+}
+
+func processCreateWorkspaceAt(t *testing.T, client *http.Client, baseURL, cookie, name string) string {
+	t.Helper()
+	request, _ := http.NewRequest(http.MethodPost, baseURL+"/api/workspaces", strings.NewReader(fmt.Sprintf(`{"name":%q}`, name)))
+	request.Header.Set("Cookie", cookie)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil || response.StatusCode != http.StatusCreated {
+		t.Fatalf("create workspace failed: %v status=%v", err, responseStatus(response))
+	}
+	defer response.Body.Close()
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	return result.ID
+}
+
+func processCreateChannelAt(t *testing.T, client *http.Client, baseURL, cookie, workspaceID string) string {
+	t.Helper()
+	body := fmt.Sprintf(`{"workspace_id":%q,"name":%q,"type":"PUBLIC"}`, workspaceID, "process-"+uuid.NewString())
+	request, _ := http.NewRequest(http.MethodPost, baseURL+"/api/channels", strings.NewReader(body))
+	request.Header.Set("Cookie", cookie)
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil || response.StatusCode != http.StatusCreated {
+		t.Fatalf("create channel failed: %v status=%v", err, responseStatus(response))
+	}
+	defer response.Body.Close()
+	var result struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	return result.ID
 }
 
 func processLogin(t *testing.T, client *http.Client, baseURL, email, password string) string {

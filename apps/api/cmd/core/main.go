@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -40,6 +41,26 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 )
+
+func closeKafkaConsumers(consumers ...interface{ Close() error }) {
+	var wg sync.WaitGroup
+	for _, consumer := range consumers {
+		wg.Add(1)
+		go func(consumer interface{ Close() error }) {
+			defer wg.Done()
+			if err := consumer.Close(); err != nil {
+				log.Printf("Kafka consumer close failed: %v", err)
+			}
+		}(consumer)
+	}
+	wg.Wait()
+}
+
+func closeResource(name string, closeFn func() error) {
+	if err := closeFn(); err != nil {
+		log.Printf("failed to close %s: %v", name, err)
+	}
+}
 
 func syncSearchDocument(ctx context.Context, queries *database.Queries, searchClient *searchpkg.Client, messageID uuid.UUID) error {
 	message, err := queries.GetMessageByID(ctx, messageID)
@@ -104,7 +125,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to dial gateway gRPC at %s: %v", gatewayAddr, err)
 	}
-	defer gatewayConn.Close()
+	defer closeResource("Gateway gRPC connection", gatewayConn.Close)
 
 	// Eagerly connect now, at startup, instead of letting the first real
 	// broadcast pay for TCP + HTTP/2 handshake setup under a tight deadline -
@@ -127,7 +148,7 @@ func main() {
 	gatewayClient := chatpb.NewGatewayServiceClient(gatewayConn)
 
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
-	defer kafkaProducer.Close()
+	defer closeResource("Kafka producer", kafkaProducer.Close)
 	searchClient := searchpkg.NewClient(searchURL)
 	if err := searchClient.EnsureIndex(context.Background()); err != nil {
 		log.Printf("warning: Elasticsearch unavailable at startup: %v", err)
@@ -191,7 +212,7 @@ func main() {
 	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", ThumbnailWorker: thumbnailWorker}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
-	defer redisClient.Close()
+	defer closeResource("Redis client", redisClient.Close)
 
 	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer}
 	workspaceHandler := &workspace.Handler{Queries: queries}
@@ -204,7 +225,6 @@ func main() {
 	go runScheduledMessages(ctx, queries, gatewayClient)
 
 	messageConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageCreated, "core-message-created", redisClient)
-	defer messageConsumer.Close()
 	go messageConsumer.Run(ctx, "dedup:message_created:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageCreated, raw)
@@ -224,7 +244,6 @@ func main() {
 	)
 
 	messageEditedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageEdited, "core-message-edited", redisClient)
-	defer messageEditedConsumer.Close()
 	go messageEditedConsumer.Run(ctx, "dedup:message_edited:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageEdited, raw)
@@ -244,7 +263,6 @@ func main() {
 	)
 
 	userConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicUserRegistered, "core-user-registered", redisClient)
-	defer userConsumer.Close()
 	go userConsumer.Run(ctx, "dedup:user_registered:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicUserRegistered, raw)
@@ -260,7 +278,6 @@ func main() {
 	)
 
 	messageDeletedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageDeleted, "core-message-deleted", redisClient)
-	defer messageDeletedConsumer.Close()
 	go messageDeletedConsumer.Run(ctx, "dedup:message_deleted:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageDeleted, raw)
@@ -279,7 +296,6 @@ func main() {
 	)
 
 	reactionAddedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionAdded, "core-reaction-added", redisClient)
-	defer reactionAddedConsumer.Close()
 	go reactionAddedConsumer.Run(ctx, "dedup:reaction_added:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionAdded, raw)
@@ -295,7 +311,7 @@ func main() {
 	)
 
 	reactionRemovedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionRemoved, "core-reaction-removed", redisClient)
-	defer reactionRemovedConsumer.Close()
+	defer closeKafkaConsumers(messageConsumer, messageEditedConsumer, userConsumer, messageDeletedConsumer, reactionAddedConsumer, reactionRemovedConsumer)
 	go reactionRemovedConsumer.Run(ctx, "dedup:reaction_removed:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionRemoved, raw)
@@ -441,6 +457,7 @@ func main() {
 		select {
 		case <-grpcStopped:
 		case <-shutdownCtx.Done():
+			log.Printf("gRPC graceful shutdown timed out; forcing stop")
 			grpcServer.Stop()
 		}
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
@@ -452,7 +469,7 @@ func main() {
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("http server failed: %v", err)
 	}
-	log.Println("core stopped cleanly")
+	log.Println("core HTTP server stopped; closing dependencies")
 }
 
 func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapkg.Producer) {

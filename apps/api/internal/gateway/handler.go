@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/redis/go-redis/v9"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
@@ -67,11 +68,13 @@ const (
 	// Rate limiting: 100 messages per 10 seconds per connection
 	rateLimitMessages = 100
 	rateLimitWindow   = 10 * time.Second
+
+	membershipUnavailableMessage = "Unable to load channel memberships"
 )
 
-// ServeWS upgrades the connection, then subscribes the user to every channel
-// they're a member of - without this step, BroadcastToChannel has nobody to
-// send to, because nothing else populates the hub's channel subscriptions.
+// ServeWS loads the user's memberships, upgrades the connection, then subscribes
+// it to every channel - without these subscriptions, BroadcastToChannel has
+// nobody to send to.
 // Pass nil for redisClient if using in-memory Hub/PresenceManager.
 func ServeWS(hub HubInterface, pm PresenceManagerInterface, tokens *auth.TokenManager, coreClient chatpb.CoreServiceClient, w http.ResponseWriter, r *http.Request) {
 	ServeWSWithRedis(hub, pm, tokens, coreClient, nil, w, r)
@@ -96,6 +99,31 @@ func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *aut
 		return
 	}
 
+	// Validate Origin before doing the Core RPC so rejected browser origins do
+	// not trigger backend work. The upgrader repeats this check at the boundary.
+	if !originAllowed(r.Header.Get("Origin")) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Memberships are required for this connection to receive channel events.
+	// Load them before upgrading so an RPC failure is an ordinary HTTP error,
+	// rather than a successful but unsubscribed WebSocket.
+	coreCtx, coreCancel := context.WithTimeout(r.Context(), 3*time.Second)
+	coreCtx = metadata.AppendToOutgoingContext(coreCtx, "x-request-id", uuid.NewString())
+	resp, err := coreClient.GetUserChannels(coreCtx, &chatpb.GetUserChannelsRequest{UserId: claims.UserID})
+	coreCancel()
+	if err != nil {
+		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
+		http.Error(w, membershipUnavailableMessage, http.StatusServiceUnavailable)
+		return
+	}
+	if resp == nil {
+		log.Printf("Core returned a nil channel membership response for %s", claims.UserID)
+		http.Error(w, membershipUnavailableMessage, http.StatusServiceUnavailable)
+		return
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("failed to upgrade connection: %v", err)
@@ -117,20 +145,10 @@ func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *aut
 
 	hub.Register(client)
 
-	// Subscribe to every channel this user belongs to, across all their
-	// workspaces, so broadcasts reach them without a separate "join" step.
-	// This is now a gRPC call to Core instead of a direct DB query - Gateway
-	// has no database access under Option B.
-	coreCtx, coreCancel := context.WithTimeout(r.Context(), 3*time.Second)
-	defer coreCancel()
-	resp, err := coreClient.GetUserChannels(coreCtx, &chatpb.GetUserChannelsRequest{UserId: claims.UserID})
-	if err != nil {
-		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
-	} else {
-		for _, channelID := range resp.GetChannelIds() {
-			if err := hub.SubscribeToChannel(r.Context(), claims.UserID, channelID); err != nil {
-				log.Printf("failed to subscribe %s to %s: %v", claims.UserID, channelID, err)
-			}
+	// Subscribe to every channel this user belongs to, across their workspaces.
+	for _, channelID := range resp.GetChannelIds() {
+		if err := hub.SubscribeToChannel(r.Context(), claims.UserID, channelID); err != nil {
+			log.Printf("failed to subscribe %s to %s: %v", claims.UserID, channelID, err)
 		}
 	}
 
