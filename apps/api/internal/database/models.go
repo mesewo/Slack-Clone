@@ -184,14 +184,16 @@ type UploadSession struct {
 }
 
 type User struct {
-	ID             uuid.UUID `json:"id"`
-	Email          string    `json:"email"`
-	PasswordHash   string    `json:"password_hash"`
-	DisplayName    string    `json:"display_name"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	AvatarUrl      string    `json:"avatar_url"`
-	PresenceStatus string    `json:"presence_status"`
+	ID             uuid.UUID   `json:"id"`
+	Email          string      `json:"email"`
+	PasswordHash   string      `json:"password_hash"`
+	DisplayName    string      `json:"display_name"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+	AvatarUrl      string      `json:"avatar_url"`
+	PresenceStatus string      `json:"presence_status"`
+	MfaSecret      pgtype.Text `json:"mfa_secret"`
+	MfaEnabled     bool        `json:"mfa_enabled"`
 }
 
 type Workspace struct {

@@ -27,12 +27,15 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channel"
+	"github.com/mesewo/slack-clone/apps/api/internal/corehealth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/dm"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
+	"github.com/mesewo/slack-clone/apps/api/internal/hashring"
 	kafkapkg "github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/message"
 	"github.com/mesewo/slack-clone/apps/api/internal/notification"
+	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/productivity"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
@@ -98,6 +101,12 @@ func main() {
 	if coreGRPCAddr == "" {
 		coreGRPCAddr = "localhost:9091"
 	}
+	selfNodeID := os.Getenv("CORE_NODE_ID")
+	if selfNodeID == "" {
+		selfNodeID = "core-1"
+	}
+	nodeRing := hashring.NewRing(100)
+	nodeRing.AddNode(selfNodeID)
 	kafkaAddr := os.Getenv("KAFKA_BROKER_ADDR")
 	if kafkaAddr == "" {
 		kafkaAddr = "localhost:19092"
@@ -213,12 +222,13 @@ func main() {
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer closeResource("Redis client", redisClient.Close)
+	permissionCache := permission.NewCache(redisClient, 60*time.Second)
 
-	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer}
-	workspaceHandler := &workspace.Handler{Queries: queries}
-	channelHandler := &channel.Handler{Queries: queries}
+	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer, Redis: redisClient}
+	workspaceHandler := &workspace.Handler{Queries: queries, PermissionCache: permissionCache}
+	channelHandler := &channel.Handler{Queries: queries, PermissionCache: permissionCache}
 	dmHandler := &dm.Handler{Queries: queries, GatewayClient: gatewayClient}
-	messageHandler := &message.Handler{Queries: queries, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient}
+	messageHandler := &message.Handler{Queries: queries, PermissionCache: permissionCache, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient, Ring: nodeRing, SelfNodeID: selfNodeID}
 	notificationHandler := &notification.Handler{Queries: queries}
 	productivityHandler := &productivity.Handler{Queries: queries}
 	go runOutbox(ctx, queries, kafkaProducer)
@@ -358,15 +368,20 @@ func main() {
 		ExposedHeaders:   []string{"Content-Length", "Content-Disposition"},
 		AllowCredentials: true,
 	}))
+	r.Get("/healthz", corehealth.LivenessHandler)
+	r.Get("/readyz", corehealth.ReadinessHandler(pool, 2*time.Second))
 
 	r.Post("/api/auth/register", userHandler.Register)
 	r.Post("/api/auth/login", userHandler.Login)
+	r.Post("/api/auth/mfa/challenge", userHandler.MFAChallenge)
 	r.Post("/api/auth/logout", userHandler.Logout)
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(tokens))
 
 		r.Get("/api/auth/verify", userHandler.Verify)
+		r.Post("/api/auth/mfa/setup", userHandler.MFASetup)
+		r.Post("/api/auth/mfa/confirm", userHandler.MFAConfirm)
 		r.Get("/api/notifications", notificationHandler.List)
 		r.Post("/api/notifications/{notificationID}/read", notificationHandler.MarkRead)
 		r.Post("/api/notifications/read-all", notificationHandler.MarkAllRead)
