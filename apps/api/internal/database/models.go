@@ -196,6 +196,12 @@ type User struct {
 	MfaEnabled     bool        `json:"mfa_enabled"`
 }
 
+type WebhookDelivery struct {
+	EventID     string    `json:"event_id"`
+	WebhookID   uuid.UUID `json:"webhook_id"`
+	DeliveredAt time.Time `json:"delivered_at"`
+}
+
 type Workspace struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`
@@ -218,4 +224,13 @@ type WorkspaceMember struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Role        string    `json:"role"`
 	JoinedAt    time.Time `json:"joined_at"`
+}
+
+type WorkspaceWebhook struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	Url         string    `json:"url"`
+	Secret      string    `json:"secret"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

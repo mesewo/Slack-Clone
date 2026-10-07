@@ -10,6 +10,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		PermissionRemoveMember,
 		PermissionInviteMember,
 		PermissionUpdateMemberRole,
+		PermissionManageWebhooks,
 	),
 	"ADMIN": permissionSet(
 		PermissionCreateChannel,
@@ -17,6 +18,7 @@ var rolePermissions = map[string]map[Permission]struct{}{
 		PermissionRemoveMember,
 		PermissionInviteMember,
 		PermissionUpdateMemberRole,
+		PermissionManageWebhooks,
 	),
 	"MEMBER": permissionSet(),
 	// GUEST is limited to ordinary read and post-message access. Guests cannot

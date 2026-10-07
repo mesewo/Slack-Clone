@@ -42,6 +42,7 @@ import (
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
 	"github.com/mesewo/slack-clone/apps/api/internal/upload"
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
+	"github.com/mesewo/slack-clone/apps/api/internal/webhook"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 )
 
@@ -229,6 +230,14 @@ func main() {
 	channelHandler := &channel.Handler{Queries: queries, PermissionCache: permissionCache}
 	dmHandler := &dm.Handler{Queries: queries, GatewayClient: gatewayClient}
 	messageHandler := &message.Handler{Queries: queries, PermissionCache: permissionCache, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient, Ring: nodeRing, SelfNodeID: selfNodeID}
+	webhookHandler := &webhook.Handler{
+		Queries: queries,
+		Authorize: func(w http.ResponseWriter, r *http.Request, workspaceID uuid.UUID) bool {
+			_, ok := auth.RequirePermission(w, r, queries, permissionCache, workspaceID, permission.PermissionManageWebhooks)
+			return ok
+		},
+	}
+	webhookDispatcher := webhook.NewDispatcher(nil, 5, 30*time.Second)
 	notificationHandler := &notification.Handler{Queries: queries}
 	productivityHandler := &productivity.Handler{Queries: queries}
 	go runOutbox(ctx, queries, kafkaProducer)
@@ -321,7 +330,27 @@ func main() {
 	)
 
 	reactionRemovedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionRemoved, "core-reaction-removed", redisClient)
-	defer closeKafkaConsumers(messageConsumer, messageEditedConsumer, userConsumer, messageDeletedConsumer, reactionAddedConsumer, reactionRemovedConsumer)
+	webhookConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageSent, "core-webhook-delivery", redisClient)
+	defer closeKafkaConsumers(messageConsumer, messageEditedConsumer, userConsumer, messageDeletedConsumer, reactionAddedConsumer, reactionRemovedConsumer, webhookConsumer)
+	go webhookConsumer.Run(ctx, "dedup:webhook_message_sent:",
+		func(raw []byte) (string, error) {
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageSent, raw)
+		},
+		func(raw []byte) error {
+			err := webhook.HandleMessageSent(ctx, queries, webhookDispatcher, raw)
+			if err == nil {
+				return nil
+			}
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+				return err
+			}
+		},
+	)
 	go reactionRemovedConsumer.Run(ctx, "dedup:reaction_removed:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionRemoved, raw)
@@ -383,6 +412,10 @@ func main() {
 		r.Post("/api/auth/mfa/setup", userHandler.MFASetup)
 		r.Post("/api/auth/mfa/confirm", userHandler.MFAConfirm)
 		r.Get("/api/notifications", notificationHandler.List)
+		r.Get("/api/workspaces/{workspaceID}/webhooks", webhookHandler.List)
+		r.Post("/api/workspaces/{workspaceID}/webhooks", webhookHandler.Create)
+		r.Put("/api/workspaces/{workspaceID}/webhooks/{webhookID}", webhookHandler.Update)
+		r.Delete("/api/workspaces/{workspaceID}/webhooks/{webhookID}", webhookHandler.Delete)
 		r.Post("/api/notifications/{notificationID}/read", notificationHandler.MarkRead)
 		r.Post("/api/notifications/read-all", notificationHandler.MarkAllRead)
 		r.Get("/api/profile", productivityHandler.Profile)
