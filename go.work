@@ -1,0 +1,7 @@
+go 1.26.5
+
+use (
+	./apps/api
+	./apps/api/services/contracts
+	./apps/api/services/channel
+)

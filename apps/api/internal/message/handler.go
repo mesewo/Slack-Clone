@@ -15,9 +15,9 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
+	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
-	"github.com/mesewo/slack-clone/apps/api/internal/hashring"
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
@@ -31,8 +31,7 @@ type Handler struct {
 	// calls the Hub as a plain Go function, since Gateway is now a separate
 	// process. This is the whole point of Phase 3's split.
 	GatewayClient chatpb.GatewayServiceClient
-	Ring          *hashring.Ring
-	SelfNodeID    string
+	ChannelOwners channelclient.Resolver
 	// Kafka publishes a durable event log entry alongside the live
 	// broadcast - two independent side effects, both best-effort relative
 	// to the DB write, which is the actual source of truth.
@@ -204,12 +203,12 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
 		return
 	}
-	if h.Ring != nil {
-		owner, ringErr := h.Ring.Get(channelID.String())
-		if ringErr != nil {
-			log.Printf("channel owner lookup failed for %s: %v", channelID, ringErr)
+	if h.ChannelOwners != nil {
+		owner, ownerErr := h.ChannelOwners.GetOwner(r.Context(), channelID.String())
+		if ownerErr != nil {
+			log.Printf("channel owner lookup failed for %s: %v", channelID, ownerErr)
 		} else {
-			log.Printf("channel %s owned by %s (self=%s)", channelID, owner, h.SelfNodeID)
+			log.Printf("channel %s owned by %s at %s", channelID, owner.NodeID, owner.Address)
 		}
 	}
 

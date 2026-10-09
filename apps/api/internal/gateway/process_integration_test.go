@@ -125,6 +125,19 @@ func buildRuntimeBinary(t *testing.T, name string) string {
 	return path
 }
 
+func buildChannelServiceBinary(t *testing.T) string {
+	t.Helper()
+	apiDir := filepath.Join("..", "..")
+	path := filepath.Join(t.TempDir(), "channel-service"+exeSuffix())
+	cmd := exec.Command("go", "build", "-o", path, "./services/channel/cmd/channel-service")
+	cmd.Dir = apiDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build channel-service: %v\n%s", err, output)
+	}
+	return path
+}
+
 func exeSuffix() string {
 	if os.PathSeparator == '\\' {
 		return ".exe"
@@ -270,6 +283,99 @@ func TestCoreRestartPreservesEstablishedGatewayWebSocket(t *testing.T) {
 	if postRestartEvent.Payload.UserID != userID || postRestartEvent.ChannelID != channelID {
 		t.Fatalf("unexpected post-restart event user=%s channel=%s", postRestartEvent.Payload.UserID, postRestartEvent.ChannelID)
 	}
+}
+
+func TestLiveCoreRecoversChannelServiceRestart(t *testing.T) {
+	if os.Getenv("SLACK_PROCESS_INTEGRATION") != "1" {
+		t.Skip("set SLACK_PROCESS_INTEGRATION=1 to run process-owned channel-service recovery test")
+	}
+	coreBinary := buildRuntimeBinary(t, "core")
+	channelBinary := buildChannelServiceBinary(t)
+	channelPort, coreHTTPPort, coreGRPCPort := freePort(t), freePort(t), freePort(t)
+	channelAddr := "127.0.0.1:" + channelPort
+	coreHTTPAddr := "127.0.0.1:" + coreHTTPPort
+	coreGRPCAddr := "127.0.0.1:" + coreGRPCPort
+	channelEnv := []string{"CHANNEL_GRPC_ADDR=" + channelAddr}
+	coreEnv := []string{
+		"CORE_HTTP_ADDR=" + coreHTTPAddr,
+		"CORE_GRPC_ADDR=" + coreGRPCAddr,
+		"GATEWAY_GRPC_ADDR=127.0.0.1:" + freePort(t),
+		"CHANNEL_GRPC_ADDR=" + channelAddr,
+		"CORE_NODE_ID=core-live-recovery",
+		"CORE_NODE_ADDRESS=" + coreGRPCAddr,
+	}
+	channelService := startManagedService(t, "channel-service-before-restart", channelBinary, channelEnv, channelAddr)
+	core := startManagedService(t, "core-channel-recovery", coreBinary, coreEnv, coreHTTPAddr)
+	client := &http.Client{Timeout: 10 * time.Second}
+	baseURL := "http://" + coreHTTPAddr
+	cookie, _, email := processRegister(t, client, baseURL, "Channel recovery "+uuid.NewString())
+	var workspaceID string
+	t.Cleanup(func() { liveCleanup(t, email, email, workspaceID) })
+	workspaceID = processCreateWorkspaceAt(t, client, baseURL, cookie, "Channel recovery "+uuid.NewString())
+	channelID := processCreateChannelAt(t, client, baseURL, cookie, workspaceID)
+
+	processCreateMessage(t, client, baseURL, cookie, channelID, "before-channel-service-restart-"+uuid.NewString())
+	wantLog := "channel " + channelID + " owned by core-live-recovery at " + coreGRPCAddr
+	waitForLog(t, core, wantLog, 10*time.Second)
+	initialOwnerLogCount := strings.Count(core.logs(), wantLog)
+	corePID := core.cmd.Process.Pid
+
+	if err := channelService.cmd.Process.Kill(); err != nil {
+		t.Fatalf("kill channel service: %v", err)
+	}
+	select {
+	case <-channelService.done:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("channel service did not exit after kill\n%s", channelService.logs())
+	}
+	channelService = startManagedService(t, "channel-service-after-restart", channelBinary, channelEnv, channelAddr)
+
+	processCreateMessage(t, client, baseURL, cookie, channelID, "after-channel-service-restart-"+uuid.NewString())
+	waitForLogCount(t, core, wantLog, initialOwnerLogCount+1, 15*time.Second)
+	if core.cmd.Process.Pid != corePID || core.cmd.ProcessState != nil {
+		t.Fatalf("Core process changed or exited during channel-service restart")
+	}
+	if !core.stopGracefully(t, 10*time.Second) {
+		t.Fatalf("Core did not stop cleanly: %s", core.logs())
+	}
+}
+
+func freePort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	return strings.TrimPrefix(listener.Addr().String(), "127.0.0.1:")
+}
+
+func waitForLog(t *testing.T, service *managedService, expected string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if strings.Contains(service.logs(), expected) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("log %q not found\n%s", expected, service.logs())
+}
+
+func waitForLogCount(t *testing.T, service *managedService, expected string, count int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		logs := service.logs()
+		if strings.Count(logs, expected) >= count {
+			return
+		}
+		if service.cmd.ProcessState != nil {
+			t.Fatalf("Core exited while waiting for owner resolution: %s", logs)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("owner resolution log %q did not occur %d times after channel restart\n%s", expected, count, service.logs())
 }
 
 func processCreateUntilLiveDelivery(t *testing.T, client *http.Client, baseURL, cookie, channelID, contentPrefix string, connection *websocket.Conn) liveMessageEvent {

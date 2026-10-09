@@ -18,21 +18,17 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
+	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
-	"github.com/mesewo/slack-clone/apps/api/internal/hashring"
 )
 
-func TestSendMessageConsultsRingAfterMembershipCheck(t *testing.T) {
+func TestSendMessageConsultsChannelOwnerServiceAfterMembershipCheck(t *testing.T) {
 	channelID := uuid.New()
 	userID := uuid.New()
-	const selfNodeID = "core-test"
-
-	ring := hashring.NewRing(100)
-	ring.AddNode(selfNodeID)
+	owners := &recordingOwnerResolver{owner: channelclient.Owner{NodeID: "core-test", Address: "127.0.0.1:9091"}}
 	handler := &Handler{
-		Queries:    database.New(&membershipOnlyDB{}),
-		Ring:       ring,
-		SelfNodeID: selfNodeID,
+		Queries:       database.New(&membershipOnlyDB{}),
+		ChannelOwners: owners,
 	}
 
 	var logs bytes.Buffer
@@ -53,10 +49,22 @@ func TestSendMessageConsultsRingAfterMembershipCheck(t *testing.T) {
 	if response.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d after the test DB reaches its unsupported transaction", response.Code, http.StatusInternalServerError)
 	}
-	wantLog := "channel " + channelID.String() + " owned by " + selfNodeID + " (self=" + selfNodeID + ")"
-	if !strings.Contains(logs.String(), wantLog) {
-		t.Fatalf("ring lookup log missing %q; logs: %s", wantLog, logs.String())
+	if owners.channelID != channelID.String() {
+		t.Fatalf("owner lookup channel ID = %q, want %q", owners.channelID, channelID)
 	}
+	if !strings.Contains(logs.String(), "channel "+channelID.String()+" owned by core-test at 127.0.0.1:9091") {
+		t.Fatalf("owner lookup log missing; logs: %s", logs.String())
+	}
+}
+
+type recordingOwnerResolver struct {
+	channelID string
+	owner     channelclient.Owner
+}
+
+func (resolver *recordingOwnerResolver) GetOwner(_ context.Context, channelID string) (channelclient.Owner, error) {
+	resolver.channelID = channelID
+	return resolver.owner, nil
 }
 
 func TestDeleteMessagePermission(t *testing.T) {

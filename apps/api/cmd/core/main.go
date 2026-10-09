@@ -27,11 +27,11 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channel"
+	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/corehealth"
 	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/dm"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
-	"github.com/mesewo/slack-clone/apps/api/internal/hashring"
 	kafkapkg "github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/message"
 	"github.com/mesewo/slack-clone/apps/api/internal/notification"
@@ -44,6 +44,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
 	"github.com/mesewo/slack-clone/apps/api/internal/webhook"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
+	"github.com/mesewo/slack-clone/services/contracts/channelpb"
 )
 
 func closeKafkaConsumers(consumers ...interface{ Close() error }) {
@@ -106,8 +107,14 @@ func main() {
 	if selfNodeID == "" {
 		selfNodeID = "core-1"
 	}
-	nodeRing := hashring.NewRing(100)
-	nodeRing.AddNode(selfNodeID)
+	channelAddr := os.Getenv("CHANNEL_GRPC_ADDR")
+	if channelAddr == "" {
+		channelAddr = "localhost:9092"
+	}
+	selfNodeAddress := os.Getenv("CORE_NODE_ADDRESS")
+	if selfNodeAddress == "" {
+		selfNodeAddress = coreGRPCAddr
+	}
 	kafkaAddr := os.Getenv("KAFKA_BROKER_ADDR")
 	if kafkaAddr == "" {
 		kafkaAddr = "localhost:19092"
@@ -156,6 +163,25 @@ func main() {
 	}
 	warmupCancel()
 	gatewayClient := chatpb.NewGatewayServiceClient(gatewayConn)
+
+	channelConn, err := grpc.NewClient(channelAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to create channel-service gRPC client for %s: %v", channelAddr, err)
+	}
+	defer closeResource("channel-service gRPC connection", channelConn.Close)
+	channelOwners := channelclient.New(channelpb.NewChannelServiceClient(channelConn), selfNodeID, selfNodeAddress)
+	joinCtx, joinCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if err := channelOwners.Join(joinCtx); err != nil {
+		log.Printf("warning: could not join channel ownership ring at %s: %v", channelAddr, err)
+	}
+	joinCancel()
+	defer func() {
+		leaveCtx, leaveCancel := context.WithTimeout(context.Background(), time.Second)
+		defer leaveCancel()
+		if err := channelOwners.Leave(leaveCtx); err != nil {
+			log.Printf("warning: could not leave channel ownership ring: %v", err)
+		}
+	}()
 
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
 	defer closeResource("Kafka producer", kafkaProducer.Close)
@@ -229,7 +255,7 @@ func main() {
 	workspaceHandler := &workspace.Handler{Queries: queries, PermissionCache: permissionCache}
 	channelHandler := &channel.Handler{Queries: queries, PermissionCache: permissionCache}
 	dmHandler := &dm.Handler{Queries: queries, GatewayClient: gatewayClient}
-	messageHandler := &message.Handler{Queries: queries, PermissionCache: permissionCache, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient, Ring: nodeRing, SelfNodeID: selfNodeID}
+	messageHandler := &message.Handler{Queries: queries, PermissionCache: permissionCache, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient, ChannelOwners: channelOwners}
 	webhookHandler := &webhook.Handler{
 		Queries: queries,
 		Authorize: func(w http.ResponseWriter, r *http.Request, workspaceID uuid.UUID) bool {
