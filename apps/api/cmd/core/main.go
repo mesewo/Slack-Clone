@@ -39,12 +39,14 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
+	"github.com/mesewo/slack-clone/apps/api/internal/storageclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/upload"
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
 	"github.com/mesewo/slack-clone/apps/api/internal/userclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/webhook"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 	"github.com/mesewo/slack-clone/services/contracts/channelpb"
+	"github.com/mesewo/slack-clone/services/contracts/storagepb"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
 	"github.com/mesewo/slack-clone/services/database"
 )
@@ -209,6 +211,30 @@ func main() {
 	userWarmupCancel()
 	userClient := userclient.New(userpb.NewUserServiceClient(userConn))
 
+	storageAddr := os.Getenv("STORAGE_GRPC_ADDR")
+	if storageAddr == "" {
+		storageAddr = "localhost:9094"
+	}
+	storageConn, err := grpc.NewClient(storageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to create storage-service gRPC client for %s: %v", storageAddr, err)
+	}
+	defer closeResource("storage-service gRPC connection", storageConn.Close)
+	storageConn.Connect()
+	storageWarmupCtx, storageWarmupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	for {
+		state := storageConn.GetState()
+		if state == connectivity.Ready {
+			break
+		}
+		if !storageConn.WaitForStateChange(storageWarmupCtx, state) {
+			log.Printf("warning: storage-service connection not ready after warmup at %s (state: %v) - continuing anyway", storageAddr, state)
+			break
+		}
+	}
+	storageWarmupCancel()
+	storageClient := storageclient.New(storagepb.NewStorageServiceClient(storageConn))
+
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
 	defer closeResource("Kafka producer", kafkaProducer.Close)
 	searchClient := searchpkg.NewClient(searchURL)
@@ -239,18 +265,10 @@ func main() {
 			log.Fatalf("failed to initialize object store bucket: %v", err)
 		}
 	}
-	thumbnailWorker := upload.NewThumbnailWorker(queries, objectStore, s3Bucket, 64, 2)
-	thumbnailWorker.Start(ctx)
 	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 	} else if removed > 0 {
 		log.Printf("cleaned %d orphaned upload sessions", removed)
-	}
-	if err := thumbnailWorker.RequeueStale(context.Background()); err != nil {
-		log.Printf("warning: failed to requeue stale thumbnail jobs: %v", err)
-	}
-	if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
-		log.Printf("warning: failed to process due thumbnail retries: %v", err)
 	}
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -260,10 +278,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
-					log.Printf("warning: failed to process due thumbnail retries: %v", err)
-				}
-				if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
+				if removed, err := upload.CleanupExpiredUploadSessions(ctx, queries, objectStore, s3Bucket, time.Now()); err != nil {
 					log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 				} else if removed > 0 {
 					log.Printf("cleaned %d orphaned upload sessions", removed)
@@ -271,7 +286,7 @@ func main() {
 			}
 		}
 	}()
-	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", ThumbnailWorker: thumbnailWorker}
+	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", Storage: storageClient}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 	defer closeResource("Redis client", redisClient.Close)

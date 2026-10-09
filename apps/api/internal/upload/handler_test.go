@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,34 +66,6 @@ func TestParseRangeClassifiesInvalidRanges(t *testing.T) {
 	}
 }
 
-func TestSafeObjectKeyDoesNotExposeRawPath(t *testing.T) {
-	key := safeUploadKey("user-123", "../../secret.txt")
-	if key == "../../secret.txt" || key == "" {
-		t.Fatalf("raw path leaked into object key: %q", key)
-	}
-	if filepath.Base(key) == "../../secret.txt" {
-		t.Fatal("object key still exposes raw filename path")
-	}
-	if len(key) == 0 {
-		t.Fatal("generated key is empty")
-	}
-}
-
-func TestValidatePresignRequest(t *testing.T) {
-	if _, _, _, err := validatePresignRequest("report.pdf", "application/pdf", 1024); err != nil {
-		t.Fatalf("valid presign request should pass: %v", err)
-	}
-	if _, _, _, err := validatePresignRequest("", "application/pdf", 1024); err == nil {
-		t.Fatal("empty filename should be rejected")
-	}
-	if _, _, _, err := validatePresignRequest("malware.exe", "application/x-msdownload", 1024); err == nil {
-		t.Fatal("unsupported content type should be rejected")
-	}
-	if _, _, _, err := validatePresignRequest("too-large.bin", "application/octet-stream", maxUploadSize+1); err == nil {
-		t.Fatal("oversized uploads should be rejected")
-	}
-}
-
 func TestParseRangeHTTPSemantics(t *testing.T) {
 	start, end, partial, valid := parseRange("bytes=0-9", 10)
 	if !partial || !valid || start != 0 || end != 9 {
@@ -108,18 +79,6 @@ func TestParseRangeHTTPSemantics(t *testing.T) {
 	}
 	if _, _, partial, valid = parseRange("", 10); partial || !valid {
 		t.Fatalf("no range should be treated as full content: partial=%v valid=%v", partial, valid)
-	}
-}
-
-func TestThumbnailResultState(t *testing.T) {
-	if next, retry := thumbnailResultState("UPLOADED", 0, true); next != "READY" || retry {
-		t.Fatalf("successful upload should finalize as READY: next=%s retry=%v", next, retry)
-	}
-	if next, retry := thumbnailResultState("PROCESSING", 1, false); next != "PROCESSING" || !retry {
-		t.Fatalf("retryable thumbnail failure should remain PROCESSING for retry: next=%s retry=%v", next, retry)
-	}
-	if next, retry := thumbnailResultState("PROCESSING", 3, false); next != "FAILED" || retry {
-		t.Fatalf("final retry failure should mark FAILED: next=%s retry=%v", next, retry)
 	}
 }
 

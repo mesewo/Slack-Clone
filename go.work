@@ -7,4 +7,5 @@ use (
 	./apps/api/services/authlib
 	./apps/api/services/database
 	./apps/api/services/user
+	./apps/api/services/storage
 )
