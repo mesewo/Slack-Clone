@@ -23,7 +23,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"golang.org/x/image/draw"
@@ -32,10 +32,10 @@ import (
 const maxUploadSize = 100 << 20 // 100MB
 
 type Handler struct {
-	Queries        *database.Queries
-	Store          *minio.Client
-	Bucket         string
-	BaseURL        string
+	Queries         *database.Queries
+	Store           *minio.Client
+	Bucket          string
+	BaseURL         string
 	ThumbnailWorker *ThumbnailWorker
 }
 

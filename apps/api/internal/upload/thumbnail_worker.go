@@ -9,15 +9,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 	"github.com/minio/minio-go/v7"
 )
 
 type ThumbnailJob struct {
-	SessionID  uuid.UUID
-	ObjectKey  string
+	SessionID   uuid.UUID
+	ObjectKey   string
 	ContentType string
-	Attempt    int
+	Attempt     int
 }
 
 type ThumbnailWorker struct {
@@ -208,4 +208,3 @@ func thumbnailResultState(current string, attempts int, success bool) (string, b
 	}
 	return "PROCESSING", true
 }
-

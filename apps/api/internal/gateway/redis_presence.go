@@ -12,8 +12,8 @@ import (
 // RedisPresenceManager tracks user status using Redis as the backing store,
 // so all gateway instances have the same view of who's online and away.
 type RedisPresenceManager struct {
-	redis *redis.Client
-	hub   *RedisHub
+	redis  *redis.Client
+	hub    *RedisHub
 	pubSub *redis.PubSub
 }
 

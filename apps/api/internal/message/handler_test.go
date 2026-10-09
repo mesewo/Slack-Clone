@@ -19,7 +19,7 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 func TestSendMessageConsultsChannelOwnerServiceAfterMembershipCheck(t *testing.T) {

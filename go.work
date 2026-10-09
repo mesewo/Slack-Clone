@@ -4,4 +4,7 @@ use (
 	./apps/api
 	./apps/api/services/contracts
 	./apps/api/services/channel
+	./apps/api/services/authlib
+	./apps/api/services/database
+	./apps/api/services/user
 )

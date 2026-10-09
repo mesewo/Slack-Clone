@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+
+	shared "github.com/mesewo/slack-clone/services/authlib/auth"
 )
 
 type contextKey string
 
 const UserContextKey contextKey = "userClaims"
 
-func Middleware(tm *TokenManager) func(http.Handler) http.Handler {
+func Middleware(tm *shared.TokenManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie(CookieName)

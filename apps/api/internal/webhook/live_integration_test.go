@@ -17,8 +17,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	segmentkafka "github.com/segmentio/kafka-go"
 
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 func TestLiveMessageSentPartialWebhookDelivery(t *testing.T) {

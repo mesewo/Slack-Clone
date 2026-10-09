@@ -18,7 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -36,10 +36,10 @@ func TestAllowedType(t *testing.T) {
 
 func TestParseRangeClassifiesInvalidRanges(t *testing.T) {
 	cases := []struct {
-		name     string
-		value    string
-		size     int64
-		wantOK   bool
+		name      string
+		value     string
+		size      int64
+		wantOK    bool
 		wantRange bool
 	}{
 		{name: "no range", value: "", size: 1000, wantOK: true, wantRange: false},
@@ -135,8 +135,10 @@ type stubDB struct {
 	queryRow func(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func (s *stubDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) { return pgconn.CommandTag{}, nil }
-func (s *stubDB) Query(context.Context, string, ...any) (pgx.Rows, error)        { return nil, nil }
+func (s *stubDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+func (s *stubDB) Query(context.Context, string, ...any) (pgx.Rows, error) { return nil, nil }
 func (s *stubDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	if s.queryRow == nil {
 		return stubQueryRow{fun: func(dest ...any) error { return nil }}
@@ -311,8 +313,8 @@ func TestServeAllowsAuthorizedAttachment(t *testing.T) {
 	}}
 
 	store, err := minio.New("example.com", &minio.Options{
-		Creds:    credentials.NewStaticV4("test", "test", ""),
-		Secure:   false,
+		Creds:  credentials.NewStaticV4("test", "test", ""),
+		Secure: false,
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.Method == http.MethodGet && req.URL.Query().Has("location") {
 				return &http.Response{

@@ -38,8 +38,8 @@ func TestKafkaConsumerRestart(t *testing.T) {
 		Addr:                   kafka.TCP(broker),
 		Topic:                  topic,
 		Balancer:               &kafka.LeastBytes{},
-		RequiredAcks:          kafka.RequireOne,
-		WriteTimeout:          10 * time.Second,
+		RequiredAcks:           kafka.RequireOne,
+		WriteTimeout:           10 * time.Second,
 		AllowAutoTopicCreation: true,
 	}
 	defer writer.Close()

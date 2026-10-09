@@ -29,7 +29,6 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/channel"
 	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/corehealth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/dm"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
 	kafkapkg "github.com/mesewo/slack-clone/apps/api/internal/kafka"
@@ -45,6 +44,8 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/webhook"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 	"github.com/mesewo/slack-clone/services/contracts/channelpb"
+	"github.com/mesewo/slack-clone/services/contracts/userpb"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 func closeKafkaConsumers(consumers ...interface{ Close() error }) {
@@ -183,6 +184,30 @@ func main() {
 		}
 	}()
 
+	userAddr := os.Getenv("USER_GRPC_ADDR")
+	if userAddr == "" {
+		userAddr = "localhost:9093"
+	}
+	userConn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to create user-service gRPC client for %s: %v", userAddr, err)
+	}
+	defer closeResource("user-service gRPC connection", userConn.Close)
+	userConn.Connect()
+	userWarmupCtx, userWarmupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	for {
+		state := userConn.GetState()
+		if state == connectivity.Ready {
+			break
+		}
+		if !userConn.WaitForStateChange(userWarmupCtx, state) {
+			log.Printf("warning: user-service connection not ready after warmup at %s (state: %v) - continuing anyway", userAddr, state)
+			break
+		}
+	}
+	userWarmupCancel()
+	userClient := userpb.NewUserServiceClient(userConn)
+
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
 	defer closeResource("Kafka producer", kafkaProducer.Close)
 	searchClient := searchpkg.NewClient(searchURL)
@@ -251,7 +276,7 @@ func main() {
 	defer closeResource("Redis client", redisClient.Close)
 	permissionCache := permission.NewCache(redisClient, 60*time.Second)
 
-	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer, Redis: redisClient}
+	userHandler := &user.Handler{Client: userClient, Cookies: cookies}
 	workspaceHandler := &workspace.Handler{Queries: queries, PermissionCache: permissionCache}
 	channelHandler := &channel.Handler{Queries: queries, PermissionCache: permissionCache}
 	dmHandler := &dm.Handler{Queries: queries, GatewayClient: gatewayClient}

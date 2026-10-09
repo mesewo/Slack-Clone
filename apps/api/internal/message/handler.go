@@ -16,12 +16,12 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 type Handler struct {

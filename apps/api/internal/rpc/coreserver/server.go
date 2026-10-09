@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
+	"github.com/mesewo/slack-clone/services/database"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"

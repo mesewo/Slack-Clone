@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 func HandleMessageSent(ctx context.Context, queries *database.Queries, dispatcher *Dispatcher, raw []byte) error {
