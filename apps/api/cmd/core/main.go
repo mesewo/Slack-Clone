@@ -41,6 +41,7 @@ import (
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
 	"github.com/mesewo/slack-clone/apps/api/internal/upload"
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
+	"github.com/mesewo/slack-clone/apps/api/internal/userclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/webhook"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
 	"github.com/mesewo/slack-clone/services/contracts/channelpb"
@@ -206,7 +207,7 @@ func main() {
 		}
 	}
 	userWarmupCancel()
-	userClient := userpb.NewUserServiceClient(userConn)
+	userClient := userclient.New(userpb.NewUserServiceClient(userConn))
 
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
 	defer closeResource("Kafka producer", kafkaProducer.Close)

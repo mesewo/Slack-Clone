@@ -7,13 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
+	"github.com/mesewo/slack-clone/apps/api/internal/userclient"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type Handler struct {
-	Client  userpb.UserServiceClient
+	Client  userclient.Client
 	Cookies auth.CookieConfig
 }
 
@@ -119,21 +120,12 @@ func (h *Handler) Logout(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
-	if _, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims); !ok {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
 		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
-	cookie, err := r.Cookie(auth.CookieName)
-	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "missing token")
-		return
-	}
-	identity, err := h.Client.Verify(r.Context(), &userpb.VerifyRequest{Token: cookie.Value})
-	if err != nil {
-		writeRPCError(w, err)
-		return
-	}
-	_ = json.NewEncoder(w).Encode(map[string]string{"id": identity.GetUserId(), "email": identity.GetEmail()})
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": claims.UserID, "email": claims.Email, "display_name": claims.DisplayName})
 }
 
 func authenticatedUser(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {

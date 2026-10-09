@@ -11,46 +11,37 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
-	"google.golang.org/grpc"
 )
 
 type stubUserClient struct {
-	userpb.UserServiceClient
 	loginResponse *userpb.AuthResponse
 	loginErr      error
-	verifyRequest *userpb.VerifyRequest
 	callCount     int
 }
 
-func (c *stubUserClient) Register(context.Context, *userpb.RegisterRequest, ...grpc.CallOption) (*userpb.AuthResponse, error) {
+func (c *stubUserClient) Register(context.Context, *userpb.RegisterRequest) (*userpb.AuthResponse, error) {
 	c.callCount++
 	return &userpb.AuthResponse{UserId: "user-1", Email: "a@example.com", Token: "signed-token", TokenTtlSeconds: 3600}, nil
 }
 
-func (c *stubUserClient) Login(context.Context, *userpb.LoginRequest, ...grpc.CallOption) (*userpb.AuthResponse, error) {
+func (c *stubUserClient) Login(context.Context, *userpb.LoginRequest) (*userpb.AuthResponse, error) {
 	c.callCount++
 	return c.loginResponse, c.loginErr
 }
 
-func (c *stubUserClient) MFASetup(context.Context, *userpb.MFASetupRequest, ...grpc.CallOption) (*userpb.MFASetupResponse, error) {
+func (c *stubUserClient) MFASetup(context.Context, *userpb.MFASetupRequest) (*userpb.MFASetupResponse, error) {
 	c.callCount++
 	return &userpb.MFASetupResponse{Secret: "SECRET", OtpauthUri: "otpauth://totp/SlackClone:a@example.com"}, nil
 }
 
-func (c *stubUserClient) MFAConfirm(context.Context, *userpb.MFAConfirmRequest, ...grpc.CallOption) (*userpb.MFAConfirmResponse, error) {
+func (c *stubUserClient) MFAConfirm(context.Context, *userpb.MFAConfirmRequest) (*userpb.MFAConfirmResponse, error) {
 	c.callCount++
 	return &userpb.MFAConfirmResponse{}, nil
 }
 
-func (c *stubUserClient) MFAChallenge(context.Context, *userpb.MFAChallengeRequest, ...grpc.CallOption) (*userpb.AuthResponse, error) {
+func (c *stubUserClient) MFAChallenge(context.Context, *userpb.MFAChallengeRequest) (*userpb.AuthResponse, error) {
 	c.callCount++
 	return &userpb.AuthResponse{UserId: "user-1", Email: "a@example.com", Token: "signed-token", TokenTtlSeconds: 3600}, nil
-}
-
-func (c *stubUserClient) Verify(_ context.Context, request *userpb.VerifyRequest, _ ...grpc.CallOption) (*userpb.UserIdentity, error) {
-	c.callCount++
-	c.verifyRequest = request
-	return &userpb.UserIdentity{UserId: "user-1", Email: "a@example.com"}, nil
 }
 
 func TestLoginMFAChallengeDoesNotSetCookie(t *testing.T) {
@@ -91,5 +82,34 @@ func TestLogoutClearsCookieWithoutCallingService(t *testing.T) {
 	}
 	if client.callCount != 0 {
 		t.Fatalf("Logout called user-service %d times; JWT logout should only expire its cookie", client.callCount)
+	}
+}
+
+func TestVerifyUsesAuthenticatedClaimsWithoutCallingService(t *testing.T) {
+	client := &stubUserClient{}
+	handler := &Handler{Client: client}
+	request := httptest.NewRequest(http.MethodGet, "/api/auth/verify", nil)
+	claims := &auth.Claims{UserID: "user-1", Email: "a@example.com", DisplayName: "A"}
+	request = request.WithContext(context.WithValue(request.Context(), auth.UserContextKey, claims))
+	response := httptest.NewRecorder()
+	handler.Verify(response, request)
+	var body map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("Verify body %s, error %v", response.Body.String(), err)
+	}
+	if response.Code != http.StatusOK || body["id"] != claims.UserID || body["email"] != claims.Email || body["display_name"] != claims.DisplayName {
+		t.Fatalf("Verify = status %d body %v", response.Code, body)
+	}
+	if client.callCount != 0 {
+		t.Fatalf("Verify called user-service %d times", client.callCount)
+	}
+}
+
+func TestVerifyUnauthenticatedResponse(t *testing.T) {
+	handler := &Handler{Client: &stubUserClient{}}
+	response := httptest.NewRecorder()
+	handler.Verify(response, httptest.NewRequest(http.MethodGet, "/api/auth/verify", nil))
+	if response.Code != http.StatusUnauthorized || response.Body.String() != "{\"error\":\"not authenticated\"}\n" {
+		t.Fatalf("Verify unauthenticated = status %d body %s", response.Code, response.Body.String())
 	}
 }

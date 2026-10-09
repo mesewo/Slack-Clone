@@ -10,6 +10,7 @@ service UserService {
   rpc MFASetup(MFASetupRequest) returns (MFASetupResponse);
   rpc MFAConfirm(MFAConfirmRequest) returns (MFAConfirmResponse);
   rpc MFAChallenge(MFAChallengeRequest) returns (AuthResponse);
+  // No production caller as of the user-service cut; retained for the user-service's own verification tests.
   rpc Verify(VerifyRequest) returns (UserIdentity);
 }
 
