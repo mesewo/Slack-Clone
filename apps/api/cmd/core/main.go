@@ -260,11 +260,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create object store client: %v", err)
 	}
-	if err := objectStore.MakeBucket(context.Background(), s3Bucket, minio.MakeBucketOptions{}); err != nil {
-		if exists, checkErr := objectStore.BucketExists(context.Background(), s3Bucket); checkErr != nil || !exists {
-			log.Fatalf("failed to initialize object store bucket: %v", err)
+	// Compose's depends_on only starts MinIO; it does not wait until MinIO is
+	// ready to accept requests. Retry bucket initialization so a cold stack
+	// start does not terminate Core before it binds the HTTP API on :8080.
+	bucketCtx, bucketCancel := context.WithTimeout(ctx, time.Minute)
+	for {
+		bucketErr := objectStore.MakeBucket(bucketCtx, s3Bucket, minio.MakeBucketOptions{})
+		if bucketErr == nil {
+			break
+		}
+		if exists, checkErr := objectStore.BucketExists(bucketCtx, s3Bucket); checkErr == nil && exists {
+			break
+		}
+		select {
+		case <-bucketCtx.Done():
+			bucketCancel()
+			log.Fatalf("failed to initialize object store bucket %q after waiting for MinIO: %v", s3Bucket, bucketErr)
+		case <-time.After(time.Second):
+			log.Printf("waiting for object store bucket %q: %v", s3Bucket, bucketErr)
 		}
 	}
+	bucketCancel()
 	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 	} else if removed > 0 {

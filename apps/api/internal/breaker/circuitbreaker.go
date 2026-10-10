@@ -1,9 +1,12 @@
-package webhook
+package breaker
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
+
+var ErrOpen = errors.New("circuit is open")
 
 type CircuitState uint8
 
@@ -25,17 +28,26 @@ type CircuitBreaker struct {
 }
 
 func NewCircuitBreaker(failureLimit int, resetTimeout time.Duration) *CircuitBreaker {
+	return NewCircuitBreakerWithClock(failureLimit, resetTimeout, time.Now)
+}
+
+// NewCircuitBreakerWithClock constructs a breaker using the supplied clock.
+// It is useful when callers need deterministic control of the reset window.
+func NewCircuitBreakerWithClock(failureLimit int, resetTimeout time.Duration, now func() time.Time) *CircuitBreaker {
 	if failureLimit < 1 {
 		failureLimit = 1
 	}
 	if resetTimeout < 0 {
 		resetTimeout = 0
 	}
+	if now == nil {
+		now = time.Now
+	}
 	return &CircuitBreaker{
 		failureLimit: failureLimit,
 		resetTimeout: resetTimeout,
 		state:        CircuitClosed,
-		now:          time.Now,
+		now:          now,
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/mesewo/slack-clone/services/contracts/storagepb"
 	"github.com/mesewo/slack-clone/services/database"
 	"github.com/mesewo/slack-clone/services/storage/internal/server"
@@ -19,6 +20,8 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load(".env", "../../.env", "apps/api/.env")
+
 	address := os.Getenv("STORAGE_GRPC_ADDR")
 	if address == "" {
 		address = ":9094"

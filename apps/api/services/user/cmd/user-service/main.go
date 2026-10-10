@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/mesewo/slack-clone/services/authlib/auth"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
 	"github.com/mesewo/slack-clone/services/database"
@@ -19,6 +20,8 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load(".env", "../../.env", "apps/api/.env")
+
 	address := os.Getenv("USER_GRPC_ADDR")
 	if address == "" {
 		address = ":9093"

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/mesewo/slack-clone/services/database"
 	"github.com/mesewo/slack-clone/services/storage/internal/thumbnail"
 	"github.com/minio/minio-go/v7"
@@ -17,6 +18,8 @@ import (
 )
 
 func main() {
+	_ = godotenv.Load(".env", "../../.env", "apps/api/.env")
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	databaseURL := os.Getenv("DATABASE_URL")

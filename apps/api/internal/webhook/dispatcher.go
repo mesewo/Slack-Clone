@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/mesewo/slack-clone/apps/api/internal/breaker"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 	signatureHeader = "X-Slack-Clone-Signature"
 )
 
-var ErrCircuitOpen = errors.New("webhook circuit is open")
+var ErrCircuitOpen = breaker.ErrOpen
 
 type PermanentDeliveryError struct {
 	StatusCode int
@@ -33,7 +35,7 @@ type Dispatcher struct {
 	failureLimit int
 	resetTimeout time.Duration
 	breakersMu   sync.Mutex
-	breakers     map[string]*CircuitBreaker
+	breakers     map[string]*breaker.CircuitBreaker
 }
 
 func NewDispatcher(client *http.Client, failureLimit int, resetTimeout time.Duration) *Dispatcher {
@@ -44,7 +46,7 @@ func NewDispatcher(client *http.Client, failureLimit int, resetTimeout time.Dura
 		client:       client,
 		failureLimit: failureLimit,
 		resetTimeout: resetTimeout,
-		breakers:     make(map[string]*CircuitBreaker),
+		breakers:     make(map[string]*breaker.CircuitBreaker),
 	}
 }
 
@@ -102,13 +104,13 @@ func (d *Dispatcher) Send(ctx context.Context, targetURL, secret string, payload
 	return errors.New("webhook delivery attempts exhausted")
 }
 
-func (d *Dispatcher) breakerFor(targetURL string) *CircuitBreaker {
+func (d *Dispatcher) breakerFor(targetURL string) *breaker.CircuitBreaker {
 	d.breakersMu.Lock()
 	defer d.breakersMu.Unlock()
 	if breaker := d.breakers[targetURL]; breaker != nil {
 		return breaker
 	}
-	breaker := NewCircuitBreaker(d.failureLimit, d.resetTimeout)
+	breaker := breaker.NewCircuitBreaker(d.failureLimit, d.resetTimeout)
 	d.breakers[targetURL] = breaker
 	return breaker
 }
