@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package storage.v1;
+
+option go_package = "github.com/mesewo/slack-clone/services/contracts/storagepb;storagepb";
+
+import "google/protobuf/timestamp.proto";
+
+service StorageService {
+  rpc PresignUpload(PresignUploadRequest) returns (PresignUploadResponse);
+  rpc CompleteUpload(CompleteUploadRequest) returns (CompleteUploadResponse);
+}
+
+message PresignUploadRequest {
+  string user_id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+}
+
+message PresignUploadResponse {
+  string id = 1;
+  string session_id = 2;
+  string object_key = 3;
+  string filename = 4;
+  string content_type = 5;
+  int64 size_bytes = 6;
+  string upload_url = 7;
+  google.protobuf.Timestamp expiry = 8;
+  google.protobuf.Timestamp expires_at = 9;
+}
+
+message CompleteUploadRequest {
+  string user_id = 1;
+  string session_id = 2;
+  string key = 3;
+  string filename = 4;
+  string content_type = 5;
+  int64 size_bytes = 6;
+}
+
+message CompleteUploadResponse {
+  string id = 1;
+  string filename = 2;
+  string content_type = 3;
+  int64 size_bytes = 4;
+}

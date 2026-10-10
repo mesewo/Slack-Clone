@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,20 +27,49 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channel"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
+	"github.com/mesewo/slack-clone/apps/api/internal/corehealth"
 	"github.com/mesewo/slack-clone/apps/api/internal/dm"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
 	kafkapkg "github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/apps/api/internal/message"
 	"github.com/mesewo/slack-clone/apps/api/internal/notification"
+	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/productivity"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
+	"github.com/mesewo/slack-clone/apps/api/internal/storageclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/upload"
 	"github.com/mesewo/slack-clone/apps/api/internal/user"
+	"github.com/mesewo/slack-clone/apps/api/internal/userclient"
+	"github.com/mesewo/slack-clone/apps/api/internal/webhook"
 	workspace "github.com/mesewo/slack-clone/apps/api/internal/workspace"
+	"github.com/mesewo/slack-clone/services/contracts/channelpb"
+	"github.com/mesewo/slack-clone/services/contracts/storagepb"
+	"github.com/mesewo/slack-clone/services/contracts/userpb"
+	"github.com/mesewo/slack-clone/services/database"
 )
+
+func closeKafkaConsumers(consumers ...interface{ Close() error }) {
+	var wg sync.WaitGroup
+	for _, consumer := range consumers {
+		wg.Add(1)
+		go func(consumer interface{ Close() error }) {
+			defer wg.Done()
+			if err := consumer.Close(); err != nil {
+				log.Printf("Kafka consumer close failed: %v", err)
+			}
+		}(consumer)
+	}
+	wg.Wait()
+}
+
+func closeResource(name string, closeFn func() error) {
+	if err := closeFn(); err != nil {
+		log.Printf("failed to close %s: %v", name, err)
+	}
+}
 
 func syncSearchDocument(ctx context.Context, queries *database.Queries, searchClient *searchpkg.Client, messageID uuid.UUID) error {
 	message, err := queries.GetMessageByID(ctx, messageID)
@@ -77,6 +107,18 @@ func main() {
 	if coreGRPCAddr == "" {
 		coreGRPCAddr = "localhost:9091"
 	}
+	selfNodeID := os.Getenv("CORE_NODE_ID")
+	if selfNodeID == "" {
+		selfNodeID = "core-1"
+	}
+	channelAddr := os.Getenv("CHANNEL_GRPC_ADDR")
+	if channelAddr == "" {
+		channelAddr = "localhost:9092"
+	}
+	selfNodeAddress := os.Getenv("CORE_NODE_ADDRESS")
+	if selfNodeAddress == "" {
+		selfNodeAddress = coreGRPCAddr
+	}
 	kafkaAddr := os.Getenv("KAFKA_BROKER_ADDR")
 	if kafkaAddr == "" {
 		kafkaAddr = "localhost:19092"
@@ -104,7 +146,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to dial gateway gRPC at %s: %v", gatewayAddr, err)
 	}
-	defer gatewayConn.Close()
+	defer closeResource("Gateway gRPC connection", gatewayConn.Close)
 
 	// Eagerly connect now, at startup, instead of letting the first real
 	// broadcast pay for TCP + HTTP/2 handshake setup under a tight deadline -
@@ -126,8 +168,75 @@ func main() {
 	warmupCancel()
 	gatewayClient := chatpb.NewGatewayServiceClient(gatewayConn)
 
+	channelConn, err := grpc.NewClient(channelAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to create channel-service gRPC client for %s: %v", channelAddr, err)
+	}
+	defer closeResource("channel-service gRPC connection", channelConn.Close)
+	channelOwners := channelclient.New(channelpb.NewChannelServiceClient(channelConn), selfNodeID, selfNodeAddress)
+	joinCtx, joinCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if err := channelOwners.Join(joinCtx); err != nil {
+		log.Printf("warning: could not join channel ownership ring at %s: %v", channelAddr, err)
+	}
+	joinCancel()
+	defer func() {
+		leaveCtx, leaveCancel := context.WithTimeout(context.Background(), time.Second)
+		defer leaveCancel()
+		if err := channelOwners.Leave(leaveCtx); err != nil {
+			log.Printf("warning: could not leave channel ownership ring: %v", err)
+		}
+	}()
+
+	userAddr := os.Getenv("USER_GRPC_ADDR")
+	if userAddr == "" {
+		userAddr = "localhost:9093"
+	}
+	userConn, err := grpc.NewClient(userAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to create user-service gRPC client for %s: %v", userAddr, err)
+	}
+	defer closeResource("user-service gRPC connection", userConn.Close)
+	userConn.Connect()
+	userWarmupCtx, userWarmupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	for {
+		state := userConn.GetState()
+		if state == connectivity.Ready {
+			break
+		}
+		if !userConn.WaitForStateChange(userWarmupCtx, state) {
+			log.Printf("warning: user-service connection not ready after warmup at %s (state: %v) - continuing anyway", userAddr, state)
+			break
+		}
+	}
+	userWarmupCancel()
+	userClient := userclient.New(userpb.NewUserServiceClient(userConn))
+
+	storageAddr := os.Getenv("STORAGE_GRPC_ADDR")
+	if storageAddr == "" {
+		storageAddr = "localhost:9094"
+	}
+	storageConn, err := grpc.NewClient(storageAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("failed to create storage-service gRPC client for %s: %v", storageAddr, err)
+	}
+	defer closeResource("storage-service gRPC connection", storageConn.Close)
+	storageConn.Connect()
+	storageWarmupCtx, storageWarmupCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	for {
+		state := storageConn.GetState()
+		if state == connectivity.Ready {
+			break
+		}
+		if !storageConn.WaitForStateChange(storageWarmupCtx, state) {
+			log.Printf("warning: storage-service connection not ready after warmup at %s (state: %v) - continuing anyway", storageAddr, state)
+			break
+		}
+	}
+	storageWarmupCancel()
+	storageClient := storageclient.New(storagepb.NewStorageServiceClient(storageConn))
+
 	kafkaProducer := kafkapkg.NewProducer(kafkaAddr)
-	defer kafkaProducer.Close()
+	defer closeResource("Kafka producer", kafkaProducer.Close)
 	searchClient := searchpkg.NewClient(searchURL)
 	if err := searchClient.EnsureIndex(context.Background()); err != nil {
 		log.Printf("warning: Elasticsearch unavailable at startup: %v", err)
@@ -156,18 +265,10 @@ func main() {
 			log.Fatalf("failed to initialize object store bucket: %v", err)
 		}
 	}
-	thumbnailWorker := upload.NewThumbnailWorker(queries, objectStore, s3Bucket, 64, 2)
-	thumbnailWorker.Start(ctx)
 	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 	} else if removed > 0 {
 		log.Printf("cleaned %d orphaned upload sessions", removed)
-	}
-	if err := thumbnailWorker.RequeueStale(context.Background()); err != nil {
-		log.Printf("warning: failed to requeue stale thumbnail jobs: %v", err)
-	}
-	if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
-		log.Printf("warning: failed to process due thumbnail retries: %v", err)
 	}
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -177,10 +278,7 @@ func main() {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := thumbnailWorker.RequeueDue(context.Background()); err != nil {
-					log.Printf("warning: failed to process due thumbnail retries: %v", err)
-				}
-				if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
+				if removed, err := upload.CleanupExpiredUploadSessions(ctx, queries, objectStore, s3Bucket, time.Now()); err != nil {
 					log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 				} else if removed > 0 {
 					log.Printf("cleaned %d orphaned upload sessions", removed)
@@ -188,23 +286,31 @@ func main() {
 			}
 		}
 	}()
-	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", ThumbnailWorker: thumbnailWorker}
+	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", Storage: storageClient}
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
-	defer redisClient.Close()
+	defer closeResource("Redis client", redisClient.Close)
+	permissionCache := permission.NewCache(redisClient, 60*time.Second)
 
-	userHandler := &user.Handler{Queries: queries, Tokens: tokens, Cookies: cookies, Kafka: kafkaProducer}
-	workspaceHandler := &workspace.Handler{Queries: queries}
-	channelHandler := &channel.Handler{Queries: queries}
+	userHandler := &user.Handler{Client: userClient, Cookies: cookies}
+	workspaceHandler := &workspace.Handler{Queries: queries, PermissionCache: permissionCache}
+	channelHandler := &channel.Handler{Queries: queries, PermissionCache: permissionCache}
 	dmHandler := &dm.Handler{Queries: queries, GatewayClient: gatewayClient}
-	messageHandler := &message.Handler{Queries: queries, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient}
+	messageHandler := &message.Handler{Queries: queries, PermissionCache: permissionCache, GatewayClient: gatewayClient, Kafka: kafkaProducer, Search: searchClient, ChannelOwners: channelOwners}
+	webhookHandler := &webhook.Handler{
+		Queries: queries,
+		Authorize: func(w http.ResponseWriter, r *http.Request, workspaceID uuid.UUID) bool {
+			_, ok := auth.RequirePermission(w, r, queries, permissionCache, workspaceID, permission.PermissionManageWebhooks)
+			return ok
+		},
+	}
+	webhookDispatcher := webhook.NewDispatcher(nil, 5, 30*time.Second)
 	notificationHandler := &notification.Handler{Queries: queries}
 	productivityHandler := &productivity.Handler{Queries: queries}
 	go runOutbox(ctx, queries, kafkaProducer)
 	go runScheduledMessages(ctx, queries, gatewayClient)
 
 	messageConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageCreated, "core-message-created", redisClient)
-	defer messageConsumer.Close()
 	go messageConsumer.Run(ctx, "dedup:message_created:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageCreated, raw)
@@ -224,7 +330,6 @@ func main() {
 	)
 
 	messageEditedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageEdited, "core-message-edited", redisClient)
-	defer messageEditedConsumer.Close()
 	go messageEditedConsumer.Run(ctx, "dedup:message_edited:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageEdited, raw)
@@ -244,7 +349,6 @@ func main() {
 	)
 
 	userConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicUserRegistered, "core-user-registered", redisClient)
-	defer userConsumer.Close()
 	go userConsumer.Run(ctx, "dedup:user_registered:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicUserRegistered, raw)
@@ -260,7 +364,6 @@ func main() {
 	)
 
 	messageDeletedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageDeleted, "core-message-deleted", redisClient)
-	defer messageDeletedConsumer.Close()
 	go messageDeletedConsumer.Run(ctx, "dedup:message_deleted:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageDeleted, raw)
@@ -279,7 +382,6 @@ func main() {
 	)
 
 	reactionAddedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionAdded, "core-reaction-added", redisClient)
-	defer reactionAddedConsumer.Close()
 	go reactionAddedConsumer.Run(ctx, "dedup:reaction_added:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionAdded, raw)
@@ -295,7 +397,27 @@ func main() {
 	)
 
 	reactionRemovedConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicReactionRemoved, "core-reaction-removed", redisClient)
-	defer reactionRemovedConsumer.Close()
+	webhookConsumer := kafkapkg.NewConsumer(kafkaAddr, kafkapkg.TopicMessageSent, "core-webhook-delivery", redisClient)
+	defer closeKafkaConsumers(messageConsumer, messageEditedConsumer, userConsumer, messageDeletedConsumer, reactionAddedConsumer, reactionRemovedConsumer, webhookConsumer)
+	go webhookConsumer.Run(ctx, "dedup:webhook_message_sent:",
+		func(raw []byte) (string, error) {
+			return kafkapkg.EventDedupKey(kafkapkg.TopicMessageSent, raw)
+		},
+		func(raw []byte) error {
+			err := webhook.HandleMessageSent(ctx, queries, webhookDispatcher, raw)
+			if err == nil {
+				return nil
+			}
+			timer := time.NewTimer(time.Second)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-timer.C:
+				return err
+			}
+		},
+	)
 	go reactionRemovedConsumer.Run(ctx, "dedup:reaction_removed:",
 		func(raw []byte) (string, error) {
 			return kafkapkg.EventDedupKey(kafkapkg.TopicReactionRemoved, raw)
@@ -342,16 +464,25 @@ func main() {
 		ExposedHeaders:   []string{"Content-Length", "Content-Disposition"},
 		AllowCredentials: true,
 	}))
+	r.Get("/healthz", corehealth.LivenessHandler)
+	r.Get("/readyz", corehealth.ReadinessHandler(pool, 2*time.Second))
 
 	r.Post("/api/auth/register", userHandler.Register)
 	r.Post("/api/auth/login", userHandler.Login)
+	r.Post("/api/auth/mfa/challenge", userHandler.MFAChallenge)
 	r.Post("/api/auth/logout", userHandler.Logout)
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Middleware(tokens))
 
 		r.Get("/api/auth/verify", userHandler.Verify)
+		r.Post("/api/auth/mfa/setup", userHandler.MFASetup)
+		r.Post("/api/auth/mfa/confirm", userHandler.MFAConfirm)
 		r.Get("/api/notifications", notificationHandler.List)
+		r.Get("/api/workspaces/{workspaceID}/webhooks", webhookHandler.List)
+		r.Post("/api/workspaces/{workspaceID}/webhooks", webhookHandler.Create)
+		r.Put("/api/workspaces/{workspaceID}/webhooks/{webhookID}", webhookHandler.Update)
+		r.Delete("/api/workspaces/{workspaceID}/webhooks/{webhookID}", webhookHandler.Delete)
 		r.Post("/api/notifications/{notificationID}/read", notificationHandler.MarkRead)
 		r.Post("/api/notifications/read-all", notificationHandler.MarkAllRead)
 		r.Get("/api/profile", productivityHandler.Profile)
@@ -441,6 +572,7 @@ func main() {
 		select {
 		case <-grpcStopped:
 		case <-shutdownCtx.Done():
+			log.Printf("gRPC graceful shutdown timed out; forcing stop")
 			grpcServer.Stop()
 		}
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {
@@ -452,7 +584,7 @@ func main() {
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("http server failed: %v", err)
 	}
-	log.Println("core stopped cleanly")
+	log.Println("core HTTP server stopped; closing dependencies")
 }
 
 func runOutbox(ctx context.Context, queries *database.Queries, producer *kafkapkg.Producer) {

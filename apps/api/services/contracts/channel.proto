@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package channel.v1;
+
+option go_package = "github.com/mesewo/slack-clone/services/contracts/channelpb;channelpb";
+
+service ChannelService {
+  rpc GetOwner(GetOwnerRequest) returns (GetOwnerResponse);
+  rpc JoinRing(JoinRingRequest) returns (JoinRingResponse);
+  rpc LeaveRing(LeaveRingRequest) returns (LeaveRingResponse);
+}
+
+message GetOwnerRequest { string channel_id = 1; }
+message GetOwnerResponse {
+  string node_id = 1;
+  string address = 2;
+}
+message JoinRingRequest {
+  string node_id = 1;
+  string address = 2;
+}
+message JoinRingResponse {}
+message LeaveRingRequest { string node_id = 1; }
+message LeaveRingResponse {}

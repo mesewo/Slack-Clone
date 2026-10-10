@@ -12,11 +12,11 @@ import (
 // This is a better fit for chat traffic than a token bucket because it
 // measures the actual recent event count, matching the expected semantics.
 type RateLimiter struct {
-	redis    *redis.Client
-	rate     int           // max events in the window
-	window   time.Duration // rolling window
-	connID   string        // unique per client connection
-	userID   string
+	redis  *redis.Client
+	rate   int           // max events in the window
+	window time.Duration // rolling window
+	connID string        // unique per client connection
+	userID string
 }
 
 // NewRateLimiter creates a rate limiter for a specific user+connection pair.

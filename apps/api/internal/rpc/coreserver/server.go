@@ -2,12 +2,15 @@ package coreserver
 
 import (
 	"context"
+	"log"
+	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
+	"github.com/mesewo/slack-clone/services/database"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -21,6 +24,18 @@ type Server struct {
 }
 
 func (s *Server) GetUserChannels(ctx context.Context, req *chatpb.GetUserChannelsRequest) (*chatpb.GetUserChannelsResponse, error) {
+	requestID := "missing"
+	if incoming, ok := metadata.FromIncomingContext(ctx); ok {
+		if ids := incoming.Get("x-request-id"); len(ids) > 0 && ids[0] != "" {
+			requestID = ids[0]
+		}
+	}
+	started := time.Now()
+	log.Printf("GetUserChannels event=enter request_id=%s", requestID)
+	defer func() {
+		log.Printf("GetUserChannels event=exit request_id=%s elapsed=%s", requestID, time.Since(started))
+	}()
+
 	userID, err := uuid.Parse(req.GetUserId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "user_id must be a valid UUID")

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 const indexName = "messages"

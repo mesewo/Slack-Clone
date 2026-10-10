@@ -18,12 +18,44 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/gateway"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/gatewayserver"
 )
+
+type observedCoreClient struct {
+	client chatpb.CoreServiceClient
+	conn   *grpc.ClientConn
+	target string
+}
+
+func (c observedCoreClient) GetUserChannels(ctx context.Context, req *chatpb.GetUserChannelsRequest, opts ...grpc.CallOption) (*chatpb.GetUserChannelsResponse, error) {
+	requestID := ""
+	if outgoing, ok := metadata.FromOutgoingContext(ctx); ok {
+		ids := outgoing.Get("x-request-id")
+		if len(ids) > 0 {
+			requestID = ids[0]
+		}
+	}
+	if requestID == "" {
+		return c.client.GetUserChannels(ctx, req, opts...)
+	}
+	started := time.Now()
+	deadlineText := "none"
+	if deadline, ok := ctx.Deadline(); ok {
+		deadlineText = deadline.Format(time.RFC3339Nano)
+	}
+	state := c.conn.GetState()
+	log.Printf("GetUserChannels event=start request_id=%s target=%s state=%s deadline=%s", requestID, c.target, state, deadlineText)
+	response, err := c.client.GetUserChannels(ctx, req, opts...)
+	endState := c.conn.GetState()
+	log.Printf("GetUserChannels event=finish request_id=%s target=%s state_start=%s state_end=%s elapsed=%s code=%s", requestID, c.target, state, endState, time.Since(started), status.Code(err))
+	return response, err
+}
 
 func main() {
 	_ = godotenv.Load()
@@ -104,7 +136,7 @@ func main() {
 		log.Fatalf("failed to dial core gRPC at %s: %v", coreAddr, err)
 	}
 	defer coreConn.Close()
-	coreClient := chatpb.NewCoreServiceClient(coreConn)
+	coreClient := observedCoreClient{client: chatpb.NewCoreServiceClient(coreConn), conn: coreConn, target: coreAddr}
 
 	// gRPC server: Core calls this to push events to connected clients.
 	grpcServer := grpc.NewServer()
@@ -131,6 +163,8 @@ func main() {
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
 	}))
+	r.Get("/healthz", gateway.LivenessHandler)
+	r.Get("/readyz", gateway.ReadinessHandler(coreClient, 2*time.Second))
 
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if redisClient != nil && redisPresence != nil {

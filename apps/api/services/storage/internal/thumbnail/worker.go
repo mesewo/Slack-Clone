@@ -1,23 +1,29 @@
-package upload
+package thumbnail
 
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 	"github.com/minio/minio-go/v7"
+	"golang.org/x/image/draw"
 )
 
 type ThumbnailJob struct {
-	SessionID  uuid.UUID
-	ObjectKey  string
+	SessionID   uuid.UUID
+	ObjectKey   string
 	ContentType string
-	Attempt    int
+	Attempt     int
 }
 
 type ThumbnailWorker struct {
@@ -209,3 +215,33 @@ func thumbnailResultState(current string, attempts int, success bool) (string, b
 	return "PROCESSING", true
 }
 
+func makeThumbnail(data []byte) ([]byte, error) {
+	source, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	bounds := source.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return nil, fmt.Errorf("invalid image dimensions")
+	}
+	const maxEdge = 200
+	scale := float64(maxEdge) / float64(max(width, height))
+	if scale > 1 {
+		scale = 1
+	}
+	destination := image.NewRGBA(image.Rect(0, 0, max(1, int(float64(width)*scale)), max(1, int(float64(height)*scale))))
+	draw.CatmullRom.Scale(destination, destination.Bounds(), source, bounds, draw.Over, nil)
+	var output bytes.Buffer
+	if err := jpeg.Encode(&output, destination, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+func max(left, right int) int {
+	if left > right {
+		return left
+	}
+	return right
+}

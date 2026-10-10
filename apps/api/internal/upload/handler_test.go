@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -18,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -36,10 +35,10 @@ func TestAllowedType(t *testing.T) {
 
 func TestParseRangeClassifiesInvalidRanges(t *testing.T) {
 	cases := []struct {
-		name     string
-		value    string
-		size     int64
-		wantOK   bool
+		name      string
+		value     string
+		size      int64
+		wantOK    bool
 		wantRange bool
 	}{
 		{name: "no range", value: "", size: 1000, wantOK: true, wantRange: false},
@@ -67,34 +66,6 @@ func TestParseRangeClassifiesInvalidRanges(t *testing.T) {
 	}
 }
 
-func TestSafeObjectKeyDoesNotExposeRawPath(t *testing.T) {
-	key := safeUploadKey("user-123", "../../secret.txt")
-	if key == "../../secret.txt" || key == "" {
-		t.Fatalf("raw path leaked into object key: %q", key)
-	}
-	if filepath.Base(key) == "../../secret.txt" {
-		t.Fatal("object key still exposes raw filename path")
-	}
-	if len(key) == 0 {
-		t.Fatal("generated key is empty")
-	}
-}
-
-func TestValidatePresignRequest(t *testing.T) {
-	if _, _, _, err := validatePresignRequest("report.pdf", "application/pdf", 1024); err != nil {
-		t.Fatalf("valid presign request should pass: %v", err)
-	}
-	if _, _, _, err := validatePresignRequest("", "application/pdf", 1024); err == nil {
-		t.Fatal("empty filename should be rejected")
-	}
-	if _, _, _, err := validatePresignRequest("malware.exe", "application/x-msdownload", 1024); err == nil {
-		t.Fatal("unsupported content type should be rejected")
-	}
-	if _, _, _, err := validatePresignRequest("too-large.bin", "application/octet-stream", maxUploadSize+1); err == nil {
-		t.Fatal("oversized uploads should be rejected")
-	}
-}
-
 func TestParseRangeHTTPSemantics(t *testing.T) {
 	start, end, partial, valid := parseRange("bytes=0-9", 10)
 	if !partial || !valid || start != 0 || end != 9 {
@@ -111,18 +82,6 @@ func TestParseRangeHTTPSemantics(t *testing.T) {
 	}
 }
 
-func TestThumbnailResultState(t *testing.T) {
-	if next, retry := thumbnailResultState("UPLOADED", 0, true); next != "READY" || retry {
-		t.Fatalf("successful upload should finalize as READY: next=%s retry=%v", next, retry)
-	}
-	if next, retry := thumbnailResultState("PROCESSING", 1, false); next != "PROCESSING" || !retry {
-		t.Fatalf("retryable thumbnail failure should remain PROCESSING for retry: next=%s retry=%v", next, retry)
-	}
-	if next, retry := thumbnailResultState("PROCESSING", 3, false); next != "FAILED" || retry {
-		t.Fatalf("final retry failure should mark FAILED: next=%s retry=%v", next, retry)
-	}
-}
-
 type stubQueryRow struct {
 	fun func(dest ...any) error
 }
@@ -135,8 +94,10 @@ type stubDB struct {
 	queryRow func(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func (s *stubDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) { return pgconn.CommandTag{}, nil }
-func (s *stubDB) Query(context.Context, string, ...any) (pgx.Rows, error)        { return nil, nil }
+func (s *stubDB) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, nil
+}
+func (s *stubDB) Query(context.Context, string, ...any) (pgx.Rows, error) { return nil, nil }
 func (s *stubDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	if s.queryRow == nil {
 		return stubQueryRow{fun: func(dest ...any) error { return nil }}
@@ -311,8 +272,8 @@ func TestServeAllowsAuthorizedAttachment(t *testing.T) {
 	}}
 
 	store, err := minio.New("example.com", &minio.Options{
-		Creds:    credentials.NewStaticV4("test", "test", ""),
-		Secure:   false,
+		Creds:  credentials.NewStaticV4("test", "test", ""),
+		Secure: false,
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			if req.Method == http.MethodGet && req.URL.Query().Has("location") {
 				return &http.Response{

@@ -10,11 +10,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/permission"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 type Handler struct {
-	Queries *database.Queries
+	Queries         *database.Queries
+	PermissionCache *permission.Cache
 }
 
 type CreateChannelRequest struct {
@@ -75,7 +77,7 @@ func (h *Handler) CreateChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if channelType == "PRIVATE" {
-		if _, ok := auth.RequireRole(w, r, h.Queries, workspaceID, "OWNER", "ADMIN"); !ok {
+		if _, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, workspaceID, permission.PermissionCreateChannel); !ok {
 			return
 		}
 	}
@@ -159,7 +161,7 @@ func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "channel not found")
 		return
 	}
-	if _, ok := auth.RequireRole(w, r, h.Queries, channel.WorkspaceID, "OWNER", "ADMIN"); !ok {
+	if _, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, channel.WorkspaceID, permission.PermissionInviteMember); !ok {
 		return
 	}
 	var req AddMemberRequest
@@ -249,7 +251,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 	// Members may leave a channel themselves. Removing someone else remains
 	// restricted to workspace owners and admins.
 	if targetID != userID {
-		if _, ok := auth.RequireRole(w, r, h.Queries, channel.WorkspaceID, "OWNER", "ADMIN"); !ok {
+		if _, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, channel.WorkspaceID, permission.PermissionRemoveMember); !ok {
 			return
 		}
 	} else if _, err := h.Queries.GetWorkspaceMember(r.Context(), database.GetWorkspaceMemberParams{

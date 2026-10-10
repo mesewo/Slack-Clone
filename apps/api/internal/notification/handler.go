@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 type Handler struct{ Queries *database.Queries }

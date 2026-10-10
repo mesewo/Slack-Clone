@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 func TestSearchMessagesIntegrationLifecycle(t *testing.T) {

@@ -184,14 +184,22 @@ type UploadSession struct {
 }
 
 type User struct {
-	ID             uuid.UUID `json:"id"`
-	Email          string    `json:"email"`
-	PasswordHash   string    `json:"password_hash"`
-	DisplayName    string    `json:"display_name"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	AvatarUrl      string    `json:"avatar_url"`
-	PresenceStatus string    `json:"presence_status"`
+	ID             uuid.UUID   `json:"id"`
+	Email          string      `json:"email"`
+	PasswordHash   string      `json:"password_hash"`
+	DisplayName    string      `json:"display_name"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+	AvatarUrl      string      `json:"avatar_url"`
+	PresenceStatus string      `json:"presence_status"`
+	MfaSecret      pgtype.Text `json:"mfa_secret"`
+	MfaEnabled     bool        `json:"mfa_enabled"`
+}
+
+type WebhookDelivery struct {
+	EventID     string    `json:"event_id"`
+	WebhookID   uuid.UUID `json:"webhook_id"`
+	DeliveredAt time.Time `json:"delivered_at"`
 }
 
 type Workspace struct {
@@ -216,4 +224,13 @@ type WorkspaceMember struct {
 	UserID      uuid.UUID `json:"user_id"`
 	Role        string    `json:"role"`
 	JoinedAt    time.Time `json:"joined_at"`
+}
+
+type WorkspaceWebhook struct {
+	ID          uuid.UUID `json:"id"`
+	WorkspaceID uuid.UUID `json:"workspace_id"`
+	Url         string    `json:"url"`
+	Secret      string    `json:"secret"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }

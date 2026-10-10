@@ -14,7 +14,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, display_name)
 VALUES ($1, $2, $3)
-RETURNING id, email, password_hash, display_name, created_at, updated_at, avatar_url, presence_status
+RETURNING id, email, password_hash, display_name, created_at, updated_at, avatar_url, presence_status, mfa_secret, mfa_enabled
 `
 
 type CreateUserParams struct {
@@ -35,12 +35,14 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.UpdatedAt,
 		&i.AvatarUrl,
 		&i.PresenceStatus,
+		&i.MfaSecret,
+		&i.MfaEnabled,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, display_name, created_at, updated_at, avatar_url, presence_status FROM users
+SELECT id, email, password_hash, display_name, created_at, updated_at, avatar_url, presence_status, mfa_secret, mfa_enabled FROM users
 WHERE email = $1
 `
 
@@ -56,12 +58,14 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.UpdatedAt,
 		&i.AvatarUrl,
 		&i.PresenceStatus,
+		&i.MfaSecret,
+		&i.MfaEnabled,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, display_name, created_at, updated_at, avatar_url, presence_status FROM users
+SELECT id, email, password_hash, display_name, created_at, updated_at, avatar_url, presence_status, mfa_secret, mfa_enabled FROM users
 WHERE id = $1
 `
 
@@ -77,6 +81,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 		&i.UpdatedAt,
 		&i.AvatarUrl,
 		&i.PresenceStatus,
+		&i.MfaSecret,
+		&i.MfaEnabled,
 	)
 	return i, err
 }

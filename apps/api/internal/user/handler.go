@@ -2,21 +2,20 @@ package user
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
+	"time"
 
-	"github.com/jackc/pgx/v5"
-
+	"github.com/google/uuid"
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
-	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
+	"github.com/mesewo/slack-clone/apps/api/internal/userclient"
+	"github.com/mesewo/slack-clone/services/contracts/userpb"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type Handler struct {
-	Queries *database.Queries
-	Tokens  *auth.TokenManager
+	Client  userclient.Client
 	Cookies auth.CookieConfig
-	Kafka   *kafka.Producer
 }
 
 type AuthRequest struct {
@@ -26,104 +25,143 @@ type AuthRequest struct {
 }
 
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
-	var req AuthRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var request AuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if len(req.Password) < 8 {
-		writeJSONError(w, http.StatusBadRequest, "password must be at least 8 characters")
-		return
-	}
-
-	hashed, err := auth.HashPassword(req.Password)
+	response, err := h.Client.Register(r.Context(), &userpb.RegisterRequest{Email: request.Email, Password: request.Password, DisplayName: request.DisplayName})
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to hash password")
+		writeRPCError(w, err)
 		return
 	}
-
-	var u database.User
-	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {
-		var err error
-		u, err = txQueries.CreateUser(r.Context(), database.CreateUserParams{Email: req.Email, PasswordHash: hashed, DisplayName: req.DisplayName})
-		if err != nil {
-			return err
-		}
-		payload, err := json.Marshal(kafka.UserRegisteredEvent{EventID: u.ID.String(), Version: 1, Source: "core", UserID: u.ID.String(), Email: u.Email, DisplayName: u.DisplayName, RegisteredAt: u.CreatedAt})
-		if err != nil {
-			return err
-		}
-		return txQueries.EnqueueOutbox(r.Context(), kafka.TopicUserRegistered, u.ID.String(), payload)
-	}); err != nil {
-		writeJSONError(w, http.StatusConflict, "email already exists or invalid data")
-		return
-	}
-
-	token, err := h.Tokens.Generate(u.ID.String(), u.Email)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to generate token")
-		return
-	}
-
-	h.Cookies.Set(w, token, h.Tokens.TTL())
-
+	h.Cookies.Set(w, response.GetToken(), time.Duration(response.GetTokenTtlSeconds())*time.Second)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"id": u.ID.String(), "email": u.Email})
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": response.GetUserId(), "email": response.GetEmail()})
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	var req AuthRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var request AuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-
-	u, err := h.Queries.GetUserByEmail(r.Context(), req.Email)
+	response, err := h.Client.Login(r.Context(), &userpb.LoginRequest{Email: request.Email, Password: request.Password})
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
-			return
-		}
-		writeJSONError(w, http.StatusInternalServerError, "something went wrong")
+		writeRPCError(w, err)
 		return
 	}
-
-	if !auth.CheckPasswordHash(req.Password, u.PasswordHash) {
-		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
+	if response.GetMfaRequired() {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"mfa_required": true, "challenge_id": response.GetChallengeId()})
 		return
 	}
-
-	token, err := h.Tokens.Generate(u.ID.String(), u.Email)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to generate token")
-		return
-	}
-
-	h.Cookies.Set(w, token, h.Tokens.TTL())
-	json.NewEncoder(w).Encode(map[string]string{"id": u.ID.String(), "email": u.Email})
+	h.Cookies.Set(w, response.GetToken(), time.Duration(response.GetTokenTtlSeconds())*time.Second)
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": response.GetUserId(), "email": response.GetEmail()})
 }
 
-// Logout was missing from the original plan - clearing the cookie is a Phase 1
-// requirement, not a later add-on.
-func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) MFASetup(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticatedUser(w, r)
+	if !ok {
+		return
+	}
+	response, err := h.Client.MFASetup(r.Context(), &userpb.MFASetupRequest{UserId: userID.String()})
+	if err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"secret": response.GetSecret(), "otpauth_uri": response.GetOtpauthUri()})
+}
+
+func (h *Handler) MFAConfirm(w http.ResponseWriter, r *http.Request) {
+	userID, ok := authenticatedUser(w, r)
+	if !ok {
+		return
+	}
+	var request struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if _, err := h.Client.MFAConfirm(r.Context(), &userpb.MFAConfirmRequest{UserId: userID.String(), Code: request.Code}); err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) MFAChallenge(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		ChallengeID string `json:"challenge_id"`
+		Code        string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || request.ChallengeID == "" {
+		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	response, err := h.Client.MFAChallenge(r.Context(), &userpb.MFAChallengeRequest{ChallengeId: request.ChallengeID, Code: request.Code})
+	if err != nil {
+		writeRPCError(w, err)
+		return
+	}
+	h.Cookies.Set(w, response.GetToken(), time.Duration(response.GetTokenTtlSeconds())*time.Second)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": response.GetUserId(), "email": response.GetEmail()})
+}
+
+// Logout remains HTTP-only: JWTs are stateless, so expiring the cookie is the
+// complete logout operation. There is no session or token-revocation store.
+func (h *Handler) Logout(w http.ResponseWriter, _ *http.Request) {
 	h.Cookies.Clear(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Verify answers "given this cookie, who is logged in right now?" - this is
-// what a dashboard checks on load/refresh to decide whether to render or
-// redirect to sign-in. Mount this behind auth.Middleware, never standalone.
 func (h *Handler) Verify(w http.ResponseWriter, r *http.Request) {
 	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
 	if !ok {
 		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]string{"id": claims.UserID, "email": claims.Email})
+	_ = json.NewEncoder(w).Encode(map[string]string{"id": claims.UserID, "email": claims.Email, "display_name": claims.DisplayName})
 }
 
-func writeJSONError(w http.ResponseWriter, status int, msg string) {
+func authenticatedUser(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "not authenticated")
+		return uuid.Nil, false
+	}
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		writeJSONError(w, http.StatusUnauthorized, "invalid user")
+		return uuid.Nil, false
+	}
+	return userID, true
+}
+
+func writeRPCError(w http.ResponseWriter, err error) {
+	code := status.Code(err)
+	statusCode := http.StatusInternalServerError
+	switch code {
+	case codes.InvalidArgument, codes.FailedPrecondition:
+		statusCode = http.StatusBadRequest
+	case codes.Unauthenticated, codes.PermissionDenied:
+		statusCode = http.StatusUnauthorized
+	case codes.AlreadyExists, codes.Aborted:
+		statusCode = http.StatusConflict
+	case codes.NotFound:
+		statusCode = http.StatusNotFound
+	case codes.Unavailable, codes.DeadlineExceeded:
+		statusCode = http.StatusServiceUnavailable
+	}
+	writeJSONError(w, statusCode, status.Convert(err).Message())
+}
+
+func writeJSONError(w http.ResponseWriter, code int, message string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package user.v1;
+
+option go_package = "github.com/mesewo/slack-clone/services/contracts/userpb;userpb";
+
+service UserService {
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc MFASetup(MFASetupRequest) returns (MFASetupResponse);
+  rpc MFAConfirm(MFAConfirmRequest) returns (MFAConfirmResponse);
+  rpc MFAChallenge(MFAChallengeRequest) returns (AuthResponse);
+  // No production caller as of the user-service cut; retained for the user-service's own verification tests.
+  rpc Verify(VerifyRequest) returns (UserIdentity);
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string display_name = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+// Login returns mfa_required and challenge_id instead of a token when the
+// account has MFA enabled. Otherwise it returns the token and identity.
+message AuthResponse {
+  string token = 1;
+  string user_id = 2;
+  string email = 3;
+  string display_name = 4;
+  bool mfa_required = 5;
+  string challenge_id = 6;
+  int64 token_ttl_seconds = 7;
+}
+
+message MFASetupRequest { string user_id = 1; }
+message MFASetupResponse {
+  string secret = 1;
+  string otpauth_uri = 2;
+}
+
+message MFAConfirmRequest {
+  string user_id = 1;
+  string code = 2;
+}
+message MFAConfirmResponse {}
+
+message MFAChallengeRequest {
+  string challenge_id = 1;
+  string code = 2;
+}
+
+message VerifyRequest { string token = 1; }
+message UserIdentity {
+  string user_id = 1;
+  string email = 2;
+  string display_name = 3;
+}

@@ -1,11 +1,13 @@
 package workspace
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -16,11 +18,13 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/permission"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 type Handler struct {
-	Queries *database.Queries
+	Queries         *database.Queries
+	PermissionCache *permission.Cache
 }
 
 type CreateWorkspaceRequest struct {
@@ -108,6 +112,7 @@ func (h *Handler) CreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "workspace created but failed to add you as owner")
 		return
 	}
+	h.invalidatePermissionCache(r.Context(), ws.ID, userID)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(ws)
@@ -197,6 +202,7 @@ func (h *Handler) JoinWorkspace(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusConflict, "workspace membership already exists")
 			return
 		}
+		h.invalidatePermissionCache(r.Context(), ws.ID, userID)
 	}
 
 	if err := h.Queries.AddUserToPublicWorkspaceChannels(r.Context(), database.AddUserToPublicWorkspaceChannelsParams{
@@ -217,7 +223,7 @@ func (h *Handler) CreateInvite(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid workspace id")
 		return
 	}
-	requester, ok := auth.RequireRole(w, r, h.Queries, workspaceID, "OWNER", "ADMIN")
+	requester, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, workspaceID, permission.PermissionInviteMember)
 	if !ok {
 		return
 	}
@@ -272,6 +278,7 @@ func (h *Handler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusConflict, "workspace membership already exists")
 		return
 	}
+	h.invalidatePermissionCache(r.Context(), workspaceID, userID)
 	if err := h.Queries.AddUserToPublicWorkspaceChannels(r.Context(), database.AddUserToPublicWorkspaceChannelsParams{WorkspaceID: workspaceID, UserID: userID}); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "joined workspace but failed to join public channels")
 		return
@@ -321,7 +328,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid workspace id")
 		return
 	}
-	requester, ok := auth.RequireRole(w, r, h.Queries, workspaceID, "OWNER", "ADMIN")
+	requester, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, workspaceID, permission.PermissionUpdateMemberRole)
 	if !ok {
 		return
 	}
@@ -353,6 +360,7 @@ func (h *Handler) UpdateMemberRole(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to update member role")
 		return
 	}
+	h.invalidatePermissionCache(r.Context(), workspaceID, targetID)
 	json.NewEncoder(w).Encode(updated)
 }
 
@@ -362,7 +370,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "invalid workspace id")
 		return
 	}
-	requester, ok := auth.RequireRole(w, r, h.Queries, workspaceID, "OWNER", "ADMIN")
+	requester, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, workspaceID, permission.PermissionRemoveMember)
 	if !ok {
 		return
 	}
@@ -384,7 +392,17 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to remove workspace member")
 		return
 	}
+	h.invalidatePermissionCache(r.Context(), workspaceID, targetID)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) invalidatePermissionCache(ctx context.Context, workspaceID, userID uuid.UUID) {
+	if h.PermissionCache == nil {
+		return
+	}
+	if err := h.PermissionCache.Invalidate(ctx, workspaceID, userID); err != nil {
+		log.Printf("permission cache invalidation failed for workspace %s user %s: %v", workspaceID, userID, err)
+	}
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {

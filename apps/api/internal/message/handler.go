@@ -15,19 +15,23 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
-	"github.com/mesewo/slack-clone/apps/api/internal/database"
+	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/events"
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
+	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
+	"github.com/mesewo/slack-clone/services/database"
 )
 
 type Handler struct {
-	Queries *database.Queries
+	Queries         *database.Queries
+	PermissionCache *permission.Cache
 	// GatewayClient replaces the old *gateway.Hub field - Core no longer
 	// calls the Hub as a plain Go function, since Gateway is now a separate
 	// process. This is the whole point of Phase 3's split.
 	GatewayClient chatpb.GatewayServiceClient
+	ChannelOwners channelclient.Resolver
 	// Kafka publishes a durable event log entry alongside the live
 	// broadcast - two independent side effects, both best-effort relative
 	// to the DB write, which is the actual source of truth.
@@ -198,6 +202,14 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if !isMember {
 		writeJSONError(w, http.StatusForbidden, "not a member of this channel")
 		return
+	}
+	if h.ChannelOwners != nil {
+		owner, ownerErr := h.ChannelOwners.GetOwner(r.Context(), channelID.String())
+		if ownerErr != nil {
+			log.Printf("channel owner lookup failed for %s: %v", channelID, ownerErr)
+		} else {
+			log.Printf("channel %s owned by %s at %s", channelID, owner.NodeID, owner.Address)
+		}
 	}
 
 	var req SendMessageRequest
@@ -951,11 +963,15 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only allow deletion by the message author or an admin
-	// For now, just check if the user is the author
 	if !msg.UserID.Valid || msg.UserID.UUID != userID {
-		writeJSONError(w, http.StatusForbidden, "you can only delete your own messages")
-		return
+		channel, err := h.Queries.GetChannelByID(r.Context(), channelID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to verify channel permission")
+			return
+		}
+		if _, ok := auth.RequirePermission(w, r, h.Queries, h.PermissionCache, channel.WorkspaceID, permission.PermissionDeleteMessage); !ok {
+			return
+		}
 	}
 
 	if err := h.Queries.InTx(r.Context(), func(txQueries *database.Queries) error {

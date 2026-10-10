@@ -10,8 +10,9 @@ import (
 var ErrInvalidToken = errors.New("invalid or expired token")
 
 type Claims struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -27,10 +28,15 @@ func NewTokenManager(secret []byte, ttl time.Duration) *TokenManager {
 }
 
 func (tm *TokenManager) Generate(userID, email string) (string, error) {
+	return tm.GenerateWithDisplayName(userID, email, "")
+}
+
+func (tm *TokenManager) GenerateWithDisplayName(userID, email, displayName string) (string, error) {
 	now := time.Now()
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
+		UserID:      userID,
+		Email:       email,
+		DisplayName: displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(tm.ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
