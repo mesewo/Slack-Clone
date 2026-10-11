@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: core
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["core:8080"]
+
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8081"]
+
+  - job_name: channel-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["channel-service:9192"]
+
+  - job_name: user-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["user-service:9193"]
+
+  - job_name: storage-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["storage-service:9194"]
+
+  - job_name: storage-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["storage-worker:9195"]

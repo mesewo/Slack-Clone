@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/kafka"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 func HandleMessageSent(ctx context.Context, queries *database.Queries, dispatcher *Dispatcher, raw []byte) error {
@@ -29,7 +29,7 @@ func HandleMessageSent(ctx context.Context, queries *database.Queries, dispatche
 	}
 	channelID, err := uuid.Parse(event.ChannelID)
 	if err != nil {
-		log.Printf("skip message sent event with invalid channel id %q", event.ChannelID)
+		telemetry.L.Sugar().Infof("skip message sent event with invalid channel id %q", event.ChannelID)
 		return nil
 	}
 	workspaceID, err := queries.GetChannelWorkspaceID(ctx, channelID)
@@ -64,7 +64,7 @@ func HandleMessageSent(ctx context.Context, queries *database.Queries, dispatche
 			continue
 		}
 		if permanentErr != nil {
-			log.Printf("webhook %s rejected event with HTTP %d; recording as resolved", target.ID, permanentErr.StatusCode)
+			telemetry.L.Sugar().Infof("webhook %s rejected event with HTTP %d; recording as resolved", target.ID, permanentErr.StatusCode)
 		}
 		if _, err := queries.MarkWebhookDelivered(ctx, database.MarkWebhookDeliveredParams{
 			EventID:   eventID,

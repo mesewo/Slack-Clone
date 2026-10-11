@@ -1,13 +1,13 @@
 package auth
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/google/uuid"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 func RequireRole(
@@ -71,7 +71,7 @@ func RequirePermission(
 	if cache != nil {
 		role, hit, cacheErr := cache.GetRole(r.Context(), workspaceID, userID)
 		if cacheErr != nil {
-			log.Printf("permission cache read failed for workspace %s user %s: %v", workspaceID, userID, cacheErr)
+			telemetry.L.Sugar().Errorf("permission cache read failed for workspace %s user %s: %v", workspaceID, userID, cacheErr)
 		} else if hit {
 			member := database.WorkspaceMember{WorkspaceID: workspaceID, UserID: userID, Role: role}
 			if !permission.Check(role, perm) {
@@ -92,7 +92,7 @@ func RequirePermission(
 	}
 	if cache != nil {
 		if err := cache.SetRole(r.Context(), workspaceID, userID, member.Role); err != nil {
-			log.Printf("permission cache write failed for workspace %s user %s: %v", workspaceID, userID, err)
+			telemetry.L.Sugar().Errorf("permission cache write failed for workspace %s user %s: %v", workspaceID, userID, err)
 		}
 	}
 	if !permission.Check(member.Role, perm) {

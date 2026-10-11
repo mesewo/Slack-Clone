@@ -2,10 +2,10 @@ package gatewayserver
 
 import (
 	"context"
-	"log"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/gateway"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
+	"github.com/mesewo/slack-clone/services/telemetry"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -24,7 +24,7 @@ func (s *Server) Broadcast(ctx context.Context, req *chatpb.BroadcastRequest) (*
 	if req.GetChannelId() == "" || len(req.GetPayload()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "channel_id and payload are required")
 	}
-	log.Printf("gateway broadcast received channel=%s payload_bytes=%d", req.GetChannelId(), len(req.GetPayload()))
+	telemetry.L.Sugar().Infof("gateway broadcast received channel=%s payload_bytes=%d", req.GetChannelId(), len(req.GetPayload()))
 	s.Hub.BroadcastToChannel(req.GetChannelId(), req.GetPayload())
 	return &chatpb.BroadcastResponse{}, nil
 }

@@ -49,6 +49,7 @@ import (
 	"github.com/mesewo/slack-clone/services/contracts/storagepb"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 func closeKafkaConsumers(consumers ...interface{ Close() error }) {
@@ -86,6 +87,8 @@ func syncSearchDocument(ctx context.Context, queries *database.Queries, searchCl
 }
 
 func main() {
+	telemetry.SetDefault(telemetry.NewLogger("core"))
+	defer telemetry.L.Sync()
 	_ = godotenv.Load()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -448,7 +451,8 @@ func main() {
 		},
 	)
 
-	grpcServer := grpc.NewServer()
+	// Keep telemetry first in the unary chain so panics are recovered before any later interceptors.
+	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(telemetry.UnaryServerInterceptor("core")))
 	chatpb.RegisterCoreServiceServer(grpcServer, &coreserver.Server{Queries: queries})
 
 	lis, err := net.Listen("tcp", coreGRPCAddr)
@@ -472,6 +476,7 @@ func main() {
 	}
 
 	r := chi.NewRouter()
+	r.Use(telemetry.ChiMiddleware("core"))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{frontendURL},
@@ -482,6 +487,7 @@ func main() {
 	}))
 	r.Get("/healthz", corehealth.LivenessHandler)
 	r.Get("/readyz", corehealth.ReadinessHandler(pool, 2*time.Second))
+	r.Handle("/metrics", telemetry.MetricsHandler())
 
 	r.Post("/api/auth/register", userHandler.Register)
 	r.Post("/api/auth/login", userHandler.Login)

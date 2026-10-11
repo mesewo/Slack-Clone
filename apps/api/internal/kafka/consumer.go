@@ -2,10 +2,10 @@ package kafka
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mesewo/slack-clone/services/telemetry"
 	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 )
@@ -88,13 +88,13 @@ func (c *Consumer) Run(ctx context.Context, dedupPrefix string, dedupKeyFunc fun
 			if ctx.Err() != nil {
 				return // shutting down
 			}
-			log.Printf("kafka[%s]: fetch error: %v", c.topic, err)
+			telemetry.L.Sugar().Errorf("kafka[%s]: fetch error: %v", c.topic, err)
 			continue
 		}
 
 		dedupKey, err := dedupKeyFunc(msg.Value)
 		if err != nil {
-			log.Printf("kafka[%s]: unparseable message, skipping: %v", c.topic, err)
+			telemetry.L.Sugar().Warnf("kafka[%s]: unparseable message, skipping: %v", c.topic, err)
 			c.commit(ctx, msg)
 			continue
 		}
@@ -103,11 +103,11 @@ func (c *Consumer) Run(ctx context.Context, dedupPrefix string, dedupKeyFunc fun
 		leaseKey := dedupPrefix + "processing:" + dedupKey
 		processed, err := c.store.Exists(ctx, processedKey)
 		if err != nil {
-			log.Printf("kafka[%s]: redis dedup check failed, not committing: %v", c.topic, err)
+			telemetry.L.Sugar().Errorf("kafka[%s]: redis dedup check failed, not committing: %v", c.topic, err)
 			continue
 		}
 		if processed {
-			log.Printf("kafka[%s]: duplicate delivery of %s, skipped", c.topic, dedupKey)
+			telemetry.L.Sugar().Infof("kafka[%s]: duplicate delivery of %s, skipped", c.topic, dedupKey)
 			c.commit(ctx, msg)
 			continue
 		}
@@ -115,22 +115,22 @@ func (c *Consumer) Run(ctx context.Context, dedupPrefix string, dedupKeyFunc fun
 		leaseToken := uuid.NewString()
 		claimed, err := c.store.Claim(ctx, leaseKey, leaseToken, processingLeaseTTL)
 		if err != nil {
-			log.Printf("kafka[%s]: redis lease failed, not committing: %v", c.topic, err)
+			telemetry.L.Sugar().Errorf("kafka[%s]: redis lease failed, not committing: %v", c.topic, err)
 			continue
 		}
 		if !claimed {
-			log.Printf("kafka[%s]: event %s is being processed by another worker, retrying", c.topic, dedupKey)
+			telemetry.L.Sugar().Infof("kafka[%s]: event %s is being processed by another worker, retrying", c.topic, dedupKey)
 			continue
 		}
 
 		if err := handle(msg.Value); err != nil {
 			_ = c.releaseLease(ctx, leaseKey, leaseToken)
-			log.Printf("kafka[%s]: handler error, not committing (will retry): %v", c.topic, err)
+			telemetry.L.Sugar().Warnf("kafka[%s]: handler error, not committing (will retry): %v", c.topic, err)
 			continue
 		}
 		if err := c.store.Complete(ctx, processedKey, "1", processedEventTTL); err != nil {
 			_ = c.releaseLease(ctx, leaseKey, leaseToken)
-			log.Printf("kafka[%s]: failed to record successful processing, not committing: %v", c.topic, err)
+			telemetry.L.Sugar().Errorf("kafka[%s]: failed to record successful processing, not committing: %v", c.topic, err)
 			continue
 		}
 		_ = c.releaseLease(ctx, leaseKey, leaseToken)
@@ -141,7 +141,7 @@ func (c *Consumer) Run(ctx context.Context, dedupPrefix string, dedupKeyFunc fun
 
 func (c *Consumer) commit(ctx context.Context, msg kafka.Message) {
 	if err := c.reader.CommitMessages(ctx, msg); err != nil {
-		log.Printf("kafka[%s]: commit failed: %v", c.topic, err)
+		telemetry.L.Sugar().Errorf("kafka[%s]: commit failed: %v", c.topic, err)
 	}
 }
 

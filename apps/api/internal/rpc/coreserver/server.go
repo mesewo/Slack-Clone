@@ -2,13 +2,13 @@ package coreserver
 
 import (
 	"context"
-	"log"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
@@ -31,9 +31,9 @@ func (s *Server) GetUserChannels(ctx context.Context, req *chatpb.GetUserChannel
 		}
 	}
 	started := time.Now()
-	log.Printf("GetUserChannels event=enter request_id=%s", requestID)
+	telemetry.L.Sugar().Infof("GetUserChannels event=enter request_id=%s", requestID)
 	defer func() {
-		log.Printf("GetUserChannels event=exit request_id=%s elapsed=%s", requestID, time.Since(started))
+		telemetry.L.Sugar().Infof("GetUserChannels event=exit request_id=%s elapsed=%s", requestID, time.Since(started))
 	}()
 
 	userID, err := uuid.Parse(req.GetUserId())

@@ -3,9 +3,9 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
+	"github.com/mesewo/slack-clone/services/telemetry"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -37,7 +37,7 @@ func (pm *RedisPresenceManager) listenForPresenceUpdates() {
 	for msg := range ch {
 		var payload PresencePayload
 		if err := json.Unmarshal([]byte(msg.Payload), &payload); err != nil {
-			log.Printf("failed to unmarshal presence update: %v", err)
+			telemetry.L.Sugar().Errorf("failed to unmarshal presence update: %v", err)
 			continue
 		}
 
@@ -71,7 +71,7 @@ func (pm *RedisPresenceManager) SetStatus(userID string, status UserStatus) {
 	if err == redis.Nil {
 		existingStatus = ""
 	} else if err != nil {
-		log.Printf("failed to get status for %s: %v", userID, err)
+		telemetry.L.Sugar().Errorf("failed to get status for %s: %v", userID, err)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (pm *RedisPresenceManager) GetStatus(userID string) UserStatus {
 		return StatusAway
 	}
 	if err != nil {
-		log.Printf("failed to get status for %s: %v", userID, err)
+		telemetry.L.Sugar().Errorf("failed to get status for %s: %v", userID, err)
 		return StatusAway
 	}
 
@@ -143,7 +143,7 @@ func (pm *RedisPresenceManager) Snapshot() map[string]UserStatus {
 	}
 
 	if err := iter.Err(); err != nil {
-		log.Printf("failed to scan presence keys: %v", err)
+		telemetry.L.Sugar().Errorf("failed to scan presence keys: %v", err)
 	}
 
 	return snapshot

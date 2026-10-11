@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 var (
@@ -114,19 +114,19 @@ func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *aut
 	resp, err := coreClient.GetUserChannels(coreCtx, &chatpb.GetUserChannelsRequest{UserId: claims.UserID})
 	coreCancel()
 	if err != nil {
-		log.Printf("failed to load channel memberships for %s: %v", claims.UserID, err)
+		telemetry.L.Sugar().Errorf("failed to load channel memberships for %s: %v", claims.UserID, err)
 		http.Error(w, membershipUnavailableMessage, http.StatusServiceUnavailable)
 		return
 	}
 	if resp == nil {
-		log.Printf("Core returned a nil channel membership response for %s", claims.UserID)
+		telemetry.L.Sugar().Errorf("Core returned a nil channel membership response for %s", claims.UserID)
 		http.Error(w, membershipUnavailableMessage, http.StatusServiceUnavailable)
 		return
 	}
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("failed to upgrade connection: %v", err)
+		telemetry.L.Sugar().Errorf("failed to upgrade connection: %v", err)
 		return
 	}
 
@@ -148,7 +148,7 @@ func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *aut
 	// Subscribe to every channel this user belongs to, across their workspaces.
 	for _, channelID := range resp.GetChannelIds() {
 		if err := hub.SubscribeToChannel(r.Context(), claims.UserID, channelID); err != nil {
-			log.Printf("failed to subscribe %s to %s: %v", claims.UserID, channelID, err)
+			telemetry.L.Sugar().Errorf("failed to subscribe %s to %s: %v", claims.UserID, channelID, err)
 		}
 	}
 
@@ -201,7 +201,7 @@ func (c *Client) readPump(hub HubInterface, pm PresenceManagerInterface, rateLim
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("websocket error: %v", err)
+				telemetry.L.Sugar().Errorf("websocket error: %v", err)
 			}
 			break
 		}
@@ -210,11 +210,11 @@ func (c *Client) readPump(hub HubInterface, pm PresenceManagerInterface, rateLim
 		if rateLimiter != nil {
 			allowed, err := rateLimiter.Allow(context.Background())
 			if err != nil {
-				log.Printf("rate limit check failed: %v", err)
+				telemetry.L.Sugar().Errorf("rate limit check failed: %v", err)
 				// On error, allow the message rather than failing closed
 			} else if !allowed {
 				// Rate limited - ignore this message
-				log.Printf("client %s rate limited", c.UserID)
+				telemetry.L.Sugar().Infof("client %s rate limited", c.UserID)
 				continue
 			}
 		}

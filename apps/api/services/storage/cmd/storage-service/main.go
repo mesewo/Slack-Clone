@@ -2,56 +2,75 @@ package main
 
 import (
 	"context"
-	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/mesewo/slack-clone/services/contracts/storagepb"
 	"github.com/mesewo/slack-clone/services/database"
 	"github.com/mesewo/slack-clone/services/storage/internal/server"
+	"github.com/mesewo/slack-clone/services/telemetry"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"google.golang.org/grpc"
 )
 
 func main() {
+	telemetry.SetDefault(telemetry.NewLogger("storage-service"))
+	defer telemetry.L.Sync()
 	_ = godotenv.Load(".env", "../../.env", "apps/api/.env")
 
 	address := os.Getenv("STORAGE_GRPC_ADDR")
 	if address == "" {
 		address = ":9094"
 	}
+	metricsAddr := os.Getenv("STORAGE_METRICS_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = ":9194"
+	}
+	metricsServer := telemetry.ServeMetricsOnly(metricsAddr)
+	go func() {
+		if err := metricsServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			telemetry.L.Sugar().Errorf("metrics server failed: %v", err)
+		}
+	}()
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
-		log.Fatal("DATABASE_URL is not set")
+		telemetry.L.Sugar().Fatal("DATABASE_URL is not set")
 	}
 	pool, err := pgxpool.New(context.Background(), databaseURL)
 	if err != nil {
-		log.Fatalf("create database pool: %v", err)
+		telemetry.L.Sugar().Fatalf("create database pool: %v", err)
 	}
 	defer pool.Close()
 
 	store, bucket := newStore()
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
-		log.Fatalf("listen on %s: %v", address, err)
+		telemetry.L.Sugar().Fatalf("listen on %s: %v", address, err)
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(telemetry.UnaryServerInterceptor("storage-service")))
 	storagepb.RegisterStorageServiceServer(grpcServer, server.New(database.New(pool), store, bucket))
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-stop
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			telemetry.L.Sugar().Errorf("metrics server shutdown failed: %v", err)
+		}
 		grpcServer.GracefulStop()
 	}()
-	log.Printf("storage service listening on %s", address)
+	telemetry.L.Sugar().Infof("storage service listening on %s", address)
 	if err := grpcServer.Serve(listener); err != nil {
-		log.Printf("storage service stopped: %v", err)
+		telemetry.L.Sugar().Errorf("storage service stopped: %v", err)
 	}
 }
 
@@ -69,7 +88,7 @@ func newStore() (*minio.Client, string) {
 	}
 	store, err := minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL})
 	if err != nil {
-		log.Fatalf("create MinIO client: %v", err)
+		telemetry.L.Sugar().Fatalf("create MinIO client: %v", err)
 	}
 	return store, bucket
 }
