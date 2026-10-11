@@ -1,5 +1,5 @@
 ---
-name: kiranism-shadcn-dashboard
+name: mesewo-shadcn-dashboard
 description: |
   Guide for building features, pages, tables, forms, themes, and navigation in this Next.js 16 shadcn dashboard template. Use this skill whenever the user wants to add a new page, create a feature module, build a data table, add a form, configure navigation items, add a theme, set up RBAC access control, or work with the dashboard's patterns and conventions. Also triggers when adding routes under /dashboard, working with Clerk auth/orgs/billing, creating mock APIs, or modifying the sidebar. Even if the user doesn't mention "dashboard" explicitly — if they're adding UI, pages, or features to this project, use this skill.
 ---
@@ -42,9 +42,9 @@ When a user asks to add a feature (e.g., "add an orders page"), follow these ste
 See [references/mock-api-guide.md](references/mock-api-guide.md) for the complete template. Key structure:
 
 ```tsx
-import { faker } from '@faker-js/faker';
-import { matchSorter } from 'match-sorter';
-import { delay } from './mock-api';
+import { faker } from "@faker-js/faker";
+import { matchSorter } from "match-sorter";
+import { delay } from "./mock-api";
 
 export type Order = {
   id: number;
@@ -74,7 +74,7 @@ export const fakeOrders = {
   },
   async deleteOrder(id) {
     /* filter out */
-  }
+  },
 };
 fakeOrders.initialize();
 ```
@@ -88,19 +88,34 @@ Each feature has 4 API files: **types** → **service** → **queries** → **mu
 **Types** (`api/types.ts`) — re-export the entity type from mock API, plus filter/response/payload types:
 
 ```tsx
-export type { Order } from '@/constants/mock-api-orders';
-export type OrderFilters = { page?: number; limit?: number; search?: string; sort?: string };
+export type { Order } from "@/constants/mock-api-orders";
+export type OrderFilters = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sort?: string;
+};
 export type OrdersResponse = { items: Order[]; total_items: number };
-export type OrderMutationPayload = { customer: string; status: string; total: number };
+export type OrderMutationPayload = {
+  customer: string;
+  status: string;
+  total: number;
+};
 ```
 
 **Service** (`api/service.ts`) — data access layer. One exported function per operation:
 
 ```tsx
-import { fakeOrders } from '@/constants/mock-api-orders';
-import type { OrderFilters, OrdersResponse, OrderMutationPayload } from './types';
+import { fakeOrders } from "@/constants/mock-api-orders";
+import type {
+  OrderFilters,
+  OrdersResponse,
+  OrderMutationPayload,
+} from "./types";
 
-export async function getOrders(filters: OrderFilters): Promise<OrdersResponse> {
+export async function getOrders(
+  filters: OrderFilters,
+): Promise<OrdersResponse> {
   return fakeOrders.getOrders(filters);
 }
 export async function getOrderById(id: number) {
@@ -120,45 +135,45 @@ export async function deleteOrder(id: number) {
 **Queries** (`api/queries.ts`) — query key factory + query options:
 
 ```tsx
-import { queryOptions } from '@tanstack/react-query';
-import { getOrders, getOrderById } from './service';
-import type { Order, OrderFilters } from './types';
+import { queryOptions } from "@tanstack/react-query";
+import { getOrders, getOrderById } from "./service";
+import type { Order, OrderFilters } from "./types";
 
 export type { Order };
 
 export const orderKeys = {
-  all: ['orders'] as const,
-  list: (filters: OrderFilters) => [...orderKeys.all, 'list', filters] as const,
-  detail: (id: number) => [...orderKeys.all, 'detail', id] as const
+  all: ["orders"] as const,
+  list: (filters: OrderFilters) => [...orderKeys.all, "list", filters] as const,
+  detail: (id: number) => [...orderKeys.all, "detail", id] as const,
 };
 
 export const ordersQueryOptions = (filters: OrderFilters) =>
   queryOptions({
     queryKey: orderKeys.list(filters),
-    queryFn: () => getOrders(filters)
+    queryFn: () => getOrders(filters),
   });
 
 export const orderByIdOptions = (id: number) =>
   queryOptions({
     queryKey: orderKeys.detail(id),
-    queryFn: () => getOrderById(id)
+    queryFn: () => getOrderById(id),
   });
 ```
 
 **Mutations** (`api/mutations.ts`) — use `mutationOptions` + `getQueryClient()` (not custom hooks with `useQueryClient()`):
 
 ```tsx
-import { mutationOptions } from '@tanstack/react-query';
-import { getQueryClient } from '@/lib/query-client';
-import { createOrder, updateOrder, deleteOrder } from './service';
-import { orderKeys } from './queries';
-import type { OrderMutationPayload } from './types';
+import { mutationOptions } from "@tanstack/react-query";
+import { getQueryClient } from "@/lib/query-client";
+import { createOrder, updateOrder, deleteOrder } from "./service";
+import { orderKeys } from "./queries";
+import type { OrderMutationPayload } from "./types";
 
 export const createOrderMutation = mutationOptions({
   mutationFn: (data: OrderMutationPayload) => createOrder(data),
   onSuccess: () => {
     getQueryClient().invalidateQueries({ queryKey: orderKeys.all });
-  }
+  },
 });
 
 export const updateOrderMutation = mutationOptions({
@@ -166,14 +181,14 @@ export const updateOrderMutation = mutationOptions({
     updateOrder(id, values),
   onSuccess: () => {
     getQueryClient().invalidateQueries({ queryKey: orderKeys.all });
-  }
+  },
 });
 
 export const deleteOrderMutation = mutationOptions({
   mutationFn: (id: number) => deleteOrder(id),
   onSuccess: () => {
     getQueryClient().invalidateQueries({ queryKey: orderKeys.all });
-  }
+  },
 });
 ```
 
@@ -182,12 +197,12 @@ export const deleteOrderMutation = mutationOptions({
 ### Step 3: Zod Schema (`src/features/<name>/schemas/<name>.ts`)
 
 ```tsx
-import { z } from 'zod';
+import { z } from "zod";
 
 export const orderSchema = z.object({
-  customer: z.string().min(2, 'Customer name must be at least 2 characters'),
-  status: z.string().min(1, 'Please select a status'),
-  total: z.number({ message: 'Total is required' })
+  customer: z.string().min(2, "Customer name must be at least 2 characters"),
+  status: z.string().min(1, "Please select a status"),
+  total: z.number({ message: "Total is required" }),
 });
 
 export type OrderFormValues = z.infer<typeof orderSchema>;
@@ -200,24 +215,24 @@ Create `src/features/<name>/components/` with:
 **Listing page** (server component — `<name>-listing.tsx`):
 
 ```tsx
-import { HydrationBoundary, dehydrate } from '@tanstack/react-query';
-import { getQueryClient } from '@/lib/query-client';
-import { searchParamsCache } from '@/lib/searchparams';
-import { ordersQueryOptions } from '../api/queries';
-import { OrderTable, OrderTableSkeleton } from './orders-table';
-import { Suspense } from 'react';
+import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
+import { getQueryClient } from "@/lib/query-client";
+import { searchParamsCache } from "@/lib/searchparams";
+import { ordersQueryOptions } from "../api/queries";
+import { OrderTable, OrderTableSkeleton } from "./orders-table";
+import { Suspense } from "react";
 
 export default function OrderListingPage() {
-  const page = searchParamsCache.get('page');
-  const search = searchParamsCache.get('name');
-  const pageLimit = searchParamsCache.get('perPage');
-  const sort = searchParamsCache.get('sort');
+  const page = searchParamsCache.get("page");
+  const search = searchParamsCache.get("name");
+  const pageLimit = searchParamsCache.get("perPage");
+  const sort = searchParamsCache.get("sort");
 
   const filters = {
     page,
     limit: pageLimit,
     ...(search && { search }),
-    ...(sort && { sort })
+    ...(sort && { sort }),
   };
 
   const queryClient = getQueryClient();
@@ -236,16 +251,16 @@ export default function OrderListingPage() {
 **Table + skeleton** (client component — `orders-table/index.tsx`):
 
 ```tsx
-'use client';
-import { useSuspenseQuery } from '@tanstack/react-query';
-import { parseAsInteger, parseAsString, useQueryStates } from 'nuqs';
-import { getSortingStateParser } from '@/lib/parsers';
-import { useDataTable } from '@/hooks/use-data-table';
-import { DataTable } from '@/components/ui/table/data-table';
-import { DataTableToolbar } from '@/components/ui/table/data-table-toolbar';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ordersQueryOptions } from '../../api/queries';
-import { columns } from './columns';
+"use client";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { parseAsInteger, parseAsString, useQueryStates } from "nuqs";
+import { getSortingStateParser } from "@/lib/parsers";
+import { useDataTable } from "@/hooks/use-data-table";
+import { DataTable } from "@/components/ui/table/data-table";
+import { DataTableToolbar } from "@/components/ui/table/data-table-toolbar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ordersQueryOptions } from "../../api/queries";
+import { columns } from "./columns";
 
 const columnIds = columns.map((c) => c.id).filter(Boolean) as string[];
 
@@ -254,14 +269,14 @@ export function OrderTable() {
     page: parseAsInteger.withDefault(1),
     perPage: parseAsInteger.withDefault(10),
     name: parseAsString,
-    sort: getSortingStateParser(columnIds).withDefault([])
+    sort: getSortingStateParser(columnIds).withDefault([]),
   });
 
   const filters = {
     page: params.page,
     limit: params.perPage,
     ...(params.name && { search: params.name }),
-    ...(params.sort.length > 0 && { sort: JSON.stringify(params.sort) })
+    ...(params.sort.length > 0 && { sort: JSON.stringify(params.sort) }),
   };
 
   const { data } = useSuspenseQuery(ordersQueryOptions(filters));
@@ -272,7 +287,7 @@ export function OrderTable() {
     pageCount: Math.ceil(data.total_items / params.perPage),
     shallow: true,
     debounceMs: 500,
-    initialState: { columnPinning: { right: ['actions'] } }
+    initialState: { columnPinning: { right: ["actions"] } },
   });
 
   return (
@@ -284,9 +299,9 @@ export function OrderTable() {
 
 export function OrderTableSkeleton() {
   return (
-    <div className='space-y-4 p-4'>
-      <Skeleton className='h-10 w-full' />
-      <Skeleton className='h-96 w-full' />
+    <div className="space-y-4 p-4">
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-96 w-full" />
     </div>
   );
 }
@@ -299,25 +314,34 @@ Each column needs `id`, `accessorKey` (or `accessorFn`), `header` with `DataTabl
 ```tsx
 export const columns: ColumnDef<Order>[] = [
   {
-    id: 'customer',
-    accessorKey: 'customer',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Customer' />,
-    meta: { label: 'Customer', placeholder: 'Search...', variant: 'text', icon: Icons.text },
-    enableColumnFilter: true
+    id: "customer",
+    accessorKey: "customer",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Customer" />
+    ),
+    meta: {
+      label: "Customer",
+      placeholder: "Search...",
+      variant: "text",
+      icon: Icons.text,
+    },
+    enableColumnFilter: true,
   },
   {
-    id: 'status',
-    accessorKey: 'status',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Status' />,
+    id: "status",
+    accessorKey: "status",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Status" />
+    ),
     cell: ({ cell }) => (
-      <Badge variant='outline' className='capitalize'>
+      <Badge variant="outline" className="capitalize">
         {cell.getValue<string>()}
       </Badge>
     ),
     enableColumnFilter: true,
-    meta: { label: 'Status', variant: 'multiSelect', options: STATUS_OPTIONS }
+    meta: { label: "Status", variant: "multiSelect", options: STATUS_OPTIONS },
   },
-  { id: 'actions', cell: ({ row }) => <CellAction data={row.original} /> }
+  { id: "actions", cell: ({ row }) => <CellAction data={row.original} /> },
 ];
 ```
 
@@ -328,16 +352,16 @@ Filter `meta.variant` options: `text`, `number`, `range`, `date`, `dateRange`, `
 Pattern: `DropdownMenu` with edit/delete items + `AlertModal` for delete confirmation + `useMutation` for the delete API call.
 
 ```tsx
-import { deleteOrderMutation } from '../../api/mutations';
+import { deleteOrderMutation } from "../../api/mutations";
 
 export const CellAction: React.FC<{ data: Order }> = ({ data }) => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const deleteMutation = useMutation({
     ...deleteOrderMutation,
     onSuccess: () => {
-      toast.success('Deleted');
+      toast.success("Deleted");
       setDeleteOpen(false);
-    }
+    },
   });
   return (
     <>
@@ -349,17 +373,19 @@ export const CellAction: React.FC<{ data: Order }> = ({ data }) => {
       />
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button variant='ghost' className='h-8 w-8 p-0'>
-            <Icons.ellipsis className='h-4 w-4' />
+          <Button variant="ghost" className="h-8 w-8 p-0">
+            <Icons.ellipsis className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end'>
+        <DropdownMenuContent align="end">
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-          <DropdownMenuItem onClick={() => router.push(`/dashboard/orders/${data.id}`)}>
-            <Icons.edit className='mr-2 h-4 w-4' /> Edit
+          <DropdownMenuItem
+            onClick={() => router.push(`/dashboard/orders/${data.id}`)}
+          >
+            <Icons.edit className="mr-2 h-4 w-4" /> Edit
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
-            <Icons.trash className='mr-2 h-4 w-4' /> Delete
+            <Icons.trash className="mr-2 h-4 w-4" /> Delete
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -373,12 +399,12 @@ For **sheet-based editing** (like Users), replace `router.push` with opening a `
 ### Step 5: Page Route (`src/app/dashboard/<name>/page.tsx`)
 
 ```tsx
-import PageContainer from '@/components/layout/page-container';
-import OrderListingPage from '@/features/orders/components/order-listing';
-import { searchParamsCache } from '@/lib/searchparams';
-import type { SearchParams } from 'nuqs/server';
+import PageContainer from "@/components/layout/page-container";
+import OrderListingPage from "@/features/orders/components/order-listing";
+import { searchParamsCache } from "@/lib/searchparams";
+import type { SearchParams } from "nuqs/server";
 
-export const metadata = { title: 'Dashboard: Orders' };
+export const metadata = { title: "Dashboard: Orders" };
 type PageProps = { searchParams: Promise<SearchParams> };
 
 export default async function Page(props: PageProps) {
@@ -388,8 +414,8 @@ export default async function Page(props: PageProps) {
   return (
     <PageContainer
       scrollable={false}
-      pageTitle='Orders'
-      pageDescription='Manage your orders.'
+      pageTitle="Orders"
+      pageDescription="Manage your orders."
       pageHeaderAction={/* Add button — Link or SheetTrigger */}
     >
       <OrderListingPage />
@@ -403,16 +429,16 @@ export default async function Page(props: PageProps) {
 **Detail/Edit page** (`src/app/dashboard/<name>/[id]/page.tsx`):
 
 ```tsx
-import PageContainer from '@/components/layout/page-container';
-import OrderViewPage from '@/features/orders/components/order-view-page';
+import PageContainer from "@/components/layout/page-container";
+import OrderViewPage from "@/features/orders/components/order-view-page";
 
-export const metadata = { title: 'Dashboard: Order Details' };
+export const metadata = { title: "Dashboard: Order Details" };
 type PageProps = { params: Promise<{ id: string }> };
 
 export default async function Page(props: PageProps) {
   const { id } = await props.params;
   return (
-    <PageContainer scrollable pageTitle='Order Details'>
+    <PageContainer scrollable pageTitle="Order Details">
       <OrderViewPage orderId={id} />
     </PageContainer>
   );
@@ -422,17 +448,18 @@ export default async function Page(props: PageProps) {
 **View page component** (client — handles new vs edit):
 
 ```tsx
-'use client';
-import { useSuspenseQuery } from '@tanstack/react-query';
-import { notFound } from 'next/navigation';
-import { orderByIdOptions } from '../api/queries';
-import OrderForm from './order-form';
+"use client";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { notFound } from "next/navigation";
+import { orderByIdOptions } from "../api/queries";
+import OrderForm from "./order-form";
 
 export default function OrderViewPage({ orderId }: { orderId: string }) {
-  if (orderId === 'new') return <OrderForm initialData={null} pageTitle='Create Order' />;
+  if (orderId === "new")
+    return <OrderForm initialData={null} pageTitle="Create Order" />;
   const { data } = useSuspenseQuery(orderByIdOptions(Number(orderId)));
   if (!data) notFound();
-  return <OrderForm initialData={data} pageTitle='Edit Order' />;
+  return <OrderForm initialData={data} pageTitle="Edit Order" />;
 }
 ```
 
@@ -451,7 +478,7 @@ Add any new filter keys. Existing params: `page`, `perPage`, `name`, `gender`, `
 To register a new icon, import from `@tabler/icons-react` and add to the `Icons` object:
 
 ```tsx
-import { IconShoppingCart } from '@tabler/icons-react';
+import { IconShoppingCart } from "@tabler/icons-react";
 export const Icons = { /* ...existing */ cart: IconShoppingCart };
 ```
 
@@ -479,13 +506,19 @@ The full pattern is shown in Steps 1-4 above. The key structure:
 For features where a separate page is overkill (like Users). The sheet manages open state; the form uses a `form` attribute to connect to the sheet footer's submit button.
 
 ```tsx
-'use client';
-import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+"use client";
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 export function OrderFormSheet({
   order,
   open,
-  onOpenChange
+  onOpenChange,
 }: {
   order?: Order;
   open: boolean;
@@ -496,37 +529,48 @@ export function OrderFormSheet({
     ...(isEdit ? updateOrderMutation : createOrderMutation),
     onSuccess: () => {
       onOpenChange(false);
-    }
+    },
   });
   const form = useAppForm({
-    defaultValues: { customer: order?.customer ?? '' /* ... */ } as OrderFormValues,
+    defaultValues: {
+      customer: order?.customer ?? "" /* ... */,
+    } as OrderFormValues,
     validators: { onSubmit: orderSchema },
     onSubmit: async ({ value }) => {
       await mutation.mutateAsync(value);
-    }
+    },
   });
   const { FormTextField, FormSelectField } = useFormFields<OrderFormValues>();
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className='flex flex-col'>
+      <SheetContent className="flex flex-col">
         <SheetHeader>
-          <SheetTitle>{isEdit ? 'Edit' : 'New'} Order</SheetTitle>
+          <SheetTitle>{isEdit ? "Edit" : "New"} Order</SheetTitle>
         </SheetHeader>
-        <div className='flex-1 overflow-auto'>
+        <div className="flex-1 overflow-auto">
           <form.AppForm>
-            <form.Form id='order-sheet-form' className='space-y-4'>
-              <FormTextField name='customer' label='Customer' required />
-              <FormSelectField name='status' label='Status' required options={STATUS_OPTIONS} />
+            <form.Form id="order-sheet-form" className="space-y-4">
+              <FormTextField name="customer" label="Customer" required />
+              <FormSelectField
+                name="status"
+                label="Status"
+                required
+                options={STATUS_OPTIONS}
+              />
             </form.Form>
           </form.AppForm>
         </div>
         <SheetFooter>
-          <Button variant='outline' onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type='submit' form='order-sheet-form' disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving...' : isEdit ? 'Update' : 'Create'}
+          <Button
+            type="submit"
+            form="order-sheet-form"
+            disabled={mutation.isPending}
+          >
+            {mutation.isPending ? "Saving..." : isEdit ? "Update" : "Create"}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -560,13 +604,13 @@ export const createOrderMutation = mutationOptions({
   mutationFn: (data) => createOrder(data),
   onSuccess: () => {
     getQueryClient().invalidateQueries({ queryKey: orderKeys.all });
-  }
+  },
 });
 
 // In component — spread + layer UI callbacks
 const mutation = useMutation({
   ...createOrderMutation,
-  onSuccess: () => toast.success('Created')
+  onSuccess: () => toast.success("Created"),
 });
 ```
 

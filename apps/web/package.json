@@ -1,10 +1,10 @@
 {
-  "name": "next-shadcn-dashboard-starter",
+  "name": "web",
   "version": "1.0.0",
   "private": true,
   "author": {
-    "name": "Kiran",
-    "url": "https://github.com/Kiranism"
+    "name": "Mesewo",
+    "url": "https://github.com/mesewo"
   },
   "scripts": {
     "dev": "next dev --turbopack",

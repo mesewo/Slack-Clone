@@ -1,5 +1,5 @@
 ---
-name: kiranism-shadcn-dashboard
+name: mesewo-shadcn-dashboard
 description: |
   Guide for building features, pages, tables, forms, themes, and navigation in this Next.js 16 shadcn dashboard template. Use this skill whenever the user wants to add a new page, create a feature module, build a data table, add a form, configure navigation items, add a theme, set up RBAC access control, or work with the dashboard's patterns and conventions. Also triggers when adding routes under /dashboard, working with Clerk auth/orgs/billing, creating mock APIs, or modifying the sidebar. Even if the user doesn't mention "dashboard" explicitly — if they're adding UI, pages, or features to this project, use this skill.
 ---
@@ -52,32 +52,36 @@ The project uses **TanStack React Query** for data fetching with server-side pre
 Define reusable query options shared between server prefetch and client hooks:
 
 ```tsx
-import { queryOptions } from '@tanstack/react-query';
-import { fakeEntities, type Entity } from '@/constants/mock-api-entities';
+import { queryOptions } from "@tanstack/react-query";
+import { fakeEntities, type Entity } from "@/constants/mock-api-entities";
 
 export type { Entity };
 
-export const entitiesQueryOptions = (filters: { page?: number; limit?: number; search?: string }) =>
+export const entitiesQueryOptions = (filters: {
+  page?: number;
+  limit?: number;
+  search?: string;
+}) =>
   queryOptions({
-    queryKey: ['entities', filters],
-    queryFn: () => fakeEntities.getEntities(filters)
+    queryKey: ["entities", filters],
+    queryFn: () => fakeEntities.getEntities(filters),
   });
 ```
 
 ### Server Prefetch + Client Hydration (Listing Component)
 
 ```tsx
-import { HydrationBoundary, dehydrate } from '@tanstack/react-query';
-import { getQueryClient } from '@/lib/query-client';
-import { searchParamsCache } from '@/lib/searchparams';
-import { entitiesQueryOptions } from '../api/queries';
-import { EntityTable, EntityTableSkeleton } from './entity-table';
-import { Suspense } from 'react';
+import { HydrationBoundary, dehydrate } from "@tanstack/react-query";
+import { getQueryClient } from "@/lib/query-client";
+import { searchParamsCache } from "@/lib/searchparams";
+import { entitiesQueryOptions } from "../api/queries";
+import { EntityTable, EntityTableSkeleton } from "./entity-table";
+import { Suspense } from "react";
 
 export default function EntityListingPage() {
-  const page = searchParamsCache.get('page');
-  const search = searchParamsCache.get('name');
-  const pageLimit = searchParamsCache.get('perPage');
+  const page = searchParamsCache.get("page");
+  const search = searchParamsCache.get("name");
+  const pageLimit = searchParamsCache.get("perPage");
 
   const filters = { page, limit: pageLimit, ...(search && { search }) };
 
@@ -97,18 +101,18 @@ export default function EntityListingPage() {
 ### Client Table Component (`shallow: true` + `useQuery`)
 
 ```tsx
-'use client';
+"use client";
 
-import { useQuery } from '@tanstack/react-query';
-import { parseAsInteger, useQueryState } from 'nuqs';
-import { useDataTable } from '@/hooks/use-data-table';
-import { entitiesQueryOptions } from '../../api/queries';
-import { columns } from './columns';
+import { useQuery } from "@tanstack/react-query";
+import { parseAsInteger, useQueryState } from "nuqs";
+import { useDataTable } from "@/hooks/use-data-table";
+import { entitiesQueryOptions } from "../../api/queries";
+import { columns } from "./columns";
 
 export function EntityTable() {
-  const [page] = useQueryState('page', parseAsInteger.withDefault(1));
-  const [pageSize] = useQueryState('perPage', parseAsInteger.withDefault(10));
-  const [search] = useQueryState('name');
+  const [page] = useQueryState("page", parseAsInteger.withDefault(1));
+  const [pageSize] = useQueryState("perPage", parseAsInteger.withDefault(10));
+  const [search] = useQueryState("name");
 
   const filters = { page, limit: pageSize, ...(search && { search }) };
 
@@ -120,10 +124,11 @@ export function EntityTable() {
     pageCount: Math.ceil((data?.total_items ?? 0) / pageSize),
     shallow: true, // URL changes stay client-side — React Query handles fetching
     debounceMs: 500,
-    initialState: { columnPinning: { right: ['actions'] } }
+    initialState: { columnPinning: { right: ["actions"] } },
   });
 
-  if (isLoading) return <DataTableSkeleton columnCount={5} rowCount={10} filterCount={2} />;
+  if (isLoading)
+    return <DataTableSkeleton columnCount={5} rowCount={10} filterCount={2} />;
 
   return (
     <DataTable table={table}>
@@ -149,11 +154,11 @@ const queryClient = useQueryClient();
 const createMutation = useMutation({
   mutationFn: (data: Payload) => fakeEntities.createEntity(data),
   onSuccess: () => {
-    queryClient.invalidateQueries({ queryKey: ['entities'] });
-    toast.success('Created successfully');
-    router.push('/dashboard/entities');
+    queryClient.invalidateQueries({ queryKey: ["entities"] });
+    toast.success("Created successfully");
+    router.push("/dashboard/entities");
   },
-  onError: () => toast.error('Failed to create')
+  onError: () => toast.error("Failed to create"),
 });
 
 // In useAppForm onSubmit:
@@ -169,12 +174,12 @@ onSubmit: async ({ value }) => {
 Pages are **server components** by default. They use `PageContainer` and accept search params as a Promise (Next.js 16 pattern).
 
 ```tsx
-import PageContainer from '@/components/layout/page-container';
-import EntityListingPage from '@/features/entities/components/entity-listing';
-import { searchParamsCache } from '@/lib/searchparams';
-import type { SearchParams } from 'nuqs/server';
+import PageContainer from "@/components/layout/page-container";
+import EntityListingPage from "@/features/entities/components/entity-listing";
+import { searchParamsCache } from "@/lib/searchparams";
+import type { SearchParams } from "nuqs/server";
 
-export const metadata = { title: 'Dashboard: Entities' };
+export const metadata = { title: "Dashboard: Entities" };
 
 type PageProps = { searchParams: Promise<SearchParams> };
 
@@ -185,8 +190,8 @@ export default async function Page(props: PageProps) {
   return (
     <PageContainer
       scrollable={false}
-      pageTitle='Entities'
-      pageDescription='Manage entities (React Query + nuqs table pattern.)'
+      pageTitle="Entities"
+      pageDescription="Manage entities (React Query + nuqs table pattern.)"
     >
       <EntityListingPage />
     </PageContainer>
@@ -205,22 +210,33 @@ Tables use TanStack Table v8 with `useDataTable` hook and `nuqs` for URL state.
 ```tsx
 export const columns: ColumnDef<YourType>[] = [
   {
-    id: 'name',
-    accessorKey: 'name',
-    header: ({ column }) => <DataTableColumnHeader column={column} title='Name' />,
-    meta: { label: 'Name', placeholder: 'Search...', variant: 'text', icon: Icons.text },
-    enableColumnFilter: true
-  },
-  {
-    id: 'category',
-    accessorKey: 'category',
+    id: "name",
+    accessorKey: "name",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Name" />
+    ),
+    meta: {
+      label: "Name",
+      placeholder: "Search...",
+      variant: "text",
+      icon: Icons.text,
+    },
     enableColumnFilter: true,
-    meta: { label: 'Category', variant: 'multiSelect', options: CATEGORY_OPTIONS }
   },
   {
-    id: 'actions',
-    cell: ({ row }) => <CellAction data={row.original} />
-  }
+    id: "category",
+    accessorKey: "category",
+    enableColumnFilter: true,
+    meta: {
+      label: "Category",
+      variant: "multiSelect",
+      options: CATEGORY_OPTIONS,
+    },
+  },
+  {
+    id: "actions",
+    cell: ({ row }) => <CellAction data={row.original} />,
+  },
 ];
 ```
 
@@ -229,7 +245,7 @@ export const columns: ColumnDef<YourType>[] = [
 ```tsx
 initialState: {
   columnPinning: {
-    right: ['actions'];
+    right: ["actions"];
   }
 }
 ```
@@ -243,15 +259,15 @@ initialState: {
 See `docs/forms.md` for the full guide. Forms use **TanStack Form + Zod** via `useAppForm` from `@/lib/form` (TanStack `createFormHook`). The shadcn TanStack Form doc anatomy lives once per widget in `src/components/forms/fields/`; pages render fields as one-liners:
 
 ```tsx
-import { useAppForm } from '@/lib/form';
-import { FieldGroup } from '@/components/ui/field';
+import { useAppForm } from "@/lib/form";
+import { FieldGroup } from "@/components/ui/field";
 
 const form = useAppForm({
-  defaultValues: { email: '', role: '' },
+  defaultValues: { email: "", role: "" },
   validators: { onSubmit: schema }, // Zod schema — errors paint per field on submit
   onSubmit: async ({ value }) => {
     await createMutation.mutateAsync(value); // React Query mutation
-  }
+  },
 });
 
 <form
@@ -262,18 +278,22 @@ const form = useAppForm({
 >
   <FieldGroup>
     <form.AppField
-      name='email' // typed against defaultValues — typos are compile errors
-      children={(field) => <field.TextField label='Email' required type='email' />}
+      name="email" // typed against defaultValues — typos are compile errors
+      children={(field) => (
+        <field.TextField label="Email" required type="email" />
+      )}
     />
     <form.AppField
-      name='role'
-      children={(field) => <field.SelectField label='Role' options={ROLE_OPTIONS} />}
+      name="role"
+      children={(field) => (
+        <field.SelectField label="Role" options={ROLE_OPTIONS} />
+      )}
     />
     <form.AppForm>
       <form.SubmitButton>Save</form.SubmitButton>
     </form.AppForm>
   </FieldGroup>
-</form>
+</form>;
 ```
 
 **Available components** (all take `label`, `description?`, `required?`): `TextField` (any input type; number converts at the edge, async-validator spinner built in), `TextareaField` (`showCount`), `SelectField`, `CheckboxField`, `SwitchField`, `RadioGroupField`, `SliderField`, `ComboboxField`, `DatePickerField`, `DateRangeField`, `OtpField`, `ColorField`, `FileUploadField`, `CheckboxGroupField`, `TagsField`, `ToggleGroupField`.
