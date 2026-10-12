@@ -44,7 +44,7 @@ spec:
               valueFrom:
                 secretKeyRef: { name: app-secrets, key: JWT_SECRET }
             - name: KAFKA_BROKER_ADDR
-              value: host.docker.internal:19092
+              value: host.docker.internal:19093
             - name: REDIS_ADDR
               value: host.docker.internal:6379
             - name: ELASTICSEARCH_URL

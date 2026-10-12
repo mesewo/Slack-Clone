@@ -162,11 +162,12 @@ services:
       - --mode
       - dev-container
       - --kafka-addr
-      - internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - internal://0.0.0.0:9092,external://0.0.0.0:19092,k8s://0.0.0.0:19093
       - --advertise-kafka-addr
-      - internal://redpanda:9092,external://localhost:19092
+      - internal://redpanda:9092,external://localhost:19092,k8s://host.docker.internal:19093
     ports:
       - "19092:19092"
+      - "19093:19093"
 
   redis:
     image: redis:7-alpine
