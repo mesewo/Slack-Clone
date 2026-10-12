@@ -114,9 +114,10 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
             if (parsed.channel_id && parsed.payload) {
               const message = parsed.payload as ChatMessage;
               if (parsed.channel_id.startsWith("dm:")) {
-                void refreshDMs().then(() => {
-                  addIncomingMessage(parsed.channel_id!, message);
-                });
+                // Render the message immediately. Refreshing the DM list is
+                // async and must not hold up the conversation's live history.
+                addIncomingMessage(parsed.channel_id, message);
+                void refreshDMs();
               } else {
                 addIncomingMessage(parsed.channel_id, message);
               }

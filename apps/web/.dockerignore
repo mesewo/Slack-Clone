@@ -75,3 +75,14 @@ AGENTS.md
 
 # Cleanup guide
 __CLEANUP__/
+# Already have .env rules presumably, add these:
+**/node_modules
+**/.next
+**/dist
+**/build
+**/tmp
+**/test-results
+**/*.tsbuildinfo
+**/.turbo
+**/coverage
+apps/web

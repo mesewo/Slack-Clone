@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: storage-worker }
+  template:
+    metadata:
+      labels: { app: storage-worker }
+    spec:
+      hostAliases:
+        - ip: "192.168.65.254"
+          hostnames: ["host.docker.internal"]
+      containers:
+        - name: storage-worker
+          image: slack-clone/storage-worker:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 9195 }]
+          env:
+            - name: STORAGE_WORKER_METRICS_ADDR
+              value: ":9195"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD }
+            - name: DATABASE_URL
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@host.docker.internal:5432/slack_db?sslmode=disable"
+            - name: S3_ENDPOINT
+              value: host.docker.internal:9000
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: S3_ACCESS_KEY }
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: S3_SECRET_KEY }
+            - name: S3_BUCKET
+              value: slack-uploads
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-worker
+spec:
+  selector: { app: storage-worker }
+  ports:
+    - { name: metrics, port: 9195, targetPort: 9195 }

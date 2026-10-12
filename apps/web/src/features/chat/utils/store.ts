@@ -356,12 +356,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     messagesPromise
       .then((messages) => {
         const currentUserId = get().currentUserId ?? "";
-        // REST returns newest-first for pagination; reverse for display order.
+        // Channel history is newest-first; the DM endpoint already returns
+        // oldest-first (ListDirectMessages orders by created_at ASC).
         const uiMessages = sortMessages(
           uniqueMessages(
-            messages
-              .slice()
-              .reverse()
+            (conversationIsDM ? messages : messages.slice().reverse())
               .map((m) => toUIMessage(m, currentUserId)),
           ),
         );
@@ -435,9 +434,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     const currentUserId = get().currentUserId ?? "";
     const uiMessages = sortMessages(
       uniqueMessages(
-        messages
-          .slice()
-          .reverse()
+        (conversation.kind === "dm" ? messages : messages.slice().reverse())
           .map((message) => toUIMessage(message, currentUserId)),
       ),
     );
@@ -734,10 +731,18 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       conversations: state.conversations.map((c) => {
         if (c.id !== channelId) return c;
         const isOwnMessage = message.user_id === currentUserId;
+        const isNewMessage = !c.messages.some((item) => item.id === message.id);
+        const isSelected = state.selectedConversationId === channelId;
         return {
           ...c,
           messages: mergeMessages(c.messages, [uiMessage]),
-          unread: isOwnMessage ? c.unread : c.unread + 1,
+          lastMessage: message.content,
+          lastMessageAt: message.created_at,
+          lastMessageIsMine: isOwnMessage,
+          unread:
+            !isNewMessage || isOwnMessage || isSelected
+              ? c.unread
+              : c.unread + 1,
         };
       }),
     }));
