@@ -13,8 +13,9 @@ import {
   type ChatMessage,
 } from "@/features/workspace/services/messageService";
 import type { DirectConversation } from "@/features/workspace/services/messageService";
+import { API_BASE_URL } from "@/lib/api-base-url";
 
-const apiOrigin = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const apiOrigin = API_BASE_URL;
 const lastConversationKey = "slack_last_conversation_id";
 
 function apiUrl(path: string): string {

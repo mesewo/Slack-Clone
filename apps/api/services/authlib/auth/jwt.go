@@ -32,13 +32,17 @@ func (tm *TokenManager) Generate(userID, email string) (string, error) {
 }
 
 func (tm *TokenManager) GenerateWithDisplayName(userID, email, displayName string) (string, error) {
+	return tm.GenerateWithTTL(userID, email, displayName, tm.ttl)
+}
+
+func (tm *TokenManager) GenerateWithTTL(userID, email, displayName string, ttl time.Duration) (string, error) {
 	now := time.Now()
 	claims := &Claims{
 		UserID:      userID,
 		Email:       email,
 		DisplayName: displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(tm.ttl)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}

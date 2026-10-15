@@ -1,8 +1,5 @@
 // src/lib/auth.ts
-const GO_API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.GO_API_URL ||
-  "http://localhost:8080";
+import { API_BASE_URL } from "@/lib/api-base-url";
 
 export interface User {
   id: string;
@@ -19,7 +16,7 @@ export interface Session {
 
 // Client-side auth helpers
 export async function login(email: string, password: string): Promise<Session> {
-  const response = await fetch(`${GO_API_URL}/api/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -35,7 +32,7 @@ export async function login(email: string, password: string): Promise<Session> {
 }
 
 export async function logout() {
-  const response = await fetch(`${GO_API_URL}/api/auth/logout`, {
+  const response = await fetch(`${API_BASE_URL}/api/auth/logout`, {
     method: "POST",
     credentials: "include",
   });
@@ -50,7 +47,7 @@ export async function register(
   password: string,
   name?: string,
 ): Promise<User> {
-  const response = await fetch(`${GO_API_URL}/api/auth/register`, {
+  const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -81,7 +78,7 @@ export function useAuth() {
         // appeared to succeed but the dashboard bounced back to sign-in -
         // this check always resolved to "not logged in" regardless of the
         // actual cookie.
-        const response = await fetch(`${GO_API_URL}/api/auth/verify`, {
+        const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
           credentials: "include",
         });
         if (response.ok) {

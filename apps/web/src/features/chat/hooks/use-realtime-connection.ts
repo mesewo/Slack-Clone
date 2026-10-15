@@ -12,6 +12,7 @@ import { useChatStore } from "../utils/store";
 import type { ChatMessage } from "@/features/workspace/services/messageService";
 import { useNotificationStore } from "@/features/notifications/utils/store";
 import { toast } from "sonner";
+import { apiClient } from "@/lib/axios";
 
 type WSEvent = {
   type: string;
@@ -48,9 +49,8 @@ export function RealtimeTypingProvider({
 // member of when the connection opens, so there's no per-room reconnect
 // needed the way the old use-chat.ts did it.
 //
-// No manual auth handshake either: the browser attaches the HttpOnly auth
-// cookie to this upgrade request automatically, and the Go handler reads it
-// straight off the request headers.
+// The browser cannot attach the HttpOnly auth cookie to a cross-site WebSocket
+// upgrade, so each connection uses a short-lived token fetched same-origin.
 export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
   const addIncomingMessage = useChatStore((s) => s.addIncomingMessage);
   const updateIncomingMessage = useChatStore((s) => s.updateIncomingMessage);
@@ -90,15 +90,35 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
     if (!enabled) return;
 
     let disposed = false;
-    const connect = () => {
+    let connect: () => Promise<void>;
+    const scheduleReconnect = () => {
       if (disposed) return;
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
+      const attempt = reconnectAttemptRef.current++;
+      const baseDelay = Math.min(30_000, 1_000 * 2 ** attempt);
+      const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
+      reconnectTimerRef.current = setTimeout(() => void connect(), delay);
+    };
 
-      ws.onopen = () => {
-        reconnectAttemptRef.current = 0;
-        void syncConversation().catch(() => undefined);
-      };
+    connect = async () => {
+      if (disposed) return;
+      try {
+        const { data } = await apiClient.get<{ token: string }>(
+          "/api/auth/ws-token",
+          { withCredentials: true },
+        );
+        if (disposed) return;
+        if (!data.token) throw new Error("WebSocket token response was empty");
+
+        const separator = WS_URL.includes("?") ? "&" : "?";
+        const ws = new WebSocket(
+          `${WS_URL}${separator}token=${encodeURIComponent(data.token)}`,
+        );
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          reconnectAttemptRef.current = 0;
+          void syncConversation().catch(() => undefined);
+        };
 
       ws.onmessage = (event) => {
         let parsed: WSEvent;
@@ -301,23 +321,24 @@ export function useRealtimeConnection(enabled: boolean, connectionKey = "") {
         }
       };
 
-      ws.onclose = () => {
-        if (disposed || wsRef.current !== ws) return;
-        const attempt = reconnectAttemptRef.current++;
-        const baseDelay = Math.min(30_000, 1_000 * 2 ** attempt);
-        const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5));
-        reconnectTimerRef.current = setTimeout(connect, delay);
-      };
-      ws.onerror = () => ws.close();
+        ws.onclose = () => {
+          if (disposed || wsRef.current !== ws) return;
+          scheduleReconnect();
+        };
+        ws.onerror = () => ws.close();
+      } catch {
+        scheduleReconnect();
+      }
     };
 
-    connect();
+    void connect();
 
     return () => {
       disposed = true;
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      wsRef.current?.close();
+      const ws = wsRef.current;
       wsRef.current = null;
+      ws?.close();
     };
   }, [
     enabled,

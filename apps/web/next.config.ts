@@ -6,6 +6,12 @@ const baseConfig: NextConfig = {
   devIndicators: false,
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : undefined,
   transpilePackages: ['geist'],
+  async rewrites() {
+    const backendUrl = process.env.BACKEND_URL;
+    return backendUrl
+      ? [{ source: '/api/:path*', destination: `${backendUrl}/api/:path*` }]
+      : [];
+  },
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production'
   }

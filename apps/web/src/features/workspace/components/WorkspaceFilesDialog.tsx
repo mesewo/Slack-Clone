@@ -7,6 +7,7 @@ import { Icons } from "@/components/icons";
 import { useChatStore } from "@/features/chat/utils/store";
 import { messageService, type ChatMessage, type UploadedAttachment } from "@/features/workspace/services/messageService";
 import { AttachmentDownloadButton } from "@/features/chat/components/AttachmentDownloadButton";
+import { API_BASE_URL } from "@/lib/api-base-url";
 
 type SharedFile = UploadedAttachment & {
   sentAt: string;
@@ -95,7 +96,7 @@ export function WorkspaceFilesDialog() {
               <h3 className="text-muted-foreground mb-2 text-xs font-semibold uppercase tracking-wide">{month}</h3>
               <div className="grid gap-2 sm:grid-cols-2">
                 {items.map((file) => {
-                  const url = file.url.startsWith("http") ? file.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}${file.url.startsWith("/") ? "" : "/"}${file.url}`;
+                  const url = file.url.startsWith("http") ? file.url : `${API_BASE_URL}${file.url.startsWith("/") ? "" : "/"}${file.url}`;
                   return <div key={`${file.conversationId}-${file.id}`} className="border-border hover:bg-muted flex min-w-0 items-center gap-3 rounded-lg border p-3 text-left">
                     <a href={url} target="_blank" rel="noreferrer" aria-label={`Open ${file.filename}`} className="flex min-w-0 flex-1 items-center gap-3">
                       {file.content_type.startsWith("image/") ? <Image src={url} alt="" width={40} height={40} unoptimized className="size-10 shrink-0 rounded-md object-cover" /> : <span className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-md"><Icons.page className="size-5" /></span>}

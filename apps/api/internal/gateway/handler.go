@@ -82,13 +82,19 @@ func ServeWS(hub HubInterface, pm PresenceManagerInterface, tokens *auth.TokenMa
 
 // ServeWSWithRedis is the full implementation supporting both in-memory and Redis-backed state.
 func ServeWSWithRedis(hub HubInterface, pm PresenceManagerInterface, tokens *auth.TokenManager, coreClient chatpb.CoreServiceClient, redisClient *redis.Client, w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(auth.CookieName)
-	if err != nil {
+	cookie, cookieErr := r.Cookie(auth.CookieName)
+	tokenValue := ""
+	if cookieErr == nil {
+		tokenValue = cookie.Value
+	} else {
+		tokenValue = r.URL.Query().Get("token")
+	}
+	if tokenValue == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	claims, err := tokens.Validate(cookie.Value)
+	claims, err := tokens.Validate(tokenValue)
 	if err != nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return

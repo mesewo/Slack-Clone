@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -145,6 +146,22 @@ func TestServeWSLoadsMembershipsBeforeSuccessfulUpgrade(t *testing.T) {
 	statuses := presence.recordedStatuses()
 	if len(statuses) == 0 || statuses[0] != StatusActive {
 		t.Fatalf("presence statuses = %v, want active initialization", statuses)
+	}
+}
+
+func TestServeWSAcceptsJWTQueryToken(t *testing.T) {
+	server := newWebSocketTestServer(t, fakeCoreClient{response: &chatpb.GetUserChannelsResponse{}})
+	cookie := validCookie(t, server.tokens)
+	target := server.URL + "?token=" + url.QueryEscape(cookie.Value)
+	conn, response, err := websocket.DefaultDialer.Dial(target, http.Header{
+		"Origin": []string{"http://localhost:3000"},
+	})
+	if err != nil {
+		t.Fatalf("websocket dial failed (status %v): %v", responseStatusForTest(response), err)
+	}
+	defer conn.Close()
+	if response.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("status = %d, want %d", response.StatusCode, http.StatusSwitchingProtocols)
 	}
 }
 

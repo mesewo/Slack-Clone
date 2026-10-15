@@ -545,6 +545,20 @@ func main() {
 		r.Use(auth.Middleware(tokens))
 
 		r.Get("/api/auth/verify", userHandler.Verify)
+		r.Get("/api/auth/ws-token", func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := r.Context().Value(auth.UserContextKey).(*auth.Claims)
+			if !ok {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			token, err := tokens.GenerateWithTTL(claims.UserID, claims.Email, claims.DisplayName, time.Minute)
+			if err != nil {
+				http.Error(w, "Unable to create WebSocket token", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"token": token})
+		})
 		r.Post("/api/auth/mfa/setup", userHandler.MFASetup)
 		r.Post("/api/auth/mfa/confirm", userHandler.MFAConfirm)
 		r.Get("/api/notifications", notificationHandler.List)
