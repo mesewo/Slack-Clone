@@ -1,0 +1,30 @@
+FROM golang:1.26.5 AS builder
+WORKDIR /src
+COPY go.work ./go.work
+COPY apps/api ./apps/api
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -o /out/core ./apps/api/cmd/core && \
+    CGO_ENABLED=0 go build -o /out/gateway ./apps/api/cmd/gateway && \
+    CGO_ENABLED=0 go build -o /out/channel-service ./apps/api/services/channel/cmd/channel-service && \
+    CGO_ENABLED=0 go build -o /out/user-service ./apps/api/services/user/cmd/user-service && \
+    CGO_ENABLED=0 go build -o /out/storage-service ./apps/api/services/storage/cmd/storage-service && \
+    CGO_ENABLED=0 go build -o /out/storage-worker ./apps/api/services/storage/cmd/storage-worker
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --no-create-home demo \
+    && mkdir -p /etc/caddy \
+    && chown -R demo:demo /etc/caddy \
+    && chmod 0755 /etc/caddy
+COPY --from=caddy:2 /usr/bin/caddy /usr/bin/caddy
+WORKDIR /app
+COPY --from=builder /out/ /app/
+COPY --chown=demo:demo --chmod=0644 deploy/demo/Caddyfile /etc/caddy/Caddyfile
+COPY --chown=demo:demo --chmod=0755 deploy/demo/start.sh /app/start.sh
+ENV PORT=10000 HOME=/tmp XDG_DATA_HOME=/tmp XDG_CONFIG_HOME=/tmp
+EXPOSE 10000 8080 8081 9090 9091 9092 9093 9094 9192 9193 9194 9195
+USER demo
+ENTRYPOINT ["/app/start.sh"]

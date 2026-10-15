@@ -2,6 +2,7 @@
 **/.env
 **/.env.*
 .git
+apps/web
 
 # Generated artifacts and local tooling.
 **/node_modules

@@ -476,6 +476,14 @@ func main() {
 	if frontendURL == "" {
 		frontendURL = "http://localhost:3000"
 	}
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = frontendURL
+	}
+	originList := strings.Split(allowedOrigins, ",")
+	for i := range originList {
+		originList[i] = strings.TrimSpace(originList[i])
+	}
 	httpAddr := os.Getenv("CORE_HTTP_ADDR")
 	if httpAddr == "" {
 		httpAddr = ":8080"
@@ -485,7 +493,7 @@ func main() {
 	r.Use(telemetry.ChiMiddleware("core"))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{frontendURL},
+		AllowedOrigins:   originList,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		ExposedHeaders:   []string{"Content-Length", "Content-Disposition"},

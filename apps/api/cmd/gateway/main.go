@@ -85,7 +85,11 @@ func main() {
 	if allowedOrigins == "" {
 		allowedOrigins = frontendURL
 	}
-	gateway.ConfigureAllowedOrigins(strings.Split(allowedOrigins, ","))
+	originList := strings.Split(allowedOrigins, ",")
+	for i := range originList {
+		originList[i] = strings.TrimSpace(originList[i])
+	}
+	gateway.ConfigureAllowedOrigins(originList)
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
@@ -166,7 +170,7 @@ func main() {
 	r.Use(telemetry.ChiMiddleware("gateway"))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{frontendURL},
+		AllowedOrigins:   originList,
 		AllowedMethods:   []string{"GET", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
