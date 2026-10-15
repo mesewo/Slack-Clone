@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -79,20 +80,23 @@ func newStore() (*minio.Client, *minio.Client, string) {
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
 	}
+	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
 	accessKey := os.Getenv("S3_ACCESS_KEY")
 	secretKey := os.Getenv("S3_SECRET_KEY")
 	useSSL, _ := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
+	region := os.Getenv("S3_REGION")
 	bucket := os.Getenv("S3_BUCKET")
 	if bucket == "" {
 		bucket = "slack-uploads"
 	}
 	creds := credentials.NewStaticV4(accessKey, secretKey, "")
-	store, err := minio.New(endpoint, &minio.Options{Creds: creds, Secure: useSSL})
+	store, err := minio.New(endpoint, &minio.Options{Creds: creds, Secure: useSSL, Region: region})
 	if err != nil {
 		telemetry.L.Sugar().Fatalf("create MinIO client: %v", err)
 	}
 	presignStore := store
 	if publicEndpoint := os.Getenv("S3_PUBLIC_ENDPOINT"); publicEndpoint != "" && publicEndpoint != endpoint {
+		publicEndpoint = strings.TrimPrefix(strings.TrimPrefix(publicEndpoint, "https://"), "http://")
 		publicUseSSL := useSSL
 		if configuredSSL := os.Getenv("S3_PUBLIC_USE_SSL"); configuredSSL != "" {
 			publicUseSSL, err = strconv.ParseBool(configuredSSL)
@@ -100,7 +104,7 @@ func newStore() (*minio.Client, *minio.Client, string) {
 				telemetry.L.Sugar().Fatalf("parse S3_PUBLIC_USE_SSL: %v", err)
 			}
 		}
-		presignStore, err = minio.New(publicEndpoint, &minio.Options{Creds: creds, Secure: publicUseSSL})
+		presignStore, err = minio.New(publicEndpoint, &minio.Options{Creds: creds, Secure: publicUseSSL, Region: region})
 		if err != nil {
 			telemetry.L.Sugar().Fatalf("create public MinIO URL signer: %v", err)
 		}

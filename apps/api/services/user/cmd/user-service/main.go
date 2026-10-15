@@ -20,6 +20,17 @@ import (
 	"google.golang.org/grpc"
 )
 
+func newRedisClient(addr string) (*redis.Client, error) {
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		options, err := redis.ParseURL(redisURL)
+		if err != nil {
+			return nil, err
+		}
+		return redis.NewClient(options), nil
+	}
+	return redis.NewClient(&redis.Options{Addr: addr}), nil
+}
+
 func main() {
 	telemetry.SetDefault(telemetry.NewLogger("user-service"))
 	defer telemetry.L.Sync()
@@ -57,7 +68,10 @@ func main() {
 		telemetry.L.Sugar().Fatalf("create database pool: %v", err)
 	}
 	defer pool.Close()
-	redisClient := redis.NewClient(&redis.Options{Addr: redisAddress})
+	redisClient, err := newRedisClient(redisAddress)
+	if err != nil {
+		telemetry.L.Sugar().Fatalf("configure Redis: %v", err)
+	}
 	defer redisClient.Close()
 
 	listener, err := net.Listen("tcp", address)

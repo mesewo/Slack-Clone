@@ -39,8 +39,12 @@ type Handler struct {
 	Storage storageclient.Client
 }
 
-func NewStore(endpoint, accessKey, secretKey string, useSSL bool) (*minio.Client, error) {
-	return minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL})
+func NewStore(endpoint, accessKey, secretKey string, useSSL bool, region string) (*minio.Client, error) {
+	return minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+		Region: region,
+	})
 }
 
 func CleanupExpiredUploadSessions(ctx context.Context, queries *database.Queries, store *minio.Client, bucket string, cutoff time.Time) (int64, error) {

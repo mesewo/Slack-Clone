@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/minio/minio-go/v7"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,6 +36,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/notification"
 	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/productivity"
+	"github.com/mesewo/slack-clone/apps/api/internal/redisclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
@@ -252,6 +253,7 @@ func main() {
 	if s3Endpoint == "" {
 		s3Endpoint = "127.0.0.1:9000"
 	}
+	s3Endpoint = strings.TrimPrefix(strings.TrimPrefix(s3Endpoint, "https://"), "http://")
 	s3AccessKey := os.Getenv("S3_ACCESS_KEY")
 	s3SecretKey := os.Getenv("S3_SECRET_KEY")
 	s3Bucket := os.Getenv("S3_BUCKET")
@@ -259,7 +261,8 @@ func main() {
 		s3Bucket = "slack-uploads"
 	}
 	s3UseSSL, _ := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
-	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL)
+	s3Region := os.Getenv("S3_REGION")
+	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL, s3Region)
 	if err != nil {
 		log.Fatalf("failed to create object store client: %v", err)
 	}
@@ -307,7 +310,10 @@ func main() {
 	}()
 	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", Storage: storageClient}
 
-	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	redisClient, err := redisclient.New(redisAddr)
+	if err != nil {
+		log.Fatalf("configure Redis: %v", err)
+	}
 	defer closeResource("Redis client", redisClient.Close)
 	permissionCache := permission.NewCache(redisClient, 60*time.Second)
 

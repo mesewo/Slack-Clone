@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -103,14 +104,16 @@ func newStore() (*minio.Client, string) {
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
 	}
+	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
 	accessKey := os.Getenv("S3_ACCESS_KEY")
 	secretKey := os.Getenv("S3_SECRET_KEY")
 	useSSL, _ := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
+	region := os.Getenv("S3_REGION")
 	bucket := os.Getenv("S3_BUCKET")
 	if bucket == "" {
 		bucket = "slack-uploads"
 	}
-	store, err := minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL})
+	store, err := minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL, Region: region})
 	if err != nil {
 		telemetry.L.Sugar().Fatalf("create MinIO client: %v", err)
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -23,6 +22,7 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/gateway"
+	"github.com/mesewo/slack-clone/apps/api/internal/redisclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/gatewayserver"
 	"github.com/mesewo/slack-clone/services/telemetry"
@@ -101,7 +101,10 @@ func main() {
 	tokens := auth.NewTokenManager([]byte(jwtSecret), 24*time.Hour)
 
 	// Initialize Redis client
-	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	redisClient, err := redisclient.New(redisAddr)
+	if err != nil {
+		log.Fatalf("configure Redis: %v", err)
+	}
 	defer redisClient.Close()
 
 	// Ping Redis to verify connectivity
