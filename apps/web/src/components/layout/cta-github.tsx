@@ -12,7 +12,7 @@ export default function CtaGithub() {
       render={
         <a
           aria-label="View on GitHub"
-          href="https://github.com/mesewo/web"
+          href="https://github.com/mesewo/slack-clone"
           rel="noopener noreferrer"
           target="_blank"
           className="text-muted-foreground hover:text-foreground transition-colors duration-300"

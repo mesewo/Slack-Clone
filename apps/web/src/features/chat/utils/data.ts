@@ -54,28 +54,28 @@ export const initialConversations: Conversation[] = [
         id: 'api-1',
         sender: 'user',
         author: 'You',
-        text: "I'm getting a 429 rate limit error when calling the /api/products endpoint. We're only making about 50 requests per minute.",
+        text: "I’ve set up the new workspace. Can you check whether messages are arriving in real time?",
         timestamp: '09:15'
       },
       {
         id: 'api-2',
         sender: 'contact',
         author: 'Priya',
-        text: "I checked your API key — it's on the Starter tier which has a 30 req/min limit. You'll need the Growth plan for 200 req/min. Would you like me to upgrade it?",
+        text: "I can see them coming through. Channel messages and direct messages are both updating.",
         timestamp: '09:18'
       },
       {
         id: 'api-3',
         sender: 'user',
         author: 'You',
-        text: 'Yes please. Also, is there a way to implement retry logic that respects the Retry-After header?',
+        text: 'Great, thanks. I’ll ask the rest of the team to try the workspace too.',
         timestamp: '09:22'
       },
       {
         id: 'api-4',
         sender: 'contact',
         author: 'Priya',
-        text: "Great question — our SDK handles this automatically if you enable `autoRetry: true` in the config. I'll send you a code snippet.",
+        text: 'Sounds good. Send me any issues you find and I’ll take a look.',
         timestamp: '09:25'
       }
     ],

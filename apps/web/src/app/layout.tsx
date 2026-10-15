@@ -24,29 +24,17 @@ export const metadata: Metadata = {
     default: "Slack Clone",
     template: "%s | Slack Clone",
   },
-  description:
-    "This is a slack clone that I personally worked on to make it appear and function as close as possible.",
+  description: "A self-hosted team messaging app built with Next.js and Go.",
   openGraph: {
     title: "Slack Clone",
-    description:
-      "This is a slack clone that I personally worked on to make it appear and function as close as possible.",
+    description: "A self-hosted team messaging app built with Next.js and Go.",
     siteName: "Slack Clone",
     type: "website",
-    images: [
-      {
-        url: "/shadcn-dashboard.png",
-        width: 3200,
-        height: 1600,
-        alt: "Slack Clone overview page",
-      },
-    ],
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "Slack Clone",
-    description:
-      "This is a slack clone that I personally worked on to make it appear and function as close as possible.",
-    images: ["/shadcn-dashboard.png"],
+    description: "A self-hosted team messaging app built with Next.js and Go.",
   },
 };
 

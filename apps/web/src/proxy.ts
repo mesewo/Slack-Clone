@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export default function middleware(req: NextRequest) {
+export default function proxy(req: NextRequest) {
   if (req.nextUrl.pathname === "/dashboard/workspaces") {
     return NextResponse.redirect(new URL("/workspaces", req.url));
   }

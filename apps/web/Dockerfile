@@ -10,6 +10,7 @@ WORKDIR /app
 
 # Install bun to use bun.lock for dependency resolution
 RUN npm install -g bun
+ENV HUSKY=0
 
 # Copy package-related files to leverage Docker cache
 COPY package.json bun.lock* ./
@@ -35,7 +36,10 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Build-time env vars — override these with --build-arg or in compose.yml
 ARG NEXT_PUBLIC_API_URL=http://localhost:8080
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:8081/ws
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ARG NEXT_PUBLIC_SENTRY_DISABLED=true
+ENV NEXT_PUBLIC_SENTRY_DISABLED=$NEXT_PUBLIC_SENTRY_DISABLED
 
 ENV BUILD_STANDALONE=true
 

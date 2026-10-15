@@ -50,13 +50,13 @@ func main() {
 	}
 	defer pool.Close()
 
-	store, bucket := newStore()
+	store, presignStore, bucket := newStore()
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		telemetry.L.Sugar().Fatalf("listen on %s: %v", address, err)
 	}
 	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(telemetry.UnaryServerInterceptor("storage-service")))
-	storagepb.RegisterStorageServiceServer(grpcServer, server.New(database.New(pool), store, bucket))
+	storagepb.RegisterStorageServiceServer(grpcServer, server.NewWithPresignStore(database.New(pool), store, presignStore, bucket))
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -74,7 +74,7 @@ func main() {
 	}
 }
 
-func newStore() (*minio.Client, string) {
+func newStore() (*minio.Client, *minio.Client, string) {
 	endpoint := os.Getenv("S3_ENDPOINT")
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
@@ -86,9 +86,24 @@ func newStore() (*minio.Client, string) {
 	if bucket == "" {
 		bucket = "slack-uploads"
 	}
-	store, err := minio.New(endpoint, &minio.Options{Creds: credentials.NewStaticV4(accessKey, secretKey, ""), Secure: useSSL})
+	creds := credentials.NewStaticV4(accessKey, secretKey, "")
+	store, err := minio.New(endpoint, &minio.Options{Creds: creds, Secure: useSSL})
 	if err != nil {
 		telemetry.L.Sugar().Fatalf("create MinIO client: %v", err)
 	}
-	return store, bucket
+	presignStore := store
+	if publicEndpoint := os.Getenv("S3_PUBLIC_ENDPOINT"); publicEndpoint != "" && publicEndpoint != endpoint {
+		publicUseSSL := useSSL
+		if configuredSSL := os.Getenv("S3_PUBLIC_USE_SSL"); configuredSSL != "" {
+			publicUseSSL, err = strconv.ParseBool(configuredSSL)
+			if err != nil {
+				telemetry.L.Sugar().Fatalf("parse S3_PUBLIC_USE_SSL: %v", err)
+			}
+		}
+		presignStore, err = minio.New(publicEndpoint, &minio.Options{Creds: creds, Secure: publicUseSSL})
+		if err != nil {
+			telemetry.L.Sugar().Fatalf("create public MinIO URL signer: %v", err)
+		}
+	}
+	return store, presignStore, bucket
 }
