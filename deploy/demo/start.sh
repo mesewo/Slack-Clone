@@ -41,15 +41,16 @@ export DATABASE_URL JWT_SECRET REDIS_URL APP_ENV S3_ACCESS_KEY S3_SECRET_KEY
 
 wait_for_port() {
 	port="$1"
+	timeout="${2:-30}"
 	attempt=0
-	while [ "$attempt" -lt 30 ]; do
+	while [ "$attempt" -lt "$timeout" ]; do
 		if (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
 			return 0
 		fi
 		sleep 1
 		attempt=$((attempt + 1))
 	done
-	echo "timed out waiting for 127.0.0.1:$port" >&2
+	echo "timed out waiting ${timeout}s for 127.0.0.1:$port" >&2
 	exit 1
 }
 
@@ -62,7 +63,7 @@ wait_for_port 9093
 wait_for_port 9094
 
 /app/core &
-wait_for_port 9091
+wait_for_port 9091 75
 
 /app/gateway &
 /usr/bin/caddy run --config /etc/caddy/Caddyfile &
