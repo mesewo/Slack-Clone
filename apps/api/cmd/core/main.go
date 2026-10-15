@@ -253,53 +253,67 @@ func main() {
 	if s3Endpoint == "" {
 		s3Endpoint = "127.0.0.1:9000"
 	}
-	s3Endpoint = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(s3Endpoint), "https://"), "http://"), "/")
-	s3AccessKey := strings.TrimSpace(os.Getenv("S3_ACCESS_KEY"))
-	s3SecretKey := strings.TrimSpace(os.Getenv("S3_SECRET_KEY"))
-	s3Bucket := strings.TrimSpace(os.Getenv("S3_BUCKET"))
+	sanitizeS3 := func(val string) string {
+		val = strings.TrimSpace(val)
+		val = strings.Trim(val, `"'`)
+		val = strings.Trim(val, `/`)
+		return strings.TrimSpace(val)
+	}
+	s3Endpoint = sanitizeS3(s3Endpoint)
+	s3Endpoint = strings.TrimPrefix(strings.TrimPrefix(s3Endpoint, "https://"), "http://")
+	s3Endpoint = strings.Trim(s3Endpoint, "/")
+	s3AccessKey := sanitizeS3(os.Getenv("S3_ACCESS_KEY"))
+	s3SecretKey := sanitizeS3(os.Getenv("S3_SECRET_KEY"))
+	s3Bucket := sanitizeS3(os.Getenv("S3_BUCKET"))
 	if s3Bucket == "" {
 		s3Bucket = "slack-uploads"
 	}
-	s3UseSSL, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv("S3_USE_SSL")))
-	s3Region := strings.Trim(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(os.Getenv("S3_REGION")), "https://"), "http://"), "/")
-	if strings.HasPrefix(s3Region, "s3.") && strings.HasSuffix(s3Region, ".backblazeb2.com") {
-		s3Region = strings.TrimSuffix(strings.TrimPrefix(s3Region, "s3."), ".backblazeb2.com")
-	}
-	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL, s3Region)
-	if err != nil {
-		log.Fatalf("failed to create object store client: %v", err)
-	}
-	// Verify bucket access or create bucket if it does not exist.
-	// Fast-fail on authentication/credential errors rather than looping until deployment timeout.
-	bucketCtx, bucketCancel := context.WithTimeout(ctx, 30*time.Second)
-	for {
-		if exists, checkErr := objectStore.BucketExists(bucketCtx, s3Bucket); checkErr == nil && exists {
-			break
-		} else if checkErr != nil {
-			errStr := checkErr.Error()
-			if strings.Contains(errStr, "The Credential is malformed") || strings.Contains(errStr, "Signature validation failed") || strings.Contains(errStr, "Malformed Access Key") || strings.Contains(errStr, "Access Denied") {
-				bucketCancel()
-				log.Fatalf("failed to access object store bucket %q: %v", s3Bucket, checkErr)
+	s3UseSSL, _ := strconv.ParseBool(sanitizeS3(os.Getenv("S3_USE_SSL")))
+	s3Region := sanitizeS3(os.Getenv("S3_REGION"))
+	if strings.Contains(s3Region, "backblazeb2.com") {
+		parts := strings.Split(s3Region, ".")
+		for _, p := range parts {
+			if strings.HasPrefix(p, "us-") || strings.HasPrefix(p, "eu-") {
+				s3Region = p
+				break
 			}
 		}
-		bucketErr := objectStore.MakeBucket(bucketCtx, s3Bucket, minio.MakeBucketOptions{Region: s3Region})
-		if bucketErr == nil {
-			break
-		}
-		errStr := bucketErr.Error()
-		if strings.Contains(errStr, "The Credential is malformed") || strings.Contains(errStr, "Signature validation failed") || strings.Contains(errStr, "Malformed Access Key") || strings.Contains(errStr, "Access Denied") {
-			bucketCancel()
-			log.Fatalf("failed to initialize object store bucket %q: %v", s3Bucket, bucketErr)
-		}
-		select {
-		case <-bucketCtx.Done():
-			bucketCancel()
-			log.Fatalf("failed to initialize object store bucket %q after waiting for S3: %v", s3Bucket, bucketErr)
-		case <-time.After(time.Second):
-			log.Printf("waiting for object store bucket %q: %v", s3Bucket, bucketErr)
+	}
+	if s3Region == "" && strings.Contains(s3Endpoint, "backblazeb2.com") {
+		parts := strings.Split(s3Endpoint, ".")
+		for _, p := range parts {
+			if strings.HasPrefix(p, "us-") || strings.HasPrefix(p, "eu-") {
+				s3Region = p
+				break
+			}
 		}
 	}
-	bucketCancel()
+	maskedKey := s3AccessKey
+	if len(maskedKey) > 6 {
+		maskedKey = maskedKey[:3] + "..." + maskedKey[len(maskedKey)-3:]
+	}
+	log.Printf("S3 config: endpoint=%q bucket=%q region=%q access_key=%q (len=%d) ssl=%v",
+		s3Endpoint, s3Bucket, s3Region, maskedKey, len(s3AccessKey), s3UseSSL)
+
+	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL, s3Region)
+	if err != nil {
+		log.Printf("warning: failed to create object store client: %v", err)
+	} else {
+		bucketCtx, bucketCancel := context.WithTimeout(ctx, 15*time.Second)
+		defer bucketCancel()
+		exists, checkErr := objectStore.BucketExists(bucketCtx, s3Bucket)
+		if checkErr == nil && exists {
+			log.Printf("object store bucket %q verified", s3Bucket)
+		} else if checkErr == nil && !exists {
+			if makeErr := objectStore.MakeBucket(bucketCtx, s3Bucket, minio.MakeBucketOptions{Region: s3Region}); makeErr != nil {
+				log.Printf("warning: could not create object store bucket %q: %v", s3Bucket, makeErr)
+			} else {
+				log.Printf("object store bucket %q created", s3Bucket)
+			}
+		} else {
+			log.Printf("warning: object store bucket %q check failed: %v (file uploads may be disabled)", s3Bucket, checkErr)
+		}
+	}
 	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 	} else if removed > 0 {
