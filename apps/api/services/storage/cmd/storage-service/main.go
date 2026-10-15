@@ -80,12 +80,15 @@ func newStore() (*minio.Client, *minio.Client, string) {
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
 	}
-	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
-	accessKey := os.Getenv("S3_ACCESS_KEY")
-	secretKey := os.Getenv("S3_SECRET_KEY")
-	useSSL, _ := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
-	region := os.Getenv("S3_REGION")
-	bucket := os.Getenv("S3_BUCKET")
+	endpoint = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(endpoint), "https://"), "http://"), "/")
+	accessKey := strings.TrimSpace(os.Getenv("S3_ACCESS_KEY"))
+	secretKey := strings.TrimSpace(os.Getenv("S3_SECRET_KEY"))
+	useSSL, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv("S3_USE_SSL")))
+	region := strings.Trim(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(os.Getenv("S3_REGION")), "https://"), "http://"), "/")
+	if strings.HasPrefix(region, "s3.") && strings.HasSuffix(region, ".backblazeb2.com") {
+		region = strings.TrimSuffix(strings.TrimPrefix(region, "s3."), ".backblazeb2.com")
+	}
+	bucket := strings.TrimSpace(os.Getenv("S3_BUCKET"))
 	if bucket == "" {
 		bucket = "slack-uploads"
 	}
