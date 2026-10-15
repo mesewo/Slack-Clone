@@ -25,13 +25,23 @@ const maxUploadSize = 100 << 20
 
 type Server struct {
 	storagepb.UnimplementedStorageServiceServer
-	queries *database.Queries
-	store   *minio.Client
-	bucket  string
+	queries      *database.Queries
+	store        *minio.Client
+	presignStore *minio.Client
+	bucket       string
 }
 
 func New(queries *database.Queries, store *minio.Client, bucket string) *Server {
-	return &Server{queries: queries, store: store, bucket: bucket}
+	return NewWithPresignStore(queries, store, store, bucket)
+}
+
+// NewWithPresignStore uses a public-facing S3 endpoint only for URLs returned
+// to browsers. Storage reads and writes continue through the internal client.
+func NewWithPresignStore(queries *database.Queries, store, presignStore *minio.Client, bucket string) *Server {
+	if presignStore == nil {
+		presignStore = store
+	}
+	return &Server{queries: queries, store: store, presignStore: presignStore, bucket: bucket}
 }
 
 func (s *Server) PresignUpload(ctx context.Context, request *storagepb.PresignUploadRequest) (*storagepb.PresignUploadResponse, error) {
@@ -55,7 +65,7 @@ func (s *Server) PresignUpload(ctx context.Context, request *storagepb.PresignUp
 	if _, err := s.queries.CreateUploadSession(ctx, session); err != nil {
 		return nil, status.Error(codes.Internal, "failed to create upload session")
 	}
-	uploadURL, err := s.store.PresignedPutObject(ctx, s.bucket, key, 15*time.Minute)
+	uploadURL, err := s.presignStore.PresignedPutObject(ctx, s.bucket, key, 15*time.Minute)
 	if err != nil {
 		_ = s.queries.UpdateUploadSessionStatus(ctx, sessionID, "FAILED", nil, 0)
 		return nil, status.Error(codes.Internal, "failed to generate upload URL")

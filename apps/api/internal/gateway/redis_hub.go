@@ -2,11 +2,11 @@ package gateway
 
 import (
 	"context"
-	"log"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/mesewo/slack-clone/services/telemetry"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -93,10 +93,10 @@ func (h *RedisHub) BroadcastToChannel(channelID string, message []byte) {
 	subscribers, err := h.GetChannelSubscribers(ctx, channelID)
 	cancel()
 	if err != nil {
-		log.Printf("failed to get channel subscribers from Redis: %v", err)
+		telemetry.L.Sugar().Errorf("failed to get channel subscribers from Redis: %v", err)
 		return
 	}
-	log.Printf("redis broadcast channel=%s subscribers=%d local_users=%d", channelID, len(subscribers), len(h.clients))
+	telemetry.L.Sugar().Infof("redis broadcast channel=%s subscribers=%d local_users=%d", channelID, len(subscribers), len(h.clients))
 
 	// Send to each subscriber's connections on this instance
 	for _, userID := range subscribers {
@@ -138,7 +138,7 @@ func (h *RedisHub) BroadcastPresence(userID string, message []byte) {
 		channelIDs = append(channelIDs, channelID)
 	}
 	if err := iter.Err(); err != nil {
-		log.Printf("failed to scan channel subscriptions: %v", err)
+		telemetry.L.Sugar().Errorf("failed to scan channel subscriptions: %v", err)
 		return
 	}
 

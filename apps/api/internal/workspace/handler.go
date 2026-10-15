@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 type Handler struct {
@@ -401,7 +401,7 @@ func (h *Handler) invalidatePermissionCache(ctx context.Context, workspaceID, us
 		return
 	}
 	if err := h.PermissionCache.Invalidate(ctx, workspaceID, userID); err != nil {
-		log.Printf("permission cache invalidation failed for workspace %s user %s: %v", workspaceID, userID, err)
+		telemetry.L.Sugar().Errorf("permission cache invalidation failed for workspace %s user %s: %v", workspaceID, userID, err)
 	}
 }
 

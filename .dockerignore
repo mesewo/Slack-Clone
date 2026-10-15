@@ -1,0 +1,19 @@
+# Keep local credentials and repository metadata out of Docker build contexts.
+**/.env
+**/.env.*
+.git
+
+# Generated artifacts and local tooling.
+**/node_modules
+**/.next
+**/dist
+**/build
+**/coverage
+**/*.tsbuildinfo
+**/.turbo
+**/.cache
+**/tmp
+**/test-results
+**/playwright-report
+**/*.log
+**/*.exe

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -22,6 +21,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 type Handler struct {
@@ -85,7 +85,7 @@ type AttachmentResponse struct {
 func (h *Handler) attachmentsForMessage(ctx context.Context, messageID uuid.UUID) []AttachmentResponse {
 	attachments, err := h.Queries.ListAttachmentsForMessage(ctx, uuid.NullUUID{UUID: messageID, Valid: true})
 	if err != nil {
-		log.Printf("failed to load attachments for message %s: %v", messageID, err)
+		telemetry.L.Sugar().Errorf("failed to load attachments for message %s: %v", messageID, err)
 		return nil
 	}
 	result := make([]AttachmentResponse, 0, len(attachments))
@@ -134,7 +134,7 @@ func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType 
 		Payload:   payload,
 	})
 	if err != nil {
-		log.Printf("failed to marshal WSEvent: %v", err)
+		telemetry.L.Sugar().Errorf("failed to marshal WSEvent: %v", err)
 		return
 	}
 
@@ -143,9 +143,9 @@ func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType 
 
 	var broadcastErr error
 	for attempt := 0; attempt < 3; attempt++ {
-		log.Printf("broadcasting channel=%s event=%s attempt=%d", channelID, eventType, attempt+1)
+		telemetry.L.Sugar().Infof("broadcasting channel=%s event=%s attempt=%d", channelID, eventType, attempt+1)
 		if _, broadcastErr = h.GatewayClient.Broadcast(ctx, &chatpb.BroadcastRequest{ChannelId: channelID.String(), Payload: event}); broadcastErr == nil {
-			log.Printf("broadcast accepted channel=%s event=%s", channelID, eventType)
+			telemetry.L.Sugar().Infof("broadcast accepted channel=%s event=%s", channelID, eventType)
 			return
 		}
 		if attempt < 2 {
@@ -158,7 +158,7 @@ func (h *Handler) broadcast(ctx context.Context, channelID uuid.UUID, eventType 
 			}
 		}
 	}
-	log.Printf("failed to broadcast to gateway after retries: %v", broadcastErr)
+	telemetry.L.Sugar().Errorf("failed to broadcast to gateway after retries: %v", broadcastErr)
 }
 
 func (h *Handler) indexMessage(ctx context.Context, message database.Message, author string) {
@@ -166,7 +166,7 @@ func (h *Handler) indexMessage(ctx context.Context, message database.Message, au
 		return
 	}
 	if err := h.Search.IndexMessage(ctx, searchpkg.ToDocument(message, author)); err != nil {
-		log.Printf("failed to index message %s: %v", message.ID, err)
+		telemetry.L.Sugar().Errorf("failed to index message %s: %v", message.ID, err)
 	}
 }
 
@@ -206,9 +206,9 @@ func (h *Handler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	if h.ChannelOwners != nil {
 		owner, ownerErr := h.ChannelOwners.GetOwner(r.Context(), channelID.String())
 		if ownerErr != nil {
-			log.Printf("channel owner lookup failed for %s: %v", channelID, ownerErr)
+			telemetry.L.Sugar().Errorf("channel owner lookup failed for %s: %v", channelID, ownerErr)
 		} else {
-			log.Printf("channel %s owned by %s at %s", channelID, owner.NodeID, owner.Address)
+			telemetry.L.Sugar().Infof("channel %s owned by %s at %s", channelID, owner.NodeID, owner.Address)
 		}
 	}
 
@@ -985,7 +985,7 @@ func (h *Handler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.Search != nil {
 		if err := h.Search.DeleteMessage(r.Context(), messageID.String()); err != nil {
-			log.Printf("failed to remove message %s from search index: %v", messageID, err)
+			telemetry.L.Sugar().Errorf("failed to remove message %s from search index: %v", messageID, err)
 		}
 	}
 

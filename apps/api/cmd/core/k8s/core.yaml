@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: core }
+  template:
+    metadata:
+      labels: { app: core }
+    spec:
+      hostAliases:
+        - ip: "192.168.65.254"
+          hostnames: ["host.docker.internal"]
+      containers:
+        - name: core
+          image: slack-clone/core:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }, { containerPort: 9091 }]
+          env:
+            - name: CORE_HTTP_ADDR
+              value: ":8080"
+            - name: CORE_GRPC_ADDR
+              value: "0.0.0.0:9091"
+            - name: CORE_NODE_ID
+              value: core-1
+            - name: CORE_NODE_ADDRESS
+              value: core:9091
+            - name: GATEWAY_GRPC_ADDR
+              value: gateway:9090
+            - name: CHANNEL_GRPC_ADDR
+              value: channel-service:9092
+            - name: USER_GRPC_ADDR
+              value: user-service:9093
+            - name: STORAGE_GRPC_ADDR
+              value: storage-service:9094
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD }
+            - name: DATABASE_URL
+              value: "postgres://postgres:$(POSTGRES_PASSWORD)@host.docker.internal:5432/slack_db?sslmode=disable"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: JWT_SECRET }
+            - name: KAFKA_BROKER_ADDR
+              value: host.docker.internal:19093
+            - name: REDIS_ADDR
+              value: host.docker.internal:6379
+            - name: ELASTICSEARCH_URL
+              value: http://host.docker.internal:9200
+            - name: S3_ENDPOINT
+              value: host.docker.internal:9000
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: S3_ACCESS_KEY }
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef: { name: app-secrets, key: S3_SECRET_KEY }
+            - name: S3_BUCKET
+              value: slack-uploads
+            - name: FRONTEND_URL
+              value: http://localhost:3000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: core
+spec:
+  selector: { app: core }
+  ports:
+    - { name: http, port: 8080, targetPort: 8080 }
+    - { name: grpc, port: 9091, targetPort: 9091 }

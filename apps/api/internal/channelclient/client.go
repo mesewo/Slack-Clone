@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mesewo/slack-clone/apps/api/internal/breaker"
 	"github.com/mesewo/slack-clone/services/contracts/channelpb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,25 +23,59 @@ type Client struct {
 	service channelpb.ChannelServiceClient
 	nodeID  string
 	address string
+	breaker *breaker.CircuitBreaker
 }
 
 func New(service channelpb.ChannelServiceClient, nodeID, address string) *Client {
-	return &Client{service: service, nodeID: nodeID, address: address}
+	return &Client{
+		service: service,
+		nodeID:  nodeID,
+		address: address,
+		breaker: breaker.NewCircuitBreaker(5, 30*time.Second),
+	}
 }
 
 func (c *Client) Join(ctx context.Context) error {
+	if !c.breaker.Allow() {
+		return breaker.ErrOpen
+	}
+	err := c.joinRing(ctx)
+	if err == nil {
+		c.breaker.RecordSuccess()
+	} else if ctx.Err() != nil {
+		c.breaker.AbortProbe()
+	} else {
+		c.breaker.RecordFailure()
+	}
+	return err
+}
+
+func (c *Client) joinRing(ctx context.Context) error {
 	_, err := c.service.JoinRing(ctx, &channelpb.JoinRingRequest{NodeId: c.nodeID, Address: c.address})
 	return err
 }
 
 func (c *Client) Leave(ctx context.Context) error {
+	if !c.breaker.Allow() {
+		return breaker.ErrOpen
+	}
 	_, err := c.service.LeaveRing(ctx, &channelpb.LeaveRingRequest{NodeId: c.nodeID})
+	if err == nil {
+		c.breaker.RecordSuccess()
+	} else if ctx.Err() != nil {
+		c.breaker.AbortProbe()
+	} else {
+		c.breaker.RecordFailure()
+	}
 	return err
 }
 
 // GetOwner re-registers this Core node if the channel service restarted and
 // lost its in-memory ring, then retries the lookup with a bounded wait.
 func (c *Client) GetOwner(ctx context.Context, channelID string) (Owner, error) {
+	if !c.breaker.Allow() {
+		return Owner{}, breaker.ErrOpen
+	}
 	operationCtx, operationCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer operationCancel()
 	var lastErr error
@@ -52,14 +87,16 @@ func (c *Client) GetOwner(ctx context.Context, channelID string) (Owner, error) 
 			if response == nil {
 				return Owner{}, status.Error(codes.Internal, "channel service returned an empty owner response")
 			}
+			c.breaker.RecordSuccess()
 			return Owner{NodeID: response.GetNodeId(), Address: response.GetAddress()}, nil
 		}
 		lastErr = err
 		if status.Code(err) != codes.Unavailable && status.Code(err) != codes.DeadlineExceeded {
+			c.breaker.RecordFailure()
 			return Owner{}, err
 		}
 		joinCtx, cancel := context.WithTimeout(operationCtx, time.Second)
-		joinErr := c.Join(joinCtx)
+		joinErr := c.joinRing(joinCtx)
 		cancel()
 		if joinErr != nil {
 			lastErr = joinErr
@@ -71,9 +108,11 @@ func (c *Client) GetOwner(ctx context.Context, channelID string) (Owner, error) 
 		select {
 		case <-operationCtx.Done():
 			timer.Stop()
+			c.breaker.AbortProbe()
 			return Owner{}, operationCtx.Err()
 		case <-timer.C:
 		}
 	}
+	c.breaker.RecordFailure()
 	return Owner{}, lastErr
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/minio/minio-go/v7"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,6 +36,7 @@ import (
 	"github.com/mesewo/slack-clone/apps/api/internal/notification"
 	"github.com/mesewo/slack-clone/apps/api/internal/permission"
 	"github.com/mesewo/slack-clone/apps/api/internal/productivity"
+	"github.com/mesewo/slack-clone/apps/api/internal/redisclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/coreserver"
 	searchpkg "github.com/mesewo/slack-clone/apps/api/internal/search"
@@ -49,6 +50,7 @@ import (
 	"github.com/mesewo/slack-clone/services/contracts/storagepb"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 func closeKafkaConsumers(consumers ...interface{ Close() error }) {
@@ -86,6 +88,8 @@ func syncSearchDocument(ctx context.Context, queries *database.Queries, searchCl
 }
 
 func main() {
+	telemetry.SetDefault(telemetry.NewLogger("core"))
+	defer telemetry.L.Sync()
 	_ = godotenv.Load()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -249,6 +253,7 @@ func main() {
 	if s3Endpoint == "" {
 		s3Endpoint = "127.0.0.1:9000"
 	}
+	s3Endpoint = strings.TrimPrefix(strings.TrimPrefix(s3Endpoint, "https://"), "http://")
 	s3AccessKey := os.Getenv("S3_ACCESS_KEY")
 	s3SecretKey := os.Getenv("S3_SECRET_KEY")
 	s3Bucket := os.Getenv("S3_BUCKET")
@@ -256,15 +261,32 @@ func main() {
 		s3Bucket = "slack-uploads"
 	}
 	s3UseSSL, _ := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
-	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL)
+	s3Region := os.Getenv("S3_REGION")
+	objectStore, err := upload.NewStore(s3Endpoint, s3AccessKey, s3SecretKey, s3UseSSL, s3Region)
 	if err != nil {
 		log.Fatalf("failed to create object store client: %v", err)
 	}
-	if err := objectStore.MakeBucket(context.Background(), s3Bucket, minio.MakeBucketOptions{}); err != nil {
-		if exists, checkErr := objectStore.BucketExists(context.Background(), s3Bucket); checkErr != nil || !exists {
-			log.Fatalf("failed to initialize object store bucket: %v", err)
+	// Compose's depends_on only starts MinIO; it does not wait until MinIO is
+	// ready to accept requests. Retry bucket initialization so a cold stack
+	// start does not terminate Core before it binds the HTTP API on :8080.
+	bucketCtx, bucketCancel := context.WithTimeout(ctx, time.Minute)
+	for {
+		bucketErr := objectStore.MakeBucket(bucketCtx, s3Bucket, minio.MakeBucketOptions{})
+		if bucketErr == nil {
+			break
+		}
+		if exists, checkErr := objectStore.BucketExists(bucketCtx, s3Bucket); checkErr == nil && exists {
+			break
+		}
+		select {
+		case <-bucketCtx.Done():
+			bucketCancel()
+			log.Fatalf("failed to initialize object store bucket %q after waiting for MinIO: %v", s3Bucket, bucketErr)
+		case <-time.After(time.Second):
+			log.Printf("waiting for object store bucket %q: %v", s3Bucket, bucketErr)
 		}
 	}
+	bucketCancel()
 	if removed, err := upload.CleanupExpiredUploadSessions(context.Background(), queries, objectStore, s3Bucket, time.Now()); err != nil {
 		log.Printf("warning: failed to clean orphaned upload sessions: %v", err)
 	} else if removed > 0 {
@@ -288,7 +310,10 @@ func main() {
 	}()
 	uploadHandler := &upload.Handler{Queries: queries, Store: objectStore, Bucket: s3Bucket, BaseURL: "", Storage: storageClient}
 
-	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	redisClient, err := redisclient.New(redisAddr)
+	if err != nil {
+		log.Fatalf("configure Redis: %v", err)
+	}
 	defer closeResource("Redis client", redisClient.Close)
 	permissionCache := permission.NewCache(redisClient, 60*time.Second)
 
@@ -432,7 +457,8 @@ func main() {
 		},
 	)
 
-	grpcServer := grpc.NewServer()
+	// Keep telemetry first in the unary chain so panics are recovered before any later interceptors.
+	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(telemetry.UnaryServerInterceptor("core")))
 	chatpb.RegisterCoreServiceServer(grpcServer, &coreserver.Server{Queries: queries})
 
 	lis, err := net.Listen("tcp", coreGRPCAddr)
@@ -456,6 +482,7 @@ func main() {
 	}
 
 	r := chi.NewRouter()
+	r.Use(telemetry.ChiMiddleware("core"))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{frontendURL},
@@ -466,6 +493,7 @@ func main() {
 	}))
 	r.Get("/healthz", corehealth.LivenessHandler)
 	r.Get("/readyz", corehealth.ReadinessHandler(pool, 2*time.Second))
+	r.Handle("/metrics", telemetry.MetricsHandler())
 
 	r.Post("/api/auth/register", userHandler.Register)
 	r.Post("/api/auth/login", userHandler.Login)

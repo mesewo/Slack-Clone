@@ -8,4 +8,5 @@ use (
 	./apps/api/services/database
 	./apps/api/services/user
 	./apps/api/services/storage
+	./apps/api/services/telemetry
 )

@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: channel-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: channel-service }
+  template:
+    metadata:
+      labels: { app: channel-service }
+    spec:
+      hostAliases:
+        - ip: "192.168.65.254"
+          hostnames: ["host.docker.internal"]
+      containers:
+        - name: channel-service
+          image: slack-clone/channel-service:dev
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 9092 }, { containerPort: 9192 }]
+          env:
+            - { name: CHANNEL_GRPC_ADDR, value: ":9092" }
+            - { name: CHANNEL_METRICS_ADDR, value: ":9192" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: channel-service
+spec:
+  selector: { app: channel-service }
+  ports:
+    - { name: grpc, port: 9092, targetPort: 9092 }
+    - { name: metrics, port: 9192, targetPort: 9192 }

@@ -15,7 +15,6 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/joho/godotenv"
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -23,8 +22,10 @@ import (
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/gateway"
+	"github.com/mesewo/slack-clone/apps/api/internal/redisclient"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/chatpb"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpc/gatewayserver"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 type observedCoreClient struct {
@@ -58,6 +59,8 @@ func (c observedCoreClient) GetUserChannels(ctx context.Context, req *chatpb.Get
 }
 
 func main() {
+	telemetry.SetDefault(telemetry.NewLogger("gateway"))
+	defer telemetry.L.Sync()
 	_ = godotenv.Load()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -98,7 +101,10 @@ func main() {
 	tokens := auth.NewTokenManager([]byte(jwtSecret), 24*time.Hour)
 
 	// Initialize Redis client
-	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	redisClient, err := redisclient.New(redisAddr)
+	if err != nil {
+		log.Fatalf("configure Redis: %v", err)
+	}
 	defer redisClient.Close()
 
 	// Ping Redis to verify connectivity
@@ -139,7 +145,8 @@ func main() {
 	coreClient := observedCoreClient{client: chatpb.NewCoreServiceClient(coreConn), conn: coreConn, target: coreAddr}
 
 	// gRPC server: Core calls this to push events to connected clients.
-	grpcServer := grpc.NewServer()
+	// Keep telemetry first in the unary chain so panics are recovered before any later interceptors.
+	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(telemetry.UnaryServerInterceptor("gateway")))
 	chatpb.RegisterGatewayServiceServer(grpcServer, &gatewayserver.Server{Hub: hubInterface})
 
 	lis, err := net.Listen("tcp", gatewayGRPCAddr)
@@ -156,6 +163,7 @@ func main() {
 	// HTTP server: just the WebSocket upgrade now - auth, channels, and
 	// messages all live in Core.
 	r := chi.NewRouter()
+	r.Use(telemetry.ChiMiddleware("gateway"))
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{frontendURL},
@@ -165,6 +173,7 @@ func main() {
 	}))
 	r.Get("/healthz", gateway.LivenessHandler)
 	r.Get("/readyz", gateway.ReadinessHandler(coreClient, 2*time.Second))
+	r.Handle("/metrics", telemetry.MetricsHandler())
 
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 		if redisClient != nil && redisPresence != nil {

@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/mesewo/slack-clone/apps/api/internal/breaker"
 )
 
 func TestDispatcherRetriesSignsOpensAndRecovers(t *testing.T) {
@@ -49,8 +51,8 @@ func TestDispatcherRetriesSignsOpensAndRecovers(t *testing.T) {
 	if got := requests.Load(); got != maxAttempts {
 		t.Fatalf("requests after failed Send = %d, want %d attempts", got, maxAttempts)
 	}
-	breaker := dispatcher.breakerFor(receiver.URL)
-	if got := breaker.State(); got != CircuitOpen {
+	cb := dispatcher.breakerFor(receiver.URL)
+	if got := cb.State(); got != breaker.CircuitOpen {
 		t.Fatalf("breaker state after threshold failures = %v, want open", got)
 	}
 	if err := dispatcher.Send(context.Background(), receiver.URL, secret, payload); !errors.Is(err, ErrCircuitOpen) {
@@ -61,16 +63,14 @@ func TestDispatcherRetriesSignsOpensAndRecovers(t *testing.T) {
 	}
 
 	status.Store(http.StatusNoContent)
-	breaker.mu.Lock()
-	breaker.now = func() time.Time { return time.Now().Add(time.Second) }
-	breaker.mu.Unlock()
+	time.Sleep(50 * time.Millisecond)
 	if err := dispatcher.Send(context.Background(), receiver.URL, secret, payload); err != nil {
 		t.Fatalf("Send after reset window: %v", err)
 	}
 	if got := requests.Load(); got != maxAttempts+1 {
 		t.Fatalf("requests after successful probe = %d, want %d", got, maxAttempts+1)
 	}
-	if got := breaker.State(); got != CircuitClosed {
+	if got := cb.State(); got != breaker.CircuitClosed {
 		t.Fatalf("breaker state after successful probe = %v, want closed", got)
 	}
 }

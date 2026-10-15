@@ -1,10 +1,8 @@
 package message
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -16,10 +14,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/mesewo/slack-clone/apps/api/internal/auth"
 	"github.com/mesewo/slack-clone/apps/api/internal/channelclient"
 	"github.com/mesewo/slack-clone/services/database"
+	"github.com/mesewo/slack-clone/services/telemetry"
 )
 
 func TestSendMessageConsultsChannelOwnerServiceAfterMembershipCheck(t *testing.T) {
@@ -31,10 +32,11 @@ func TestSendMessageConsultsChannelOwnerServiceAfterMembershipCheck(t *testing.T
 		ChannelOwners: owners,
 	}
 
-	var logs bytes.Buffer
-	previousWriter := log.Writer()
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(previousWriter) })
+	core, observedLogs := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	previousLogger := telemetry.L
+	telemetry.SetDefault(logger)
+	t.Cleanup(func() { telemetry.SetDefault(previousLogger) })
 
 	router := chi.NewRouter()
 	router.Post("/channels/{channelID}/messages", func(w http.ResponseWriter, r *http.Request) {
@@ -52,8 +54,8 @@ func TestSendMessageConsultsChannelOwnerServiceAfterMembershipCheck(t *testing.T
 	if owners.channelID != channelID.String() {
 		t.Fatalf("owner lookup channel ID = %q, want %q", owners.channelID, channelID)
 	}
-	if !strings.Contains(logs.String(), "channel "+channelID.String()+" owned by core-test at 127.0.0.1:9091") {
-		t.Fatalf("owner lookup log missing; logs: %s", logs.String())
+	if observedLogs.FilterMessageSnippet("channel "+channelID.String()+" owned by core-test at 127.0.0.1:9091").Len() == 0 {
+		t.Fatalf("owner lookup log missing; logs: %v", observedLogs.All())
 	}
 }
 

@@ -2,7 +2,9 @@ package userclient
 
 import (
 	"context"
+	"time"
 
+	"github.com/mesewo/slack-clone/apps/api/internal/breaker"
 	"github.com/mesewo/slack-clone/apps/api/internal/rpcretry"
 	"github.com/mesewo/slack-clone/services/contracts/userpb"
 )
@@ -18,36 +20,37 @@ type Client interface {
 
 type retryingClient struct {
 	service userpb.UserServiceClient
+	breaker *breaker.CircuitBreaker
 }
 
 // New wraps the generated client with bounded retries for transient service
 // restarts, matching Core's channelclient retry policy.
 func New(service userpb.UserServiceClient) Client {
-	return &retryingClient{service: service}
+	return &retryingClient{service: service, breaker: breaker.NewCircuitBreaker(5, 30*time.Second)}
 }
 
 func (c *retryingClient) Register(ctx context.Context, req *userpb.RegisterRequest) (*userpb.AuthResponse, error) {
-	return rpcretry.Do(ctx, func(ctx context.Context) (*userpb.AuthResponse, error) { return c.service.Register(ctx, req) })
+	return rpcretry.Do(ctx, c.breaker, func(ctx context.Context) (*userpb.AuthResponse, error) { return c.service.Register(ctx, req) })
 }
 
 func (c *retryingClient) Login(ctx context.Context, req *userpb.LoginRequest) (*userpb.AuthResponse, error) {
-	return rpcretry.Do(ctx, func(ctx context.Context) (*userpb.AuthResponse, error) { return c.service.Login(ctx, req) })
+	return rpcretry.Do(ctx, c.breaker, func(ctx context.Context) (*userpb.AuthResponse, error) { return c.service.Login(ctx, req) })
 }
 
 func (c *retryingClient) MFASetup(ctx context.Context, req *userpb.MFASetupRequest) (*userpb.MFASetupResponse, error) {
-	return rpcretry.Do(ctx, func(ctx context.Context) (*userpb.MFASetupResponse, error) {
+	return rpcretry.Do(ctx, c.breaker, func(ctx context.Context) (*userpb.MFASetupResponse, error) {
 		return c.service.MFASetup(ctx, req)
 	})
 }
 
 func (c *retryingClient) MFAConfirm(ctx context.Context, req *userpb.MFAConfirmRequest) (*userpb.MFAConfirmResponse, error) {
-	return rpcretry.Do(ctx, func(ctx context.Context) (*userpb.MFAConfirmResponse, error) {
+	return rpcretry.Do(ctx, c.breaker, func(ctx context.Context) (*userpb.MFAConfirmResponse, error) {
 		return c.service.MFAConfirm(ctx, req)
 	})
 }
 
 func (c *retryingClient) MFAChallenge(ctx context.Context, req *userpb.MFAChallengeRequest) (*userpb.AuthResponse, error) {
-	return rpcretry.Do(ctx, func(ctx context.Context) (*userpb.AuthResponse, error) {
+	return rpcretry.Do(ctx, c.breaker, func(ctx context.Context) (*userpb.AuthResponse, error) {
 		return c.service.MFAChallenge(ctx, req)
 	})
 }

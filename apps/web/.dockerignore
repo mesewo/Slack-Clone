@@ -1,0 +1,17 @@
+# Do not send local credentials or generated artifacts to the image build.
+.env
+.env.*
+!.env.example
+node_modules
+.next
+out
+dist
+build
+coverage
+*.tsbuildinfo
+.turbo
+.cache
+test-results
+playwright-report
+.git
+.vercel
