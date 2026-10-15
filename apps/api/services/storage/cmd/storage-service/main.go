@@ -80,15 +80,44 @@ func newStore() (*minio.Client, *minio.Client, string) {
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
 	}
-	endpoint = strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(endpoint), "https://"), "http://"), "/")
-	accessKey := strings.TrimSpace(os.Getenv("S3_ACCESS_KEY"))
-	secretKey := strings.TrimSpace(os.Getenv("S3_SECRET_KEY"))
-	useSSL, _ := strconv.ParseBool(strings.TrimSpace(os.Getenv("S3_USE_SSL")))
-	region := strings.Trim(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(os.Getenv("S3_REGION")), "https://"), "http://"), "/")
-	if strings.HasPrefix(region, "s3.") && strings.HasSuffix(region, ".backblazeb2.com") {
-		region = strings.TrimSuffix(strings.TrimPrefix(region, "s3."), ".backblazeb2.com")
+	sanitizeS3 := func(val string) string {
+		val = strings.TrimSpace(val)
+		val = strings.Trim(val, `"'`)
+		val = strings.Trim(val, `/`)
+		fields := strings.Fields(val)
+		if len(fields) > 0 {
+			val = fields[0]
+		}
+		val = strings.Trim(val, `"'`)
+		val = strings.Trim(val, `/`)
+		return strings.TrimSpace(val)
 	}
-	bucket := strings.TrimSpace(os.Getenv("S3_BUCKET"))
+	endpoint = sanitizeS3(endpoint)
+	endpoint = strings.TrimPrefix(strings.TrimPrefix(endpoint, "https://"), "http://")
+	endpoint = strings.Trim(endpoint, "/")
+	accessKey := sanitizeS3(os.Getenv("S3_ACCESS_KEY"))
+	secretKey := sanitizeS3(os.Getenv("S3_SECRET_KEY"))
+	useSSL, _ := strconv.ParseBool(sanitizeS3(os.Getenv("S3_USE_SSL")))
+	region := sanitizeS3(os.Getenv("S3_REGION"))
+	if strings.Contains(region, "backblazeb2.com") {
+		parts := strings.Split(region, ".")
+		for _, p := range parts {
+			if strings.HasPrefix(p, "us-") || strings.HasPrefix(p, "eu-") {
+				region = p
+				break
+			}
+		}
+	}
+	if region == "" && strings.Contains(endpoint, "backblazeb2.com") {
+		parts := strings.Split(endpoint, ".")
+		for _, p := range parts {
+			if strings.HasPrefix(p, "us-") || strings.HasPrefix(p, "eu-") {
+				region = p
+				break
+			}
+		}
+	}
+	bucket := sanitizeS3(os.Getenv("S3_BUCKET"))
 	if bucket == "" {
 		bucket = "slack-uploads"
 	}

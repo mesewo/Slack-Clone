@@ -257,6 +257,12 @@ func main() {
 		val = strings.TrimSpace(val)
 		val = strings.Trim(val, `"'`)
 		val = strings.Trim(val, `/`)
+		fields := strings.Fields(val)
+		if len(fields) > 0 {
+			val = fields[0]
+		}
+		val = strings.Trim(val, `"'`)
+		val = strings.Trim(val, `/`)
 		return strings.TrimSpace(val)
 	}
 	s3Endpoint = sanitizeS3(s3Endpoint)

@@ -13,13 +13,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 go build -o /out/storage-worker ./apps/api/services/storage/cmd/storage-worker
 
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends bash ca-certificates libcap2-bin \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home demo \
     && mkdir -p /etc/caddy \
     && chown -R demo:demo /etc/caddy \
     && chmod 0755 /etc/caddy
 COPY --from=caddy:2 /usr/bin/caddy /usr/bin/caddy
+RUN setcap -r /usr/bin/caddy && chmod 0755 /usr/bin/caddy
 WORKDIR /app
 COPY --from=builder /out/ /app/
 COPY --chown=demo:demo --chmod=0644 deploy/demo/Caddyfile /etc/caddy/Caddyfile
