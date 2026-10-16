@@ -1,5 +1,7 @@
 import { apiClient } from "@/lib/axios";
 
+const API_UPLOAD_FALLBACK_LIMIT = 8 * 1024 * 1024;
+
 export interface ChatMessage {
   id: string;
   channel_id: string;
@@ -284,14 +286,20 @@ export const messageService = {
         },
       });
     } catch (error) {
-      let storageHost = "the configured object storage endpoint";
+      let storageOrigin = "the configured object storage endpoint";
       try {
-        storageHost = new URL(presign.data.upload_url).hostname;
+        storageOrigin = new URL(presign.data.upload_url).origin;
       } catch {
         // Keep the message useful if the configured upload URL is malformed.
       }
+      if (file.size > API_UPLOAD_FALLBACK_LIMIT) {
+        throw new Error(
+          `Direct upload to ${storageOrigin} was blocked for ${file.name}. The API fallback is limited to files up to 8 MB; this deployment rejected the larger request with HTTP 413. Add a Backblaze bucket CORS rule allowing ${window.location.origin} to PUT objects with the Content-Type header.`,
+          { cause: error },
+        );
+      }
       try {
-        // Small/medium files can still be uploaded through the API if the
+        // Small files can still be uploaded through the API if the
         // browser cannot reach the bucket (for example, before its CORS rule is set).
         return await uploadLegacy();
       } catch (fallbackError) {
@@ -299,7 +307,7 @@ export const messageService = {
           ? fallbackError.message
           : "unknown API error";
         throw new Error(
-          `Upload failed for ${file.name}. The browser could not reach ${storageHost}, and the API fallback failed (${fallbackDetail}). Check HTTPS, bucket CORS for ${window.location.origin} (PUT and Content-Type), and the API service logs.`,
+          `Upload failed for ${file.name}. The browser could not reach ${storageOrigin}, and the API fallback failed (${fallbackDetail}). Check HTTPS, bucket CORS for ${window.location.origin} (PUT and Content-Type), and the API service logs.`,
           { cause: fallbackError ?? error },
         );
       }
