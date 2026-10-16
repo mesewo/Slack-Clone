@@ -13,6 +13,7 @@ export type Message = {
   id: string;
   sender: "user" | "contact"; // 'user' = you; 'contact' = any other channel member
   author: string;
+  userId?: string | null;
   text: string;
   timestamp: string;
   createdAt?: string;

@@ -136,6 +136,22 @@ export function WorkspaceChatView() {
     );
   };
 
+  const handleStartDM = useCallback(
+    async (targetUserId: string) => {
+      if (!targetUserId || targetUserId === currentUserId) return;
+      try {
+        const dmId = await createDM(targetUserId);
+        if (dmId) {
+          openConversation(dmId);
+        }
+      } catch (error) {
+        console.error("Failed to start DM:", error);
+        toast.error("Could not start direct message");
+      }
+    },
+    [currentUserId, createDM, params.workspaceId, selectConversation, router],
+  );
+
   if (authLoading) return <WorkspaceLoading />;
 
   if (!user) {
@@ -247,6 +263,7 @@ export function WorkspaceChatView() {
           activeConversation.kind === "channel" &&
           (workspaceRole === "OWNER" || workspaceRole === "ADMIN")
         }
+        onStartDM={handleStartDM}
       />
       {parentMessage && <ThreadPanel parentMessage={parentMessage} />}
     </div>

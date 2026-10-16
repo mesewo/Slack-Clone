@@ -8,6 +8,7 @@ import { RichMessageEditor, type RichMessageEditorHandle } from "./RichMessageEd
 import type { Attachment } from "../utils/types";
 import { toast } from "sonner";
 import { IconAt, IconMoodSmile } from "@tabler/icons-react";
+import { EmojiPicker } from "./emoji-picker";
 
 // File upload validation constants
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
@@ -72,78 +73,6 @@ const validateFiles = (
   return { valid, errors };
 };
 
-const emojiOptions = [
-  "👍",
-  "🎉",
-  "✅",
-  "🔥",
-  "🚀",
-  "🎯",
-  "❤️",
-  "👏",
-  "🙌",
-  "😄",
-  "😍",
-  "😎",
-  "😂",
-  "🤔",
-  "💡",
-  "😮",
-  "🎁",
-  "📌",
-  "💬",
-  "👀",
-  "⚡",
-  "🥳",
-  "😢",
-  "🤣",
-  "🥰",
-  "🤩",
-  "🤯",
-  "🤗",
-  "😴",
-  "😡",
-  "🤷",
-  "🙈",
-  "💀",
-  "👻",
-  "🤖",
-  "🍕",
-  "🍔",
-  "🍻",
-  "☕",
-  "🌈",
-  "☀️",
-  "🌙",
-  "🌟",
-  "💎",
-  "🎵",
-  "🎮",
-  "📎",
-  "🔔",
-  "📈",
-  "🛠️",
-  "⏳",
-  "❗",
-  "❓",
-];
-
-const emojiAliases: Record<string, string> = {
-  "👍": "thumbs up like",
-  "🎉": "party celebrate",
-  "✅": "check done yes",
-  "🔥": "fire hot",
-  "🚀": "rocket launch",
-  "❤️": "heart love",
-  "😂": "laugh funny joy",
-  "😊": "smile happy",
-  "🤔": "thinking",
-  "😮": "surprised",
-  "😢": "sad cry",
-  "👏": "clap applause",
-  "👀": "eyes look",
-  "💡": "idea lightbulb",
-};
 
 interface MessageComposerProps {
   draft: string;
@@ -178,7 +107,6 @@ export function MessageComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<RichMessageEditorHandle>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [emojiSearch, setEmojiSearch] = useState("");
   const [attachOpen, setAttachOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduledFor, setScheduledFor] = useState("");
@@ -393,43 +321,14 @@ export function MessageComposer({
                 <IconMoodSmile className="size-5" aria-hidden="true" />
               </button>
               {emojiOpen && (
-                <div className="absolute bottom-10 left-0 z-20 w-48 rounded-xl border border-border/70 bg-popover p-1.5 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={() => setEmojiOpen(false)}
-                    className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
-                    aria-label="Close emoji picker"
-                  >
-                    <Icons.close className="size-3" />
-                  </button>
-                  <input
-                    value={emojiSearch}
-                    onChange={(event) => setEmojiSearch(event.target.value)}
-                    placeholder="Search emoji"
-                    aria-label="Search emoji"
-                    className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 pr-7 text-xs outline-none"
+                <div className="absolute bottom-10 left-0 z-30">
+                  <EmojiPicker
+                    onSelect={(emoji) => {
+                      insertEmoji(emoji);
+                      setEmojiOpen(false);
+                    }}
+                    onClose={() => setEmojiOpen(false)}
                   />
-                  <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
-                    {emojiOptions
-                      .filter(
-                        (emoji) =>
-                          !emojiSearch ||
-                          `${emoji} ${emojiAliases[emoji] || ""}`
-                            .toLowerCase()
-                            .includes(emojiSearch.toLowerCase()),
-                      )
-                      .map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => insertEmoji(emoji)}
-                          className="hover:bg-accent/70 flex h-7 w-7 items-center justify-center rounded-md text-base transition"
-                          aria-label={`Insert ${emoji}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-                  </div>
                 </div>
               )}
             </div>

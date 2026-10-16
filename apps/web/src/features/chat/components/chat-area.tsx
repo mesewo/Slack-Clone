@@ -37,6 +37,7 @@ interface ChatAreaProps {
   onSchedule: (scheduledFor: string) => Promise<void>;
   typingUserCount: number;
   canManageChannel?: boolean;
+  onStartDM?: (userId: string) => void;
 }
 
 export function ChatArea({
@@ -62,6 +63,7 @@ export function ChatArea({
   onSchedule,
   typingUserCount,
   canManageChannel,
+  onStartDM,
 }: ChatAreaProps) {
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -466,6 +468,7 @@ export function ChatArea({
                       onTogglePin={togglePin}
                       pinTargetLabel={conversation.kind === "dm" ? "conversation" : "channel"}
                       compact={compact}
+                      onStartDM={onStartDM}
                     />
                   </div>
                 );

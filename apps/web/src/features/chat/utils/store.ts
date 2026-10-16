@@ -41,6 +41,7 @@ function toUIMessage(m: ChatMessage, currentUserId: string): Message {
     id: m.id,
     sender: isOwn ? "user" : "contact",
     author: isOwn ? "You" : m.author_name || "Unknown",
+    userId: m.user_id ?? undefined,
     text: m.content,
     timestamp: formatTime(m.created_at),
     createdAt: m.created_at,

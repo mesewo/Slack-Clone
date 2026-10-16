@@ -12,134 +12,9 @@ import type { Message } from "../utils/types";
 import { productivityService } from "@/features/workspace/services/productivityService";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RichMessageEditor } from "./RichMessageEditor";
-
-const reactionChoices = Array.from(
-  new Set([
-    "👍",
-    "👎",
-    "👏",
-    "🙌",
-    "🙏",
-    "💪",
-    "🤝",
-    "👀",
-    "❤️",
-    "🧡",
-    "💛",
-    "💚",
-    "💙",
-    "💜",
-    "🖤",
-    "🤍",
-    "💔",
-    "🔥",
-    "✨",
-    "⭐",
-    "✅",
-    "❌",
-    "💯",
-    "🎉",
-    "🎊",
-    "🚀",
-    "💡",
-    "🎯",
-    "🏆",
-    "😂",
-    "🤣",
-    "😅",
-    "😊",
-    "😍",
-    "🥰",
-    "😘",
-    "😎",
-    "🤔",
-    "😮",
-    "😢",
-    "😭",
-    "😡",
-    "🤯",
-    "🤗",
-    "🥳",
-    "😴",
-    "🤷",
-    "🙈",
-    "💀",
-    "👻",
-    "🤖",
-    "🍕",
-    "🍔",
-    "🍻",
-    "☕",
-    "🌈",
-    "☀️",
-    "🌙",
-    "🐶",
-    "🐱",
-    "🦄",
-    "🌟",
-    "💎",
-    "🎵",
-    "🎮",
-    "📌",
-    "📎",
-    "🔒",
-    "🔑",
-    "⚡",
-    "❗",
-    "❓",
-    "💬",
-    "📣",
-    "🙋",
-    "💖",
-    "💗",
-    "💓",
-    "💞",
-    "💘",
-    "💝",
-    "😇",
-    "🤩",
-    "😋",
-    "😜",
-    "🤪",
-    "😏",
-    "😬",
-    "😱",
-    "🤫",
-    "🫡",
-    "🫶",
-    "🌻",
-    "🌸",
-    "🍀",
-    "🎁",
-    "🎈",
-    "🥇",
-    "🥈",
-    "🥉",
-    "🔔",
-    "📈",
-    "🛠️",
-    "✅",
-    "⏳",
-    "🆘",
-  ]),
-);
-
-const reactionAliases: Record<string, string> = {
-  "👍": "thumbs up like",
-  "🎉": "party celebrate",
-  "✅": "check done yes",
-  "🔥": "fire hot",
-  "🚀": "rocket launch",
-  "❤️": "heart love",
-  "😂": "laugh funny",
-  "😊": "smile happy",
-  "🤔": "thinking",
-  "😮": "surprised",
-  "😢": "sad cry",
-  "👏": "clap applause",
-  "👀": "eyes look",
-  "💡": "idea lightbulb",
-};
+import { IconMoodSmile } from "@tabler/icons-react";
+import { EmojiPicker } from "./emoji-picker";
+import { getFrequentlyUsedEmojis, trackEmojiUsage } from "../utils/emoji-frequency";
 
 function renderFormattedText(text: string): React.ReactNode[] {
   const normalizedText = text.replace(/<u>(.*?)<\/u>/g, "__$1__");
@@ -234,6 +109,7 @@ interface MessageBubbleProps {
   onTogglePin?: (messageId: string) => Promise<void>;
   pinTargetLabel?: string;
   compact?: boolean;
+  onStartDM?: (userId: string) => void;
 }
 
 export function MessageBubble({
@@ -249,6 +125,7 @@ export function MessageBubble({
   onTogglePin,
   pinTargetLabel = "channel",
   compact = false,
+  onStartDM,
 }: MessageBubbleProps) {
   const shouldReduceMotion = useReducedMotion();
   const isUser = message.sender === "user";
@@ -256,9 +133,21 @@ export function MessageBubble({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
-  const [reactionSearch, setReactionSearch] = useState("");
+  const [quickEmojis, setQuickEmojis] = useState<string[]>(["👍", "❤️", "😂"]);
   const [isSaved, setIsSaved] = useState(false);
   const [editDraft, setEditDraft] = useState(message.text);
+
+  useEffect(() => {
+    const updateQuick = () => {
+      const frequent = getFrequentlyUsedEmojis(3);
+      if (frequent.length > 0) {
+        setQuickEmojis(frequent.map((f) => f.emoji));
+      }
+    };
+    updateQuick();
+    window.addEventListener("emoji_frequency_updated", updateQuick);
+    return () => window.removeEventListener("emoji_frequency_updated", updateQuick);
+  }, []);
 
   const hasMention = /(^|\s)@\w+/.test(message.text);
 
@@ -324,18 +213,20 @@ export function MessageBubble({
       id={`message-${message.id}`}
       data-message-id={message.id}
       aria-label={message.author + " at " + message.timestamp}
-      onClick={(event) => {
-        if ((event.target as HTMLElement).closest("button, input, textarea"))
-          return;
-        openActions();
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        openActions();
-      }}
     >
       {!compact && (
-        <Avatar className="mt-0.5 size-8 shrink-0 rounded-md">
+        <Avatar
+          onClick={() => {
+            if (message.userId && onStartDM && message.userId !== currentUserId) {
+              onStartDM(message.userId);
+            }
+          }}
+          className={cn(
+            "mt-0.5 size-8 shrink-0 rounded-md",
+            message.userId && onStartDM && message.userId !== currentUserId && "cursor-pointer transition-transform hover:scale-105 hover:ring-2 hover:ring-primary/40"
+          )}
+          title={message.userId && onStartDM && message.userId !== currentUserId ? `Direct message ${message.author}` : undefined}
+        >
           <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.65rem] font-semibold">
             {message.author.slice(0, 2).toUpperCase()}
           </AvatarFallback>
@@ -348,15 +239,24 @@ export function MessageBubble({
         )}
       >
         <div className="absolute top-0 right-2 z-10 flex -translate-y-1/2 items-center gap-0.5 rounded-lg border border-border/80 bg-background/95 p-0.5 opacity-0 shadow-md transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
-          <button
-            type="button"
-            title="Reply in thread"
-            aria-label="Reply in thread"
-            onClick={() => onOpenThread(message)}
-            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
-          >
-            <Icons.chat className="size-3.5" />
-          </button>
+          {/* Quick Reaction shortcuts (Slack-style top frequent emojis) */}
+          {quickEmojis.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              title={`React with ${emoji}`}
+              aria-label={`React with ${emoji}`}
+              onClick={() => {
+                trackEmojiUsage(emoji);
+                onToggleReaction(message.id, emoji);
+              }}
+              className="hover:bg-accent focus-visible:ring-ring rounded p-1 text-sm outline-none transition hover:scale-125 focus-visible:ring-2"
+            >
+              {emoji}
+            </button>
+          ))}
+
+          {/* Full Emoji Picker Popover */}
           <Popover open={reactionPickerOpen} onOpenChange={setReactionPickerOpen}>
             <PopoverTrigger render={<button
               type="button"
@@ -366,48 +266,31 @@ export function MessageBubble({
               onClick={() => setReactionPickerOpen((open) => !open)}
               className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
             />}>
-            😊
+              <IconMoodSmile className="size-3.5 text-muted-foreground hover:text-foreground" />
             </PopoverTrigger>
-            <PopoverContent side="top" align="end" sideOffset={8} className="w-64 p-2 shadow-[var(--shadow-popover)]">
-              <button
-                type="button"
-                onClick={() => setReactionPickerOpen(false)}
-                className="text-muted-foreground hover:bg-accent absolute top-1 right-1 rounded p-1"
-                aria-label="Close reaction picker"
-              >
-                <Icons.close className="size-3" />
-              </button>
-              <input
-                value={reactionSearch}
-                onChange={(event) => setReactionSearch(event.target.value)}
-                placeholder="Search emoji"
-                aria-label="Search reaction emoji"
-                className="border-border bg-background mb-1 w-full rounded-md border px-2 py-1 text-xs outline-none"
+            <PopoverContent side="top" align="end" sideOffset={8} className="w-auto p-0 border-none shadow-2xl bg-transparent">
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  onToggleReaction(message.id, emoji);
+                  setReactionPickerOpen(false);
+                }}
+                onClose={() => setReactionPickerOpen(false)}
               />
-              <div className="grid max-h-48 grid-cols-8 gap-1 overflow-y-auto pr-1">
-                {reactionChoices
-                  .filter((emoji) =>
-                    `${emoji} ${reactionAliases[emoji] || ""}`
-                      .toLowerCase()
-                      .includes(reactionSearch.toLowerCase()),
-                  )
-                  .map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      title={`React ${emoji}`}
-                      onClick={() => {
-                        onToggleReaction(message.id, emoji);
-                        setReactionPickerOpen(false);
-                      }}
-                      className="hover:bg-accent flex size-7 items-center justify-center rounded text-lg"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-              </div>
             </PopoverContent>
           </Popover>
+
+          {/* Reply in thread */}
+          <button
+            type="button"
+            title="Reply in thread"
+            aria-label="Reply in thread"
+            onClick={() => onOpenThread(message)}
+            className="hover:bg-accent focus-visible:ring-ring rounded p-1.5 outline-none focus-visible:ring-2"
+          >
+            <Icons.chat className="size-3.5" />
+          </button>
+
+          {/* More message actions */}
           <Popover open={menuOpen} onOpenChange={setMenuOpen}>
             <PopoverTrigger render={<button
               type="button"
@@ -437,12 +320,25 @@ export function MessageBubble({
           </Popover>
         </div>
         {!compact && (
-          <p className="text-foreground text-xs font-bold sm:text-sm">
-            {message.author}{" "}
-            <span className="text-muted-foreground ml-1 text-[0.65rem] font-normal">
+          <div className="flex items-baseline gap-1.5">
+            {message.userId && onStartDM && message.userId !== currentUserId ? (
+              <button
+                type="button"
+                onClick={() => onStartDM(message.userId!)}
+                className="text-foreground hover:underline text-xs font-bold sm:text-sm text-left focus:outline-none"
+                title={`Direct message ${message.author}`}
+              >
+                {message.author}
+              </button>
+            ) : (
+              <span className="text-foreground text-xs font-bold sm:text-sm">
+                {message.author}
+              </span>
+            )}
+            <span className="text-muted-foreground text-[0.65rem] font-normal">
               {message.timestamp}
             </span>
-          </p>
+          </div>
         )}
         {isEditing ? (
           <div className="mt-2 space-y-2">
@@ -547,6 +443,18 @@ export function MessageBubble({
                 </button>
               );
             })}
+            <button
+              type="button"
+              onClick={() => setReactionPickerOpen(true)}
+              aria-label="Add reaction"
+              title="Add reaction"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                isUser ? "border-primary-foreground/30" : "border-border",
+              )}
+            >
+              <IconMoodSmile className="size-3" /> +
+            </button>
           </div>
         )}
       </div>
