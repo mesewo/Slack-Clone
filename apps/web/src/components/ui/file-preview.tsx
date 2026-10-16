@@ -197,88 +197,123 @@ export const FilePreview: FC<FilePreviewProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  // 1. COMPOSE MODE: Compact preview chips with upload spinner and remove button
+  // 1. COMPOSE MODE: Compact preview chips with upload spinner, click preview, and remove button
   if (isComposeMode) {
     return (
-      <div className={cn("flex w-full flex-wrap gap-2 p-1.5", className)}>
-        {files.map((file) => (
-          <div
-            key={file.id}
-            className={cn(
-              "group/file relative flex items-center rounded-xl transition-all",
-              isInverted
-                ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
-                : "bg-muted/90 hover:bg-muted border border-border/60",
-              "max-w-[260px] min-w-[170px] p-2 pr-7 select-none"
-            )}
-          >
-            {/* Uploading Animation Overlay */}
-            {file.isUploading && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-black/55 backdrop-blur-[1px] text-white">
-                <Icons.spinner size={18} className="animate-spin text-white mb-0.5" />
-                <span className="text-[0.62rem] font-medium tracking-wide">Uploading...</span>
-              </div>
-            )}
+      <>
+        <div className={cn("flex w-full flex-wrap gap-2 p-1.5", className)}>
+          {files.map((file) => (
+            <div
+              key={file.id}
+              className={cn(
+                "group/file relative flex items-center rounded-xl transition-all",
+                isInverted
+                  ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
+                  : "bg-muted/90 hover:bg-muted border border-border/60",
+                "max-w-[260px] min-w-[170px] p-2 pr-7 select-none"
+              )}
+            >
+              {/* Uploading Animation Overlay */}
+              {file.isUploading && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-black/55 backdrop-blur-[1px] text-white">
+                  <Icons.spinner size={18} className="animate-spin text-white mb-0.5" />
+                  <span className="text-[0.62rem] font-medium tracking-wide">Uploading...</span>
+                </div>
+              )}
 
-            {onRemove && (
-              <button
-                type="button"
-                onClick={() => onRemove(file.id)}
-                className="absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-muted-foreground/60 hover:bg-muted-foreground text-white cursor-pointer transition"
-                aria-label={`Remove ${file.name}`}
-              >
-                <Icons.close size={11} />
-              </button>
-            )}
+              {onRemove && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(file.id);
+                  }}
+                  className="absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-muted-foreground/60 hover:bg-muted-foreground text-white cursor-pointer transition"
+                  aria-label={`Remove ${file.name}`}
+                >
+                  <Icons.close size={11} />
+                </button>
+              )}
 
-            {file.type.startsWith("image/") && file.url ? (
-              <div className="mr-2.5 shrink-0 overflow-hidden rounded-lg">
-                <Image
-                  src={file.url}
-                  alt={file.name}
-                  width={48}
-                  height={48}
-                  unoptimized
-                  className="size-12 rounded-lg object-cover"
-                />
-              </div>
-            ) : (
-              <div
-                className={cn(
-                  "mr-2.5 flex size-10 items-center justify-center rounded-lg",
-                  isInverted
-                    ? "bg-primary-foreground/10"
-                    : "bg-muted-foreground/10"
-                )}
-              >
-                {getFileIcon(file.type, file.name)}
-              </div>
-            )}
+              {file.type.startsWith("image/") && file.url ? (
+                <div
+                  className="group/thumb relative mr-2.5 shrink-0 cursor-pointer overflow-hidden rounded-lg"
+                  onClick={() => openGalleryForFile(file.id)}
+                  title="Click to preview image"
+                >
+                  <Image
+                    src={file.url}
+                    alt={file.name}
+                    width={48}
+                    height={48}
+                    unoptimized
+                    className="size-12 rounded-lg object-cover transition-transform group-hover/thumb:scale-105"
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/35 opacity-0 transition-opacity group-hover/thumb:opacity-100">
+                    <Icons.media size={14} className="text-white" />
+                  </div>
+                </div>
+              ) : file.type.startsWith("video/") && file.url ? (
+                <button
+                  type="button"
+                  className="group/thumb relative mr-2.5 size-12 shrink-0 cursor-pointer overflow-hidden rounded-lg bg-black"
+                  onClick={() => openGalleryForFile(file.id)}
+                  title="Click to preview video"
+                  aria-label={`Preview ${file.name}`}
+                >
+                  <video src={file.url} muted preload="metadata" className="size-full object-cover" />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/25 text-white transition-colors group-hover/thumb:bg-black/45">
+                    <Icons.video size={18} />
+                  </span>
+                </button>
+              ) : (
+                <div
+                  className={cn(
+                    "mr-2.5 flex size-10 items-center justify-center rounded-lg",
+                    isInverted
+                      ? "bg-primary-foreground/10"
+                      : "bg-muted-foreground/10"
+                  )}
+                >
+                  {getFileIcon(file.type, file.name)}
+                </div>
+              )}
 
-            <div className="flex min-w-0 flex-1 flex-col">
-              <p
-                className={cn(
-                  "truncate text-xs font-semibold",
-                  isInverted ? "text-primary-foreground" : "text-foreground"
-                )}
-                title={file.name}
-              >
-                {file.name}
-              </p>
-              <span
-                className={cn(
-                  "text-[0.68rem]",
-                  isInverted
-                    ? "text-primary-foreground/70"
-                    : "text-muted-foreground"
-                )}
-              >
-                {formatFileSize(file.size) || getFormattedFileType(file.type, file.name)}
-              </span>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <p
+                  className={cn(
+                    "truncate text-xs font-semibold",
+                    isInverted ? "text-primary-foreground" : "text-foreground"
+                  )}
+                  title={file.name}
+                >
+                  {file.name}
+                </p>
+                <span
+                  className={cn(
+                    "text-[0.68rem]",
+                    isInverted
+                      ? "text-primary-foreground/70"
+                      : "text-muted-foreground"
+                  )}
+                >
+                  {formatFileSize(file.size) || getFormattedFileType(file.type, file.name)}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+
+        {/* Slack Media Gallery / Viewer for compose previews */}
+        {mediaFiles.length > 0 && (
+          <MediaGallery
+            isOpen={galleryOpen}
+            onClose={() => setGalleryOpen(false)}
+            items={mediaFiles}
+            initialIndex={galleryIndex}
+          />
+        )}
+      </>
     );
   }
 
@@ -290,7 +325,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
           const isImage = file.type.startsWith("image/");
           const isVideo = file.type.startsWith("video/");
 
-          // Images: rendered naturally with rounded corners and clean hover download button
+          // Images: rendered naturally with rounded corners and centered hover download button
           if (isImage && file.url) {
             return (
               <div
@@ -305,20 +340,22 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   onClick={() => openGalleryForFile(file.id)}
                   title="Click to view full image"
                 />
-                {/* Top-right hover download button */}
-                <div className="absolute top-2 right-2 opacity-0 group-hover/media:opacity-100 transition-opacity">
-                  <AttachmentDownloadButton
-                    id={file.id}
-                    url={file.url}
-                    filename={file.name}
-                    contentType={file.type}
-                  />
+                {/* Centered hover download button */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover/media:opacity-100 transition-opacity pointer-events-none rounded-lg">
+                  <div className="pointer-events-auto">
+                    <AttachmentDownloadButton
+                      id={file.id}
+                      url={file.url}
+                      filename={file.name}
+                      contentType={file.type}
+                    />
+                  </div>
                 </div>
               </div>
             );
           }
 
-          // Videos: rendered cleanly with controls
+          // Videos: rendered cleanly with centered hover download overlay
           if (isVideo && file.url) {
             return (
               <div
@@ -331,19 +368,23 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   preload="metadata"
                   className="max-h-80 max-w-[440px] w-auto h-auto rounded-lg"
                 />
-                <div className="absolute top-2 right-2 opacity-0 group-hover/media:opacity-100 transition-opacity">
-                  <AttachmentDownloadButton
-                    id={file.id}
-                    url={file.url}
-                    filename={file.name}
-                    contentType={file.type}
-                  />
+                {/* Centered hover download button */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover/media:opacity-100 transition-opacity pointer-events-none rounded-lg">
+                  <div className="pointer-events-auto">
+                    <AttachmentDownloadButton
+                      id={file.id}
+                      url={file.url}
+                      filename={file.name}
+                      contentType={file.type}
+                    />
+                  </div>
                 </div>
               </div>
             );
           }
 
           // Other files (PDFs, docs, spreadsheets, zip, audio, code): Slack file card
+          // Download icon sits on the foreground directly above the left file thumbnail
           return (
             <div
               key={file.id}
@@ -352,8 +393,19 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 isInverted && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
               )}
             >
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/80">
+              {/* Left thumbnail with foreground download icon on hover */}
+              <div className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/80 overflow-hidden">
                 {getFileIcon(file.type, file.name)}
+                {file.url && (
+                  <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/55 opacity-0 group-hover/file:opacity-100 transition-opacity">
+                    <AttachmentDownloadButton
+                      id={file.id}
+                      url={file.url}
+                      filename={file.name}
+                      contentType={file.type}
+                    />
+                  </div>
+                )}
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
                 <p
@@ -366,16 +418,6 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   {formatFileSize(file.size) || getFormattedFileType(file.type, file.name)}
                 </span>
               </div>
-              {file.url && (
-                <div className="shrink-0">
-                  <AttachmentDownloadButton
-                    id={file.id}
-                    url={file.url}
-                    filename={file.name}
-                    contentType={file.type}
-                  />
-                </div>
-              )}
             </div>
           );
         })}

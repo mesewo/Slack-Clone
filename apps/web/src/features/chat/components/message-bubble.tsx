@@ -5,7 +5,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { FilePreview } from "@/components/ui/file-preview";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AlertModal } from "@/components/modal/alert-modal";
 import { toast } from "sonner";
 import type { Message } from "../utils/types";
@@ -137,6 +137,17 @@ export function MessageBubble({
   const [quickEmojis, setQuickEmojis] = useState<string[]>(["👍", "❤️", "😂"]);
   const [isSaved, setIsSaved] = useState(false);
   const [editDraft, setEditDraft] = useState(message.text);
+  const [currentAvatar, setCurrentAvatar] = useState("");
+
+  useEffect(() => {
+    const updateAvatar = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setCurrentAvatar(detail ?? window.localStorage.getItem("slack_profile_avatar") ?? "");
+    };
+    setCurrentAvatar(window.localStorage.getItem("slack_profile_avatar") ?? "");
+    window.addEventListener("slack:avatar-updated", updateAvatar);
+    return () => window.removeEventListener("slack:avatar-updated", updateAvatar);
+  }, []);
 
   useEffect(() => {
     const updateQuick = () => {
@@ -219,6 +230,7 @@ export function MessageBubble({
         <UserProfilePopover
           userId={message.userId}
           author={message.author}
+          avatarUrl={isUser ? currentAvatar : undefined}
           isCurrentUser={isUser}
           onStartDM={onStartDM}
         >
@@ -228,6 +240,7 @@ export function MessageBubble({
             )}
             title={`View profile of ${message.author}`}
           >
+            {isUser && currentAvatar && <AvatarImage src={currentAvatar} alt={message.author} />}
             <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.65rem] font-semibold">
               {message.author.slice(0, 2).toUpperCase()}
             </AvatarFallback>

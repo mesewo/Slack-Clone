@@ -10,6 +10,7 @@ import {
   productivityService,
   type NotificationPreferences,
 } from "@/features/workspace/services/productivityService";
+import { AVATAR_PRESETS } from "../utils/avatar-presets";
 
 export default function ProfileViewPage() {
   const { user, loading } = useAuth();
@@ -29,7 +30,12 @@ export default function ProfileViewPage() {
     void productivityService
       .getProfile()
       .then((profile) => {
-        setAvatarUrl(profile.avatar_url);
+        const savedAvatar = profile.avatar_url || window.localStorage.getItem("slack_profile_avatar") || "";
+        setAvatarUrl(savedAvatar);
+        if (savedAvatar) {
+          window.localStorage.setItem("slack_profile_avatar", savedAvatar);
+          window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: savedAvatar }));
+        }
         setDisplayName(profile.display_name || user.name || "");
         setPresenceStatus(profile.presence_status || "active");
       })
@@ -79,12 +85,26 @@ export default function ProfileViewPage() {
     const reader = new FileReader();
     reader.onload = () => {
       const nextAvatarUrl = String(reader.result || "");
-      setAvatarUrl(nextAvatarUrl);
-      void productivityService.updateProfile({ avatar_url: nextAvatarUrl });
-      window.localStorage.setItem("slack_profile_avatar", nextAvatarUrl);
-      toast.success("Profile photo updated");
+      void saveAvatar(nextAvatarUrl);
     };
     reader.readAsDataURL(file);
+  };
+
+  const saveAvatar = async (nextAvatarUrl: string) => {
+    const previousAvatar = avatarUrl;
+    setAvatarUrl(nextAvatarUrl);
+    window.localStorage.setItem("slack_profile_avatar", nextAvatarUrl);
+    window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: nextAvatarUrl }));
+    try {
+      await productivityService.updateProfile({ avatar_url: nextAvatarUrl });
+      toast.success("Profile photo updated");
+    } catch {
+      setAvatarUrl(previousAvatar);
+      if (previousAvatar) window.localStorage.setItem("slack_profile_avatar", previousAvatar);
+      else window.localStorage.removeItem("slack_profile_avatar");
+      window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: previousAvatar }));
+      toast.error("Could not update profile photo");
+    }
   };
 
   const saveDisplayName = () => {
@@ -92,6 +112,7 @@ export default function ProfileViewPage() {
     if (!nextName) return;
     void productivityService.updateProfile({ display_name: nextName });
     window.localStorage.setItem("slack_profile_display_name", nextName);
+    window.dispatchEvent(new Event("slack:profile-updated"));
     setDisplayName(nextName);
     setEditingName(false);
     toast.success("Profile name updated");
@@ -114,13 +135,7 @@ export default function ProfileViewPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="text-muted-foreground p-6 text-sm">
-        Loading profile...
-      </div>
-    );
-  }
+  if (loading) return <div role="status" aria-label="Loading profile" className="mx-auto w-full max-w-2xl animate-pulse space-y-6 p-4 sm:p-6"><div className="h-8 w-40 rounded-md bg-muted" /><div className="rounded-xl border border-border bg-card p-5"><div className="flex items-center gap-4"><div className="size-14 rounded-full bg-muted" /><div className="space-y-2"><div className="h-4 w-36 rounded bg-muted" /><div className="h-3 w-48 rounded bg-muted" /></div></div><div className="mt-6 h-10 rounded bg-muted/70" /></div><div className="h-48 rounded-xl border border-border bg-card" /></div>;
 
   if (!user) {
     return (
@@ -171,6 +186,7 @@ export default function ProfileViewPage() {
             className="hidden"
             onChange={(event) => handleAvatarChange(event.target.files?.[0])}
           />
+          <Button type="button" variant="outline" size="sm" onClick={() => avatarInputRef.current?.click()}>Upload photo</Button>
           <div className="min-w-0">
             {editingName ? (
               <div className="flex items-center gap-2">
@@ -223,6 +239,17 @@ export default function ProfileViewPage() {
           </Button>
         </div>
       </div>
+      <section className="border-border bg-card rounded-xl border p-5">
+        <h2 className="text-lg font-semibold">Choose an avatar</h2>
+        <p className="text-muted-foreground mt-1 text-sm">Pick a profile image for your workspace.</p>
+        <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-6">
+          {AVATAR_PRESETS.map((preset) => (
+            <button key={preset.id} type="button" onClick={() => void saveAvatar(preset.url)} aria-label={`Choose ${preset.name} avatar`} title={`${preset.name} · ${preset.category}`} className={`aspect-square overflow-hidden rounded-full border-2 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${avatarUrl === preset.url ? "border-primary ring-2 ring-primary/25" : "border-border"}`}>
+              <img src={preset.url} alt="" className="size-full object-cover" loading="lazy" />
+            </button>
+          ))}
+        </div>
+      </section>
       <div className="border-border bg-card rounded-xl border p-5">
         <h2 className="text-lg font-semibold">Notification preferences</h2>
         <p className="text-muted-foreground mt-1 text-sm">

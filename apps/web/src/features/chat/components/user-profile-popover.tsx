@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { IconClock, IconMessage, IconCopy, IconCheck } from "@tabler/icons-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import { toast } from "sonner";
 interface UserProfilePopoverProps {
   userId?: string | null;
   author: string;
+  avatarUrl?: string;
   isCurrentUser?: boolean;
   onStartDM?: (userId: string) => void;
   children: React.ReactNode;
@@ -18,12 +19,21 @@ interface UserProfilePopoverProps {
 export function UserProfilePopover({
   userId,
   author,
+  avatarUrl,
   isCurrentUser = false,
   onStartDM,
   children,
 }: UserProfilePopoverProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  const effectiveAvatar =
+    avatarUrl ||
+    (isCurrentUser && typeof window !== "undefined"
+      ? window.localStorage.getItem("slack_profile_avatar") ||
+        window.localStorage.getItem("slack_user_avatar") ||
+        ""
+      : "");
 
   const localTime = new Date().toLocaleTimeString([], {
     hour: "2-digit",
@@ -64,6 +74,7 @@ export function UserProfilePopover({
           {/* Avatar floating over banner */}
           <div className="relative -mt-8 mb-2.5 inline-block">
             <Avatar className="size-16 rounded-2xl border-4 border-background shadow-md">
+              <AvatarImage src={effectiveAvatar} alt={author} />
               <AvatarFallback className="bg-primary/20 text-primary text-lg font-bold rounded-xl">
                 {author.slice(0, 2).toUpperCase()}
               </AvatarFallback>

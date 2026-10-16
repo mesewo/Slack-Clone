@@ -19,24 +19,62 @@ export function UserAvatarProfile({
   showInfo = false,
   user,
 }: UserAvatarProfileProps) {
-  const [localAvatar, setLocalAvatar] = useState("");
-  const [localName, setLocalName] = useState("");
+  const [localAvatar, setLocalAvatar] = useState(() => {
+    if (typeof window !== "undefined") {
+      return (
+        window.localStorage.getItem("slack_profile_avatar") ||
+        window.localStorage.getItem("slack_user_avatar") ||
+        ""
+      );
+    }
+    return "";
+  });
+  const [localName, setLocalName] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem("slack_profile_display_name") || "";
+    }
+    return "";
+  });
 
   useEffect(() => {
+    const handleAvatarUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail !== undefined) {
+        setLocalAvatar(customEvent.detail);
+      } else {
+        setLocalAvatar(
+          window.localStorage.getItem("slack_profile_avatar") ||
+            window.localStorage.getItem("slack_user_avatar") ||
+            ""
+        );
+      }
+    };
+
+    const handleProfileUpdate = () => {
+      const name = window.localStorage.getItem("slack_profile_display_name");
+      if (name) setLocalName(name);
+    };
+
+    window.addEventListener("slack:avatar-updated", handleAvatarUpdate);
+    window.addEventListener("slack:profile-updated", handleProfileUpdate);
+
     void productivityService
       .getProfile()
       .then((profile) => {
-        setLocalAvatar(profile.avatar_url);
-        setLocalName(profile.display_name);
+        if (profile.avatar_url) {
+          setLocalAvatar(profile.avatar_url);
+          window.localStorage.setItem("slack_profile_avatar", profile.avatar_url);
+        }
+        if (profile.display_name) {
+          setLocalName(profile.display_name);
+        }
       })
-      .catch(() => {
-        setLocalAvatar(
-          window.localStorage.getItem("slack_profile_avatar") || "",
-        );
-        setLocalName(
-          window.localStorage.getItem("slack_profile_display_name") || "",
-        );
-      });
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener("slack:avatar-updated", handleAvatarUpdate);
+      window.removeEventListener("slack:profile-updated", handleProfileUpdate);
+    };
   }, []);
 
   return (

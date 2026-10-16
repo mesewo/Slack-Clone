@@ -5,7 +5,11 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
+import { IconMoodSmile } from "@tabler/icons-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { EmojiPicker } from "./emoji-picker";
 
 export interface RichMessageEditorHandle {
   focus: () => void;
@@ -97,6 +101,19 @@ export const RichMessageEditor = forwardRef<
 ) {
   const editorRef = useRef<HTMLDivElement>(null);
   const renderedValueRef = useRef<string | null>(null);
+  const savedRangeRef = useRef<Range | null>(null);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && editorRef.current) {
+      const range = sel.getRangeAt(0);
+      if (editorRef.current.contains(range.commonAncestorContainer)) {
+        savedRangeRef.current = range.cloneRange();
+      }
+    }
+  };
+
   const mentionMatch = initialValue.match(/(^|\s)@([\w-]*)$/);
   const mentionQuery = mentionMatch?.[2].toLowerCase() ?? "";
   const visibleMentions = mentionMatch
@@ -127,11 +144,47 @@ export const RichMessageEditor = forwardRef<
     editorRef.current?.focus();
     document.execCommand(command, false, value);
     syncDraft();
+    saveSelection();
   };
 
   const insertText = (text: string) => {
-    editorRef.current?.focus();
-    document.execCommand("insertText", false, text);
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+
+    const sel = window.getSelection();
+    if (sel) {
+      if (
+        savedRangeRef.current &&
+        editor.contains(savedRangeRef.current.commonAncestorContainer)
+      ) {
+        sel.removeAllRanges();
+        sel.addRange(savedRangeRef.current);
+      } else {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+
+      const currentRange = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+      if (currentRange) {
+        currentRange.deleteContents();
+        const textNode = document.createTextNode(text);
+        currentRange.insertNode(textNode);
+        currentRange.setStartAfter(textNode);
+        currentRange.setEndAfter(textNode);
+        currentRange.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(currentRange);
+        savedRangeRef.current = currentRange.cloneRange();
+      } else {
+        document.execCommand("insertText", false, text);
+      }
+    } else {
+      document.execCommand("insertText", false, text);
+    }
     syncDraft();
   };
 
@@ -151,6 +204,7 @@ export const RichMessageEditor = forwardRef<
       document.execCommand("insertText", false, `@${mention} `);
     }
     syncDraft();
+    saveSelection();
   };
 
   useImperativeHandle(forwardedRef, () => ({
@@ -194,6 +248,39 @@ export const RichMessageEditor = forwardRef<
           {formatButton("Blockquote", "M3.5 2.75a.75.75 0 0 0-1.5 0v14.5a.75.75 0 0 0 1.5 0zM6.75 3a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5zM6 10.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75a.75.75 0 0 1-.75-.75m.75 5.25a.75.75 0 0 0 0 1.5h7.5a.75.75 0 0 0 0-1.5z", "formatBlock", "blockquote")}
           {formatButton("Code", "M12.058 3.212c.396.12.62.54.5.936L8.87 16.29a.75.75 0 1 1-1.435-.436l3.686-12.143a.75.75 0 0 1 .936-.5M5.472 6.24a.75.75 0 0 1 .005 1.06l-2.67 2.693 2.67 2.691a.75.75 0 1 1-1.065 1.057l-3.194-3.22a.75.75 0 0 1 0-1.056l3.194-3.22a.75.75 0 0 1 1.06-.005m9.044 1.06a.75.75 0 1 1 1.065-1.056l3.194 3.221a.75.75 0 0 1 0 1.057l-3.194 3.219a.75.75 0 0 1-1.065-1.057l2.67-2.69z", "formatBlock", "code")}
           {formatButton("Code block", "M9.212 2.737a.75.75 0 1 0-1.424-.474l-2.5 7.5a.75.75 0 0 0 1.424.474zm6.038.265a.75.75 0 0 0 0 1.5h2a.25.25 0 0 1 .25.25v11.5a.25.25 0 0 1-.25.25h-13a.25.25 0 0 1-.25-.25v-3.5a.75.75 0 0 0-1.5 0v3.5c0 .966.784 1.75 1.75 1.75h13a1.75 1.75 0 0 0 1.75-1.75v-11.5a1.75 1.75 0 0 0-1.75-1.75zm-3.69.5a.75.75 0 1 0-1.12.996l1.556 1.754-1.556 1.75a.75.75 0 1 0 1.12.997l2-2.249a.75.75 0 0 0 0-.996zM3.999 9.061a.75.75 0 0 1-1.058-.062l-2-2.249a.75.75 0 0 1 0-.996l2-2.252a.75.75 0 1 1 1.12.996L2.504 6.252l1.557 1.75a.75.75 0 0 1-.062 1.059", "formatBlock", "pre")}
+          {separator}
+          <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+            <PopoverTrigger
+              render={
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    saveSelection();
+                    e.preventDefault();
+                  }}
+                  className="text-foreground/70 hover:text-foreground flex size-5 shrink-0 items-center justify-center rounded transition-colors"
+                  aria-label="Insert emoji"
+                  title="Insert emoji"
+                />
+              }
+            >
+              <IconMoodSmile className="size-4" />
+            </PopoverTrigger>
+            <PopoverContent
+              side="top"
+              align="start"
+              sideOffset={8}
+              className="w-auto p-0 border-none shadow-2xl bg-transparent"
+            >
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  insertText(emoji);
+                  setEmojiPickerOpen(false);
+                }}
+                onClose={() => setEmojiPickerOpen(false)}
+              />
+            </PopoverContent>
+          </Popover>
         </div>
       )}
       <div className="relative">
@@ -206,6 +293,10 @@ export const RichMessageEditor = forwardRef<
           aria-multiline="true"
           tabIndex={0}
           onInput={syncDraft}
+          onKeyUp={saveSelection}
+          onMouseUp={saveSelection}
+          onSelect={saveSelection}
+          onBlur={saveSelection}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();

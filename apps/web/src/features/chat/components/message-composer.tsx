@@ -175,7 +175,7 @@ export function MessageComposer({
   };
 
   const insertEmoji = (emoji: string) => {
-    editorRef.current?.insertText(`${emoji} `);
+    editorRef.current?.insertText(emoji);
     setEmojiOpen(false);
   };
 
