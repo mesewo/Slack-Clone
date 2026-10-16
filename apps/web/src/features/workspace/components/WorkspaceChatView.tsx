@@ -120,7 +120,7 @@ export function WorkspaceChatView() {
         })
         .catch((error) => {
           console.error("File upload failed:", error);
-          toast.error(`Failed to upload ${file.name}`);
+          toast.error(error instanceof Error ? error.message : `Failed to upload ${file.name}`);
           setAttachments((current) =>
             current.filter((item) => item.id !== tempId),
           );

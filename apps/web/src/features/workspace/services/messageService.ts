@@ -234,8 +234,27 @@ export const messageService = {
   },
 
   async upload(file: File): Promise<UploadedAttachment> {
+    const uploadLegacy = async () => {
+      const form = new FormData();
+      form.append("file", file);
+      const fallback = await apiClient.post<UploadedAttachment>(
+        "/api/uploads",
+        form,
+      );
+      return fallback.data;
+    };
+
+    let presign: {
+      data: {
+        session_id: string;
+        upload_url: string;
+        filename: string;
+        content_type: string;
+        size_bytes: number;
+      };
+    };
     try {
-      const presign = await apiClient.post<{
+      presign = await apiClient.post<{
         session_id: string;
         upload_url: string;
         filename: string;
@@ -246,32 +265,46 @@ export const messageService = {
         content_type: file.type || "application/octet-stream",
         size_bytes: file.size,
       });
+    } catch {
+      // Keep compatibility with deployments that have not enabled presigned uploads.
+      try {
+        return await uploadLegacy();
+      } catch (error) {
+        throw new Error(`Could not start the upload for ${file.name}.`, { cause: error });
+      }
+    }
 
-      const uploadURL = presign.data.upload_url;
-      const putResponse = await fetch(uploadURL, {
+    let putResponse: Response;
+    try {
+      putResponse = await fetch(presign.data.upload_url, {
         method: "PUT",
         body: file,
         headers: {
           "Content-Type": file.type || "application/octet-stream",
         },
       });
-      if (!putResponse.ok) {
-        throw new Error(`upload PUT failed: ${putResponse.status}`);
-      }
+    } catch (error) {
+      throw new Error(
+        `Could not reach file storage while uploading ${file.name}. Check that the storage service is running and that RUSTFS_CORS_ALLOWED_ORIGINS includes this app's origin.`,
+        { cause: error },
+      );
+    }
 
+    if (!putResponse.ok) {
+      const detail = (await putResponse.text()).slice(0, 240);
+      throw new Error(
+        `File storage rejected ${file.name} (${putResponse.status}${detail ? `: ${detail}` : ""}).`,
+      );
+    }
+
+    try {
       const complete = await apiClient.post<UploadedAttachment>(
         "/api/uploads/complete",
         { session_id: presign.data.session_id },
       );
       return complete.data;
     } catch (error) {
-      const form = new FormData();
-      form.append("file", file);
-      const fallback = await apiClient.post<UploadedAttachment>(
-        "/api/uploads",
-        form,
-      );
-      return fallback.data;
+      throw new Error(`The upload finished, but ${file.name} could not be added to the message.`, { cause: error });
     }
   },
 
