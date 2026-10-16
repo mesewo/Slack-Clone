@@ -144,7 +144,7 @@ func main() {
 
 	queries := database.New(pool)
 	tokens := auth.NewTokenManager([]byte(jwtSecret), 24*time.Hour)
-	cookies := auth.CookieConfig{Secure: os.Getenv("APP_ENV") == "production"}
+	cookies := auth.CookieConfig{Secure: strings.EqualFold(os.Getenv("APP_ENV"), "production")}
 
 	gatewayConn, err := grpc.NewClient(gatewayAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -528,9 +528,10 @@ func main() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   originList,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"},
-		ExposedHeaders:   []string{"Content-Length", "Content-Disposition"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Content-Length", "Content-Disposition", "Set-Cookie"},
 		AllowCredentials: true,
+		MaxAge:           300,
 	}))
 	r.Get("/healthz", corehealth.LivenessHandler)
 	r.Get("/readyz", corehealth.ReadinessHandler(pool, 2*time.Second))
