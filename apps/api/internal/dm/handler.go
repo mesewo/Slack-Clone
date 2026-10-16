@@ -32,6 +32,7 @@ type ConversationResponse struct {
 	OtherDisplayName    string    `json:"other_display_name"`
 	OtherEmail          string    `json:"other_email"`
 	OtherPresenceStatus string    `json:"other_presence_status"`
+	OtherAvatarURL      string    `json:"other_avatar_url"`
 	LastMessage         string    `json:"last_message"`
 	LastMessageAt       time.Time `json:"last_message_at"`
 	LastMessageIsMine   bool      `json:"last_message_is_mine"`
@@ -111,12 +112,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		seen[item.ID] = struct{}{}
-		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus, LastMessage: item.LastMessage, LastMessageAt: item.LastMessageAt, LastMessageIsMine: item.LastMessageIsMine})
+		result = append(result, ConversationResponse{ID: item.ID, OtherUserID: item.OtherUserID, OtherDisplayName: item.OtherDisplayName, OtherEmail: item.OtherEmail, OtherPresenceStatus: item.OtherPresenceStatus, OtherAvatarURL: item.OtherAvatarUrl, LastMessage: item.LastMessage, LastMessageAt: item.LastMessageAt, LastMessageIsMine: item.LastMessageIsMine})
 	}
 	if _, exists := seen[selfID]; !exists {
 		if self, userErr := h.Queries.GetUserByID(r.Context(), userID); userErr == nil {
 			seen[selfID] = struct{}{}
-			result = append(result, ConversationResponse{ID: selfID, OtherUserID: userID, OtherDisplayName: self.DisplayName, OtherEmail: self.Email, OtherPresenceStatus: self.PresenceStatus})
+			result = append(result, ConversationResponse{ID: selfID, OtherUserID: userID, OtherDisplayName: self.DisplayName, OtherEmail: self.Email, OtherPresenceStatus: self.PresenceStatus, OtherAvatarURL: self.AvatarUrl})
 		}
 	}
 	writeJSON(w, result)

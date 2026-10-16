@@ -107,18 +107,6 @@ export function UserNav() {
           >
             Profile
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              const workspaceId = window.localStorage.getItem("active_workspace_id");
-              router.push(
-                workspaceId
-                  ? `/home/${workspaceId}/notifications`
-                  : "/workspaces",
-              );
-            }}
-          >
-            Notifications
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSignOut}>Sign out</DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

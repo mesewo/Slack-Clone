@@ -144,6 +144,7 @@ function toDMConversation(
     kind: "dm",
     dmId: dm.id,
     otherUserId: dm.other_user_id,
+    avatarUrl: dm.other_avatar_url || undefined,
     customStatus: dm.other_presence_status || null,
     lastMessage: dm.last_message || "",
     lastMessageAt: dm.last_message_at,

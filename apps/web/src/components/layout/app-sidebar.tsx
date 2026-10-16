@@ -112,7 +112,7 @@ export default function AppSidebar() {
         : "/workspaces";
     if (url === "/dashboard/notifications")
       return activeWorkspaceId
-        ? `/home/${activeWorkspaceId}/notifications`
+        ? `/home/${activeWorkspaceId}/activity`
         : "/workspaces";
     if (url === "/dashboard/profile")
       return activeWorkspaceId
@@ -418,10 +418,10 @@ export default function AppSidebar() {
                     Profile
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/notifications` : "/workspaces")}
+                    onClick={() => router.push(activeWorkspaceId ? `/home/${activeWorkspaceId}/activity` : "/workspaces")}
                   >
                     <Icons.notification className="mr-2 h-4 w-4" />
-                    Notifications
+                    Activity
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />

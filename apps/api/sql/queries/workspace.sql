@@ -38,7 +38,7 @@ ON CONFLICT (channel_id, user_id) DO NOTHING;
 
 -- name: ListWorkspaceMembers :many
 SELECT wm.workspace_id, wm.user_id, wm.role, wm.joined_at,
-	u.email, u.display_name, u.presence_status
+	u.email, u.display_name, u.presence_status, u.avatar_url
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = $1

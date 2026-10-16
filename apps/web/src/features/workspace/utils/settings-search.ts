@@ -11,7 +11,7 @@ export const settingsSearchDestinations: SettingsSearchDestination[] = [
     label: "Notifications",
     description: "Manage workspace notifications, mentions, and alerts.",
     keywords: ["notification", "alerts", "mentions"],
-    pathBuilder: (workspaceId) => `/home/${workspaceId}/notifications`,
+    pathBuilder: (workspaceId) => `/home/${workspaceId}/activity`,
   },
   {
     label: "Admin tools",

@@ -29,7 +29,7 @@ import (
 	"golang.org/x/image/draw"
 )
 
-const maxUploadSize = 100 << 20 // 100MB
+const maxUploadSize = 1 << 30 // 1 GiB
 
 type Handler struct {
 	Queries *database.Queries
@@ -99,8 +99,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
-	if err := r.ParseMultipartForm(maxUploadSize); err != nil {
-		writeError(w, http.StatusBadRequest, "file exceeds 100MB limit or is invalid")
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "file exceeds 1GB limit or is invalid")
 		return
 	}
 	file, header, err := r.FormFile("file")

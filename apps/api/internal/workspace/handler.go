@@ -45,6 +45,7 @@ type WorkspaceMemberResponse struct {
 	Email          string `json:"email"`
 	DisplayName    string `json:"display_name"`
 	PresenceStatus string `json:"presence_status"`
+	AvatarURL      string `json:"avatar_url"`
 }
 
 type WorkspaceInviteResponse struct {
@@ -316,7 +317,7 @@ func (h *Handler) ListMembers(w http.ResponseWriter, r *http.Request) {
 	for _, item := range members {
 		response = append(response, WorkspaceMemberResponse{
 			WorkspaceMember: database.WorkspaceMember{WorkspaceID: item.WorkspaceID, UserID: item.UserID, Role: item.Role, JoinedAt: item.JoinedAt},
-			Email:           item.Email, DisplayName: item.DisplayName, PresenceStatus: item.PresenceStatus,
+			Email:           item.Email, DisplayName: item.DisplayName, PresenceStatus: item.PresenceStatus, AvatarURL: item.AvatarUrl,
 		})
 	}
 	json.NewEncoder(w).Encode(map[string]any{"role": member.Role, "members": response})

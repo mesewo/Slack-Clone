@@ -13,6 +13,8 @@ import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
 import { pinService, type PinnedMessage } from "@/features/workspace/services/pinService";
+import { useParams } from "next/navigation";
+import { useWorkspaceMembers } from "@/features/workspace/hooks/use-workspace-members";
 
 interface ChatAreaProps {
   conversation: Conversation;
@@ -65,6 +67,8 @@ export function ChatArea({
   canManageChannel,
   onStartDM,
 }: ChatAreaProps) {
+  const { workspaceId } = useParams<{ workspaceId: string }>();
+  const { members } = useWorkspaceMembers(workspaceId);
   const shouldReduceMotion = useReducedMotion();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const newMessagesMarkerRef = useRef<HTMLDivElement | null>(null);
@@ -84,6 +88,7 @@ export function ChatArea({
     new Set([
       "here",
       "channel",
+      ...members.map((member) => member.display_name || member.email),
       ...conversation.messages.map((message) => message.author),
     ]),
   );
@@ -469,6 +474,7 @@ export function ChatArea({
                       pinTargetLabel={conversation.kind === "dm" ? "conversation" : "channel"}
                       compact={compact}
                       onStartDM={onStartDM}
+                      authorAvatarUrl={conversation.kind === "dm" ? conversation.avatarUrl : undefined}
                     />
                   </div>
                 );

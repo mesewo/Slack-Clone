@@ -114,7 +114,7 @@ export function MediaGallery({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-md select-none animate-in fade-in-0 duration-200"
+      className="fixed inset-0 z-50 flex flex-col bg-zinc-700/95 backdrop-blur-md select-none animate-in fade-in-0 duration-200"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
@@ -216,7 +216,7 @@ export function MediaGallery({
 
         {/* Media Content */}
         <div
-          className="relative max-h-[85vh] max-w-[85vw] flex items-center justify-center transition-transform duration-150"
+          className="relative max-h-[85vh] max-w-[85vw] flex items-center justify-center rounded-lg border border-white/20 bg-zinc-950 p-1 transition-transform duration-150"
           style={{
             transform: `scale(${zoom}) rotate(${rotation}deg)`,
           }}

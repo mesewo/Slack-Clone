@@ -165,7 +165,7 @@ func (q *Queries) GetWorkspaceMember(ctx context.Context, arg GetWorkspaceMember
 
 const listWorkspaceMembers = `-- name: ListWorkspaceMembers :many
 SELECT wm.workspace_id, wm.user_id, wm.role, wm.joined_at,
-	u.email, u.display_name, u.presence_status
+	u.email, u.display_name, u.presence_status, u.avatar_url
 FROM workspace_members wm
 JOIN users u ON u.id = wm.user_id
 WHERE wm.workspace_id = $1
@@ -181,6 +181,7 @@ type ListWorkspaceMembersRow struct {
 	Email          string    `json:"email"`
 	DisplayName    string    `json:"display_name"`
 	PresenceStatus string    `json:"presence_status"`
+	AvatarUrl      string    `json:"avatar_url"`
 }
 
 func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUID) ([]ListWorkspaceMembersRow, error) {
@@ -200,6 +201,7 @@ func (q *Queries) ListWorkspaceMembers(ctx context.Context, workspaceID uuid.UUI
 			&i.Email,
 			&i.DisplayName,
 			&i.PresenceStatus,
+			&i.AvatarUrl,
 		); err != nil {
 			return nil, err
 		}

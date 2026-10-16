@@ -111,6 +111,7 @@ interface MessageBubbleProps {
   pinTargetLabel?: string;
   compact?: boolean;
   onStartDM?: (userId: string) => void;
+  authorAvatarUrl?: string;
 }
 
 export function MessageBubble({
@@ -127,6 +128,7 @@ export function MessageBubble({
   pinTargetLabel = "channel",
   compact = false,
   onStartDM,
+  authorAvatarUrl,
 }: MessageBubbleProps) {
   const shouldReduceMotion = useReducedMotion();
   const isUser = message.sender === "user";
@@ -230,7 +232,7 @@ export function MessageBubble({
         <UserProfilePopover
           userId={message.userId}
           author={message.author}
-          avatarUrl={isUser ? currentAvatar : undefined}
+          avatarUrl={isUser ? currentAvatar : authorAvatarUrl}
           isCurrentUser={isUser}
           onStartDM={onStartDM}
         >
@@ -240,7 +242,7 @@ export function MessageBubble({
             )}
             title={`View profile of ${message.author}`}
           >
-            {isUser && currentAvatar && <AvatarImage src={currentAvatar} alt={message.author} />}
+            {(isUser ? currentAvatar : authorAvatarUrl) && <AvatarImage src={(isUser ? currentAvatar : authorAvatarUrl)!} alt={message.author} />}
             <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.65rem] font-semibold">
               {message.author.slice(0, 2).toUpperCase()}
             </AvatarFallback>

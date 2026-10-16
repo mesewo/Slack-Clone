@@ -114,7 +114,7 @@ export const RichMessageEditor = forwardRef<
     }
   };
 
-  const mentionMatch = initialValue.match(/(^|\s)@([\w-]*)$/);
+  const mentionMatch = initialValue.match(/(^|\s)@([\p{L}\p{N}_ -]*)$/u);
   const mentionQuery = mentionMatch?.[2].toLowerCase() ?? "";
   const visibleMentions = mentionMatch
     ? mentionSuggestions.filter((name) => name.toLowerCase().startsWith(mentionQuery))

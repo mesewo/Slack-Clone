@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const maxUploadSize = 100 << 20
+const maxUploadSize = 1 << 30 // 1 GiB; below the S3 single PUT limit.
 
 type Server struct {
 	storagepb.UnimplementedStorageServiceServer
@@ -65,7 +65,7 @@ func (s *Server) PresignUpload(ctx context.Context, request *storagepb.PresignUp
 	if _, err := s.queries.CreateUploadSession(ctx, session); err != nil {
 		return nil, status.Error(codes.Internal, "failed to create upload session")
 	}
-	uploadURL, err := s.presignStore.PresignedPutObject(ctx, s.bucket, key, 15*time.Minute)
+	uploadURL, err := s.presignStore.PresignedPutObject(ctx, s.bucket, key, time.Hour)
 	if err != nil {
 		_ = s.queries.UpdateUploadSessionStatus(ctx, sessionID, "FAILED", nil, 0)
 		return nil, status.Error(codes.Internal, "failed to generate upload URL")

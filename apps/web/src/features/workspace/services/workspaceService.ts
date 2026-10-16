@@ -15,6 +15,7 @@ export interface WorkspaceMember {
   email: string;
   display_name: string;
   presence_status?: string;
+  avatar_url?: string;
 }
 
 function makeUniqueSlug(name: string, attempt = 0): string {

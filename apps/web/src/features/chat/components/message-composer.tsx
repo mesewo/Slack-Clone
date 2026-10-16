@@ -11,7 +11,7 @@ import { IconAt, IconMoodSmile } from "@tabler/icons-react";
 import { EmojiPicker } from "./emoji-picker";
 
 // File upload validation constants
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB, matching the storage upload service
 function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
     .toISOString()

@@ -1,12 +1,12 @@
 "use client";
 
 import { Icons } from "@/components/icons";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "../utils/types";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChannelMembersPanel } from "./ChannelMembersPanel";
 import { PresenceIndicator } from "./PresenceIndicator";
@@ -35,6 +35,7 @@ export function ChatHeader({
   const [leavingChannel, setLeavingChannel] = useState(false);
   const [starred, setStarred] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [profileAvatar, setProfileAvatar] = useState("");
   const router = useRouter();
   const params = useParams<{ workspaceId: string }>();
   const userPresence = useChatStore((state) => state.userPresence);
@@ -45,6 +46,19 @@ export function ChatHeader({
     ? userPresence[conversation.otherUserId] || "offline"
     : "offline";
 
+  useEffect(() => {
+    setProfileAvatar(window.localStorage.getItem("slack_profile_avatar") || "");
+    const onAvatarUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setProfileAvatar(detail ?? window.localStorage.getItem("slack_profile_avatar") ?? "");
+    };
+    window.addEventListener("slack:avatar-updated", onAvatarUpdate);
+    return () => window.removeEventListener("slack:avatar-updated", onAvatarUpdate);
+  }, []);
+  const avatarUrl = conversation.otherUserId === currentUserId
+    ? profileAvatar || conversation.avatarUrl
+    : conversation.avatarUrl;
+
   const handleClose = () => {
     selectConversation("");
     router.replace(`/home/${params.workspaceId}`);
@@ -54,6 +68,7 @@ export function ChatHeader({
       <div className="flex items-center gap-2 sm:gap-3">
         <div className="relative">
           <Avatar className="border-border/60 bg-background/80 text-foreground h-10 w-10 rounded-2xl border shadow-sm sm:h-12 sm:w-12 sm:rounded-3xl">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={conversation.name} />}
             <AvatarFallback className="bg-primary/15 text-primary rounded-2xl text-sm font-semibold sm:rounded-3xl sm:text-base">
               {conversation.initials}
             </AvatarFallback>

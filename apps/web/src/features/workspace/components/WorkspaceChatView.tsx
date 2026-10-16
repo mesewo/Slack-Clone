@@ -14,7 +14,7 @@ import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 import { useRealtimeTyping } from "@/features/chat/hooks/use-realtime-connection";
 import { AppLoader } from "@/components/ui/app-loader";
 import { IconMessageCircle } from "@tabler/icons-react";
-import { WorkspaceLoading } from "@/components/layout/workspace-loading";
+import { ConversationLoading } from "@/components/layout/workspace-loading";
 
 export function WorkspaceChatView() {
   const { user, loading: authLoading } = useAuth();
@@ -181,7 +181,7 @@ export function WorkspaceChatView() {
     [currentUserId, createDM, params.workspaceId, selectConversation, router],
   );
 
-  if (authLoading) return <WorkspaceLoading />;
+  if (authLoading) return <ConversationLoading />;
 
   if (!user) {
     return (
@@ -190,11 +190,11 @@ export function WorkspaceChatView() {
   }
 
   if (selectedRouteId && (!routeConversation || selectedConversationId !== selectedRouteId)) {
-    return <WorkspaceLoading />;
+    return <ConversationLoading />;
   }
 
   if (selectedRouteId && loadingMessages) {
-    return <WorkspaceLoading />;
+    return <ConversationLoading />;
   }
 
   if (!activeConversation) {

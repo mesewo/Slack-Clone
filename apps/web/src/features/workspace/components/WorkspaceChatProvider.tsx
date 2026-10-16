@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useChatStore } from "@/features/chat/utils/store";
@@ -18,6 +18,7 @@ export function WorkspaceChatProvider({
   const { workspaceId } = useParams<{ workspaceId: string }>();
   const { user, loading: authLoading } = useAuth();
   const [workspaceReady, setWorkspaceReady] = useState(false);
+  const initializedWorkspaceRef = useRef<string | null>(null);
   const init = useChatStore((state) => state.init);
   const selectedConversationId = useChatStore(
     (state) => state.selectedConversationId,
@@ -31,7 +32,10 @@ export function WorkspaceChatProvider({
     }
 
     let cancelled = false;
-    setWorkspaceReady(false);
+    if (initializedWorkspaceRef.current !== workspaceId) {
+      initializedWorkspaceRef.current = workspaceId;
+      setWorkspaceReady(false);
+    }
     window.localStorage.setItem("active_workspace_id", workspaceId);
     void init(user.id, workspaceId).finally(() => {
       if (!cancelled) setWorkspaceReady(true);

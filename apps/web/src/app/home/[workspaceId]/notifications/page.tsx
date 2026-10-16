@@ -1,9 +1,10 @@
-import NotificationsPage from '@/features/notifications/components/notifications-page';
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: 'Dashboard: Notifications'
-};
-
-export default function Page() {
-  return <NotificationsPage />;
+export default async function NotificationsRoute({
+  params,
+}: {
+  params: Promise<{ workspaceId: string }>;
+}) {
+  const { workspaceId } = await params;
+  redirect(`/home/${workspaceId}/activity`);
 }

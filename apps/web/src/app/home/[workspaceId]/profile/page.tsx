@@ -14,6 +14,7 @@ import {
 } from "@/features/workspace/services/productivityService";
 import { startThemeTransition } from "@/lib/theme-transition";
 import { cn } from "@/lib/utils";
+import { AVATAR_PRESETS } from "@/features/profile/utils/avatar-presets";
 import { IconClock, IconMoodSmile, IconPhone, IconMail, IconBriefcase } from "@tabler/icons-react";
 
 export default function WorkspaceProfilePage() {
@@ -79,6 +80,7 @@ export default function WorkspaceProfilePage() {
       setAvatarUrl(nextAvatarUrl);
       void productivityService.updateProfile({ avatar_url: nextAvatarUrl });
       window.localStorage.setItem("slack_profile_avatar", nextAvatarUrl);
+      window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: nextAvatarUrl }));
       toast.success("Profile photo updated");
     };
     reader.readAsDataURL(file);
@@ -88,6 +90,7 @@ export default function WorkspaceProfilePage() {
     setAvatarUrl("");
     void productivityService.updateProfile({ avatar_url: "" });
     window.localStorage.removeItem("slack_profile_avatar");
+    window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: "" }));
     toast.success("Profile photo removed");
   };
 
@@ -163,9 +166,13 @@ export default function WorkspaceProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-        <Icons.spinner className="size-5 animate-spin mr-2" />
-        Loading profile...
+      <div role="status" aria-label="Loading profile" className="mx-auto w-full max-w-4xl animate-pulse space-y-6 p-6">
+        <div className="h-7 w-48 rounded bg-muted" />
+        <div className="h-14 rounded-xl border border-border bg-muted/40" />
+        <div className="grid gap-5 lg:grid-cols-[1fr_280px]">
+          <div className="h-80 rounded-xl border border-border bg-muted/40" />
+          <div className="h-64 rounded-xl border border-border bg-muted/40" />
+        </div>
       </div>
     );
   }
@@ -291,10 +298,11 @@ export default function WorkspaceProfilePage() {
                     variant="outline"
                     size="sm"
                     className="h-7 text-xs rounded-lg"
-                    onClick={() => avatarInputRef.current?.click()}
+                    onClick={() => document.getElementById("profile-avatar-gallery")?.scrollIntoView({ behavior: "smooth", block: "center" })}
                   >
-                    Change photo
+                    Choose avatar
                   </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg" onClick={() => avatarInputRef.current?.click()}>Upload photo</Button>
                   {avatarUrl && (
                     <Button
                       variant="ghost"
@@ -318,6 +326,23 @@ export default function WorkspaceProfilePage() {
                 </div>
               </div>
             </div>
+
+            <section id="profile-avatar-gallery" className="rounded-xl border border-border/80 bg-card p-5 shadow-xs">
+              <h3 className="text-sm font-semibold">Choose a profile picture</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Pick an illustrated avatar for your workspace profile.</p>
+              <div className="mt-4 grid grid-cols-5 gap-3 sm:grid-cols-8">
+                {AVATAR_PRESETS.map((preset) => (
+                  <button key={preset.id} type="button" onClick={() => {
+                    setAvatarUrl(preset.url);
+                    window.localStorage.setItem("slack_profile_avatar", preset.url);
+                    window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: preset.url }));
+                    void productivityService.updateProfile({ avatar_url: preset.url }).then(() => toast.success("Profile photo updated")).catch(() => toast.error("Could not update profile photo"));
+                  }} aria-label={`Choose ${preset.name} avatar`} title={`${preset.name} - ${preset.category}`} className={`aspect-square overflow-hidden rounded-full border-2 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${avatarUrl === preset.url ? "border-primary ring-2 ring-primary/25" : "border-border"}`}>
+                    <img src={preset.url} alt="" className="size-full object-cover" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </section>
 
             {/* Custom Status Pill */}
             <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs">

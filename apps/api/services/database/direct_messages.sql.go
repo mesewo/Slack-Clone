@@ -110,7 +110,7 @@ func (q *Queries) IsDirectConversationMember(ctx context.Context, arg IsDirectCo
 const listDirectConversationsForUser = `-- name: ListDirectConversationsForUser :many
 SELECT dc.id, dc.created_by, dc.created_at,
   u.id AS other_user_id, u.display_name AS other_display_name, u.email AS other_email,
-  u.presence_status AS other_presence_status,
+  u.presence_status AS other_presence_status, u.avatar_url AS other_avatar_url,
   COALESCE(latest.content, '') AS last_message,
   COALESCE(latest.created_at, dc.created_at) AS last_message_at,
   COALESCE(latest.is_mine, FALSE) AS last_message_is_mine
@@ -143,6 +143,7 @@ type ListDirectConversationsForUserRow struct {
 	OtherDisplayName    string    `json:"other_display_name"`
 	OtherEmail          string    `json:"other_email"`
 	OtherPresenceStatus string    `json:"other_presence_status"`
+	OtherAvatarUrl      string    `json:"other_avatar_url"`
 	LastMessage         string    `json:"last_message"`
 	LastMessageAt       time.Time `json:"last_message_at"`
 	LastMessageIsMine   bool      `json:"last_message_is_mine"`
@@ -165,6 +166,7 @@ func (q *Queries) ListDirectConversationsForUser(ctx context.Context, userID uui
 			&i.OtherDisplayName,
 			&i.OtherEmail,
 			&i.OtherPresenceStatus,
+			&i.OtherAvatarUrl,
 			&i.LastMessage,
 			&i.LastMessageAt,
 			&i.LastMessageIsMine,

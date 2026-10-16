@@ -165,6 +165,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
   const isComposeMode = mode === "compose";
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [imagePreview, setImagePreview] = useState<MediaItem | null>(null);
 
   if (files.length === 0) return null;
 
@@ -236,11 +237,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
               )}
 
               {file.type.startsWith("image/") && file.url ? (
-                <div
-                  className="group/thumb relative mr-2.5 shrink-0 cursor-pointer overflow-hidden rounded-lg"
-                  onClick={() => openGalleryForFile(file.id)}
-                  title="Click to preview image"
-                >
+                <button type="button" className="group/thumb relative mr-2.5 shrink-0 cursor-pointer overflow-hidden rounded-lg" onClick={() => setImagePreview({ id: file.id, url: file.url!, name: file.name, type: file.type, size: file.size })} title="Preview image" aria-label={`Preview ${file.name}`}>
                   <Image
                     src={file.url}
                     alt={file.name}
@@ -252,20 +249,14 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/35 opacity-0 transition-opacity group-hover/thumb:opacity-100">
                     <Icons.media size={14} className="text-white" />
                   </div>
-                </div>
+                </button>
               ) : file.type.startsWith("video/") && file.url ? (
-                <button
-                  type="button"
-                  className="group/thumb relative mr-2.5 size-12 shrink-0 cursor-pointer overflow-hidden rounded-lg bg-black"
-                  onClick={() => openGalleryForFile(file.id)}
-                  title="Click to preview video"
-                  aria-label={`Preview ${file.name}`}
-                >
+                <div className="relative mr-2.5 size-12 shrink-0 overflow-hidden rounded-lg bg-black" title={file.name}>
                   <video src={file.url} muted preload="metadata" className="size-full object-cover" />
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/25 text-white transition-colors group-hover/thumb:bg-black/45">
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
                     <Icons.video size={18} />
                   </span>
-                </button>
+                </div>
               ) : (
                 <div
                   className={cn(
@@ -304,15 +295,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
           ))}
         </div>
 
-        {/* Slack Media Gallery / Viewer for compose previews */}
-        {mediaFiles.length > 0 && (
-          <MediaGallery
-            isOpen={galleryOpen}
-            onClose={() => setGalleryOpen(false)}
-            items={mediaFiles}
-            initialIndex={galleryIndex}
-          />
-        )}
+        {imagePreview && <div role="dialog" aria-modal="true" aria-label={`Image preview: ${imagePreview.name}`} onClick={() => setImagePreview(null)} className="fixed inset-0 z-[80] flex items-center justify-center bg-zinc-800/90 p-6 backdrop-blur-sm"><button type="button" className="absolute right-4 top-4 rounded-full border border-white/20 bg-zinc-950/80 p-2 text-white hover:bg-zinc-700" onClick={() => setImagePreview(null)} aria-label="Close image preview"><Icons.close className="size-5" /></button><img src={imagePreview.url} alt={imagePreview.name} className="max-h-[88vh] max-w-[min(92vw,1200px)] rounded-md border border-white/20 bg-zinc-950 object-contain shadow-2xl" onClick={(event) => event.stopPropagation()} /></div>}
       </>
     );
   }

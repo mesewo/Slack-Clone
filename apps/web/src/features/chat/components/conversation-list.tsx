@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icons } from "@/components/icons";
 import { motion } from "motion/react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -64,9 +64,20 @@ export function ConversationList({
   const [starsLoaded, setStarsLoaded] = useState(false);
   const [search, setSearch] = useState("");
   const [unreadsOnly, setUnreadsOnly] = useState(false);
+  const [profileAvatar, setProfileAvatar] = useState("");
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
+
+  useEffect(() => {
+    setProfileAvatar(window.localStorage.getItem("slack_profile_avatar") || "");
+    const onAvatarUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      setProfileAvatar(detail ?? window.localStorage.getItem("slack_profile_avatar") ?? "");
+    };
+    window.addEventListener("slack:avatar-updated", onAvatarUpdate);
+    return () => window.removeEventListener("slack:avatar-updated", onAvatarUpdate);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -410,6 +421,7 @@ export function ConversationList({
             >
               <span className="relative size-7 shrink-0">
                 <Avatar className="size-7 rounded-md border border-white/10">
+                  {(conversation.otherUserId === user?.id ? profileAvatar || conversation.avatarUrl : conversation.avatarUrl) && <AvatarImage src={(conversation.otherUserId === user?.id ? profileAvatar || conversation.avatarUrl : conversation.avatarUrl)!} alt={conversation.name} />}
                   <AvatarFallback className="rounded-md bg-slate-700 text-[0.6rem] font-semibold text-slate-100">
                     {conversation.initials || conversation.name?.slice(0, 2).toUpperCase()}
                   </AvatarFallback>
@@ -468,10 +480,13 @@ export function ConversationList({
         </div>
 
         {starredOpen && visibleStarredConversations.filter((conversation) => !dmOnly || conversation.kind === "dm").map((conversation) => (
-          <button key={`starred-${conversation.id}`} type="button" onClick={() => onSelect(conversation.id)} className="flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-[13px] text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]">
-            {conversation.kind === "dm" ? <IconMessage className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" /> : <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />}
-            <span className="truncate">{conversation.kind === "dm" ? conversation.name : conversation.name.replace(/^#\s*/, "")}</span>
-          </button>
+          <div key={`starred-${conversation.id}`} className="group/starred relative">
+            <button type="button" onClick={() => onSelect(conversation.id)} className="flex h-7 w-full items-center gap-2 rounded-md px-2 pr-8 text-left text-[13px] text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]">
+              {conversation.kind === "dm" ? <IconMessage className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" /> : <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />}
+              <span className="truncate">{conversation.kind === "dm" ? conversation.name : conversation.name.replace(/^#\s*/, "")}</span>
+            </button>
+            <button type="button" onClick={() => void toggleStar(conversation)} aria-label={`Remove ${conversation.name} from Starred`} title="Remove from Starred" className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-[var(--chat-sidebar-muted,#94a3b8)] opacity-0 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.08))] hover:text-white focus-visible:opacity-100 group-hover/starred:opacity-100"><Icons.close className="size-3.5" /></button>
+          </div>
         ))}
 
         {!dmOnly && starredOpen && starsLoaded && visibleStarredConversations.length === 0 && starredHintVisible && (

@@ -41,6 +41,7 @@ export type Conversation = {
   kind?: "channel" | "dm";
   dmId?: string;
   otherUserId?: string;
+  avatarUrl?: string;
   customStatus?: string | null;
   lastMessage?: string;
   lastMessageAt?: string;
