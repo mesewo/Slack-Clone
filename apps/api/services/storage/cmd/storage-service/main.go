@@ -76,10 +76,11 @@ func main() {
 }
 
 func newStore() (*minio.Client, *minio.Client, string) {
-	endpoint := os.Getenv("S3_ENDPOINT")
+	endpoint := strings.TrimSpace(os.Getenv("S3_ENDPOINT"))
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
 	}
+	endpointUsesTLS := strings.HasPrefix(strings.ToLower(endpoint), "https://") || strings.Contains(strings.ToLower(endpoint), "backblazeb2.com")
 	sanitizeS3 := func(val string) string {
 		val = strings.TrimSpace(val)
 		val = strings.Trim(val, `"'`)
@@ -98,6 +99,9 @@ func newStore() (*minio.Client, *minio.Client, string) {
 	accessKey := sanitizeS3(os.Getenv("S3_ACCESS_KEY"))
 	secretKey := sanitizeS3(os.Getenv("S3_SECRET_KEY"))
 	useSSL, _ := strconv.ParseBool(sanitizeS3(os.Getenv("S3_USE_SSL")))
+	// Backblaze's S3 API is HTTPS-only. Infer TLS from its endpoint so a missing
+	// S3_USE_SSL setting cannot generate unusable HTTP presigned URLs.
+	useSSL = useSSL || endpointUsesTLS
 	region := sanitizeS3(os.Getenv("S3_REGION"))
 	if strings.Contains(region, "backblazeb2.com") {
 		parts := strings.Split(region, ".")
@@ -127,15 +131,17 @@ func newStore() (*minio.Client, *minio.Client, string) {
 		telemetry.L.Sugar().Fatalf("create MinIO client: %v", err)
 	}
 	presignStore := store
-	if publicEndpoint := os.Getenv("S3_PUBLIC_ENDPOINT"); publicEndpoint != "" && publicEndpoint != endpoint {
+	if publicEndpoint := strings.TrimSpace(os.Getenv("S3_PUBLIC_ENDPOINT")); publicEndpoint != "" && publicEndpoint != endpoint {
+		publicEndpointUsesTLS := strings.HasPrefix(strings.ToLower(publicEndpoint), "https://") || strings.Contains(strings.ToLower(publicEndpoint), "backblazeb2.com")
 		publicEndpoint = strings.TrimPrefix(strings.TrimPrefix(publicEndpoint, "https://"), "http://")
-		publicUseSSL := useSSL
+		publicUseSSL := useSSL || publicEndpointUsesTLS
 		if configuredSSL := os.Getenv("S3_PUBLIC_USE_SSL"); configuredSSL != "" {
 			publicUseSSL, err = strconv.ParseBool(configuredSSL)
 			if err != nil {
 				telemetry.L.Sugar().Fatalf("parse S3_PUBLIC_USE_SSL: %v", err)
 			}
 		}
+		publicUseSSL = publicUseSSL || publicEndpointUsesTLS
 		presignStore, err = minio.New(publicEndpoint, &minio.Options{Creds: creds, Secure: publicUseSSL, Region: region})
 		if err != nil {
 			telemetry.L.Sugar().Fatalf("create public MinIO URL signer: %v", err)

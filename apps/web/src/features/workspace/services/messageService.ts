@@ -284,10 +284,25 @@ export const messageService = {
         },
       });
     } catch (error) {
-      throw new Error(
-        `Could not reach file storage while uploading ${file.name}. Check that the storage service is running and that RUSTFS_CORS_ALLOWED_ORIGINS includes this app's origin.`,
-        { cause: error },
-      );
+      let storageHost = "the configured object storage endpoint";
+      try {
+        storageHost = new URL(presign.data.upload_url).hostname;
+      } catch {
+        // Keep the message useful if the configured upload URL is malformed.
+      }
+      try {
+        // Small/medium files can still be uploaded through the API if the
+        // browser cannot reach the bucket (for example, before its CORS rule is set).
+        return await uploadLegacy();
+      } catch (fallbackError) {
+        const fallbackDetail = fallbackError instanceof Error
+          ? fallbackError.message
+          : "unknown API error";
+        throw new Error(
+          `Upload failed for ${file.name}. The browser could not reach ${storageHost}, and the API fallback failed (${fallbackDetail}). Check HTTPS, bucket CORS for ${window.location.origin} (PUT and Content-Type), and the API service logs.`,
+          { cause: fallbackError ?? error },
+        );
+      }
     }
 
     if (!putResponse.ok) {

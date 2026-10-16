@@ -100,10 +100,11 @@ func main() {
 }
 
 func newStore() (*minio.Client, string) {
-	endpoint := os.Getenv("S3_ENDPOINT")
+	endpoint := strings.TrimSpace(os.Getenv("S3_ENDPOINT"))
 	if endpoint == "" {
 		endpoint = "127.0.0.1:9000"
 	}
+	endpointUsesTLS := strings.HasPrefix(strings.ToLower(endpoint), "https://") || strings.Contains(strings.ToLower(endpoint), "backblazeb2.com")
 	sanitizeS3 := func(val string) string {
 		val = strings.TrimSpace(val)
 		val = strings.Trim(val, `"'`)
@@ -122,6 +123,7 @@ func newStore() (*minio.Client, string) {
 	accessKey := sanitizeS3(os.Getenv("S3_ACCESS_KEY"))
 	secretKey := sanitizeS3(os.Getenv("S3_SECRET_KEY"))
 	useSSL, _ := strconv.ParseBool(sanitizeS3(os.Getenv("S3_USE_SSL")))
+	useSSL = useSSL || endpointUsesTLS
 	region := sanitizeS3(os.Getenv("S3_REGION"))
 	if strings.Contains(region, "backblazeb2.com") {
 		parts := strings.Split(region, ".")

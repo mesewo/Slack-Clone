@@ -249,10 +249,11 @@ func main() {
 	} else if err := searchClient.Reindex(context.Background(), messages); err != nil {
 		log.Printf("warning: failed to backfill search index: %v", err)
 	}
-	s3Endpoint := os.Getenv("S3_ENDPOINT")
+	s3Endpoint := strings.TrimSpace(os.Getenv("S3_ENDPOINT"))
 	if s3Endpoint == "" {
 		s3Endpoint = "127.0.0.1:9000"
 	}
+	s3EndpointUsesTLS := strings.HasPrefix(strings.ToLower(s3Endpoint), "https://") || strings.Contains(strings.ToLower(s3Endpoint), "backblazeb2.com")
 	sanitizeS3 := func(val string) string {
 		val = strings.TrimSpace(val)
 		val = strings.Trim(val, `"'`)
@@ -275,6 +276,7 @@ func main() {
 		s3Bucket = "slack-uploads"
 	}
 	s3UseSSL, _ := strconv.ParseBool(sanitizeS3(os.Getenv("S3_USE_SSL")))
+	s3UseSSL = s3UseSSL || s3EndpointUsesTLS
 	s3Region := sanitizeS3(os.Getenv("S3_REGION"))
 	if strings.Contains(s3Region, "backblazeb2.com") {
 		parts := strings.Split(s3Region, ".")
