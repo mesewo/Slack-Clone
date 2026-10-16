@@ -359,13 +359,28 @@ export function MessageComposer({
           <div className="flex items-center">
             <Button
               type="submit"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0 rounded-r-none rounded-l-2xl shadow-[0_8px_16px_rgba(99,102,241,0.25)] sm:h-11 sm:w-11"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-10 w-10 shrink-0 rounded-r-none rounded-l-2xl shadow-[0_8px_16px_rgba(99,102,241,0.25)] sm:h-11 sm:w-11 transition-all disabled:opacity-50"
               disabled={
-                isUploading || (!draft.trim() && attachments.length === 0)
+                isUploading ||
+                attachments.some((item) => item.isUploading) ||
+                (!draft.trim() && attachments.length === 0)
               }
-              aria-label="Send message"
+              aria-label={
+                attachments.some((item) => item.isUploading)
+                  ? "Uploading files..."
+                  : "Send message"
+              }
+              title={
+                attachments.some((item) => item.isUploading)
+                  ? "Uploading files..."
+                  : "Send message"
+              }
             >
-              <Icons.send className="size-4" />
+              {isUploading || attachments.some((item) => item.isUploading) ? (
+                <Icons.spinner className="size-4 animate-spin" />
+              ) : (
+                <Icons.send className="size-4" />
+              )}
             </Button>
             <Button
               type="button"

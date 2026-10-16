@@ -21,9 +21,9 @@ export const settingsSearchDestinations: SettingsSearchDestination[] = [
   },
   {
     label: "Profile",
-    description: "Update your account profile and display name.",
-    keywords: ["avatar", "display name", "account"],
-    pathBuilder: () => "/dashboard/profile",
+    description: "Update your account profile, display name, and preferences.",
+    keywords: ["avatar", "display name", "account", "preferences", "status"],
+    pathBuilder: (workspaceId) => `/home/${workspaceId}/profile`,
   },
   {
     label: "Theme",

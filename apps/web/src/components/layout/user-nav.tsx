@@ -47,7 +47,16 @@ export function UserNav() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push("/dashboard/profile")}>
+          <DropdownMenuItem
+            onClick={() => {
+              const workspaceId = window.localStorage.getItem("active_workspace_id");
+              router.push(
+                workspaceId
+                  ? `/home/${workspaceId}/profile`
+                  : "/dashboard/profile"
+              );
+            }}
+          >
             Profile
           </DropdownMenuItem>
           <DropdownMenuItem

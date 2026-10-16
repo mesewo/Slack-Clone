@@ -82,50 +82,79 @@ export function WorkspaceChatView() {
       void markConversationRead(selectedConversationId);
   }, [markConversationRead, selectedConversationId]);
 
+  const handleAddAttachments = useCallback((files: FileList) => {
+    const fileList = Array.from(files);
+    for (const file of fileList) {
+      const tempId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const localUrl = URL.createObjectURL(file);
+
+      const newAttachment: Attachment = {
+        id: tempId,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        file,
+        url: localUrl,
+        isUploading: true,
+      };
+
+      setAttachments((current) => [...current, newAttachment]);
+
+      // Upload immediately in background so it's ready when user clicks send
+      messageService
+        .upload(file)
+        .then((uploaded) => {
+          setAttachments((current) =>
+            current.map((item) =>
+              item.id === tempId
+                ? {
+                    ...item,
+                    id: uploaded.id,
+                    url: uploaded.url,
+                    thumbnailUrl: uploaded.thumbnail_url,
+                    isUploading: false,
+                  }
+                : item,
+            ),
+          );
+        })
+        .catch((error) => {
+          console.error("File upload failed:", error);
+          toast.error(`Failed to upload ${file.name}`);
+          setAttachments((current) =>
+            current.filter((item) => item.id !== tempId),
+          );
+        });
+    }
+  }, []);
+
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!draft.trim() && attachments.length === 0) return;
+
+      // If any attachment is still uploading, prevent premature sending
+      if (attachments.some((item) => item.isUploading)) {
+        toast.info("Please wait for files to finish uploading.");
+        return;
+      }
+
       setIsUploading(true);
-      setAttachments((current) =>
-        current.map((item) => ({ ...item, isUploading: Boolean(item.file) })),
-      );
       try {
-        const uploaded = await Promise.all(
-          attachments
-            .filter((item) => item.file)
-            .map((item) => messageService.upload(item.file!)),
-        );
         await sendMessage(
           draft,
-          uploaded.map((item) => item.id),
+          attachments.map((item) => item.id),
         );
         setAttachments([]);
-      } catch {
-        setAttachments((current) =>
-          current.map((item) => ({ ...item, isUploading: false })),
-        );
-        toast.error("Upload failed. Check the file type and 100MB size limit.");
+      } catch (error) {
+        console.error("Failed to send message:", error);
+        toast.error("Could not send message. Please try again.");
       } finally {
         setIsUploading(false);
       }
     },
     [attachments, draft, sendMessage],
   );
-
-  const handleAddAttachments = useCallback((files: FileList) => {
-    setAttachments((current) => [
-      ...current,
-      ...Array.from(files).map((file) => ({
-        id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        name: file.name,
-        size: file.size,
-        type: file.type,
-        file,
-        url: URL.createObjectURL(file),
-      })),
-    ]);
-  }, []);
 
   const openConversation = (id: string) => {
     selectConversation(id);

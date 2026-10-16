@@ -116,47 +116,66 @@ export function AttachmentDownloadButton({
       type="button"
       onClick={() => void download()}
       disabled={state === "downloading"}
-      className={`${overlay ? "absolute inset-0 z-10 flex h-full w-full rounded-xl bg-black/25 text-white hover:bg-black/40" : "relative inline-flex size-8 rounded-full bg-background/80 text-foreground shadow-sm backdrop-blur hover:bg-background"} items-center justify-center transition-colors disabled:cursor-wait ${className}`}
+      className={
+        overlay
+          ? `absolute inset-0 z-10 flex h-full w-full items-center justify-center rounded-[inherit] bg-black/30 text-white backdrop-blur-[1px] transition-colors hover:bg-black/50 disabled:cursor-wait ${className}`
+          : `relative inline-flex size-8 items-center justify-center rounded-full bg-background/90 text-foreground shadow-sm backdrop-blur transition-all hover:bg-accent hover:text-accent-foreground disabled:cursor-wait ${className}`
+      }
       aria-label={
         state === "downloading"
-          ? `Downloading ${filename}`
+          ? `Downloading ${filename} (${progress}%)`
           : `Download ${filename}`
       }
-      title={`Download ${filename}`}
+      title={
+        state === "downloading"
+          ? `Downloading ${filename} (${progress}%)`
+          : `Download ${filename}`
+      }
     >
       {state === "downloading" ? (
-        <svg
-          viewBox="0 0 36 36"
-          className="size-6 -rotate-90"
-          aria-hidden="true"
-        >
-          <circle
-            cx="18"
-            cy="18"
-            r="15"
-            fill="none"
-            stroke={overlay ? "white" : "currentColor"}
-            strokeOpacity="0.2"
-            strokeWidth="3"
-          />
-          <circle
-            cx="18"
-            cy="18"
-            r="15"
-            fill="none"
-            stroke={overlay ? "white" : "currentColor"}
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeDasharray={2 * Math.PI * 15}
-            strokeDashoffset={2 * Math.PI * 15 * (1 - progress / 100)}
-          />
-        </svg>
+        <div className="flex flex-col items-center justify-center gap-1">
+          <svg
+            viewBox="0 0 36 36"
+            className="size-7 -rotate-90 animate-pulse"
+            aria-hidden="true"
+          >
+            <circle
+              cx="18"
+              cy="18"
+              r="15"
+              fill="none"
+              stroke={overlay ? "white" : "currentColor"}
+              strokeOpacity="0.25"
+              strokeWidth="3"
+            />
+            <circle
+              cx="18"
+              cy="18"
+              r="15"
+              fill="none"
+              stroke={overlay ? "#38bdf8" : "currentColor"}
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 15}
+              strokeDashoffset={2 * Math.PI * 15 * (1 - progress / 100)}
+              className="transition-[stroke-dashoffset] duration-150"
+            />
+          </svg>
+          <span className="text-[0.65rem] font-semibold text-white drop-shadow">
+            {progress}%
+          </span>
+        </div>
       ) : (
-        <span className={`flex size-10 items-center justify-center rounded-full shadow-lg ring-1 ${overlay ? "bg-black/55 ring-white/70" : "bg-muted ring-border"}`}>
-          <IconArrowDown className="size-6" />
+        <span
+          className={`flex size-8 items-center justify-center rounded-full shadow-md transition-transform hover:scale-110 ${
+            overlay
+              ? "bg-black/60 ring-1 ring-white/60 text-white"
+              : "bg-muted text-foreground"
+          }`}
+        >
+          <IconArrowDown className="size-4" />
         </span>
       )}
-      {state === "downloading" && <span className="sr-only">{progress}%</span>}
     </button>
   );
 }

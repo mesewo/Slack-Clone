@@ -40,9 +40,15 @@ export function ChatHeader({
   const userPresence = useChatStore((state) => state.userPresence);
   const currentUserId = useChatStore((state) => state.currentUserId);
   const removeConversation = useChatStore((state) => state.removeConversation);
+  const selectConversation = useChatStore((state) => state.selectConversation);
   const presence = conversation.otherUserId
     ? userPresence[conversation.otherUserId] || "offline"
     : "offline";
+
+  const handleClose = () => {
+    selectConversation("");
+    router.replace(`/home/${params.workspaceId}`);
+  };
   return (
     <header className="border-border/60 bg-muted/30 relative flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:gap-4 sm:px-4">
       <div className="flex items-center gap-2 sm:gap-3">
@@ -145,6 +151,17 @@ export function ChatHeader({
           onClick={() => setMenuOpen((open) => !open)}
         >
           <Icons.ellipsis className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="border-border/60 bg-background/70 text-muted-foreground hover:bg-accent/70 hover:text-foreground focus-visible:ring-primary/40 focus-visible:ring-offset-background size-8 rounded-full border shadow-sm transition focus-visible:ring-2 focus-visible:ring-offset-2 sm:size-10"
+          aria-label="Close conversation"
+          title="Close (Esc)"
+          onClick={handleClose}
+        >
+          <Icons.close className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
         </Button>
         {menuOpen && (
           <div className="border-border bg-popover absolute top-14 right-3 z-30 w-52 rounded-xl border p-1 shadow-xl">

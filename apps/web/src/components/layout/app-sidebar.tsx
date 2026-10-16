@@ -114,6 +114,10 @@ export default function AppSidebar() {
       return activeWorkspaceId
         ? `/home/${activeWorkspaceId}/notifications`
         : "/workspaces";
+    if (url === "/dashboard/profile")
+      return activeWorkspaceId
+        ? `/home/${activeWorkspaceId}/profile`
+        : "/workspaces";
     return url;
   };
   const organization = null;
@@ -402,7 +406,13 @@ export default function AppSidebar() {
 
                 <DropdownMenuGroup>
                   <DropdownMenuItem
-                    onClick={() => router.push("/dashboard/profile")}
+                    onClick={() =>
+                      router.push(
+                        activeWorkspaceId
+                          ? `/home/${activeWorkspaceId}/profile`
+                          : "/dashboard/profile"
+                      )
+                    }
                   >
                     <Icons.account className="mr-2 h-4 w-4" />
                     Profile

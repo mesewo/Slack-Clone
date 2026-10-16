@@ -1,21 +1,11 @@
 "use client";
 
-import type { FC } from "react";
-import { useState } from "react";
+import React, { FC, useState } from "react";
 import Image from "next/image";
 import { Icons } from "@/components/icons";
 import { AttachmentDownloadButton } from "@/features/chat/components/AttachmentDownloadButton";
-import { AttachmentLightbox } from "@/components/ui/attachment-lightbox";
+import { MediaGallery, type MediaItem } from "@/components/ui/media-gallery";
 import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
-
-// 2 MB in bytes
-const DEFAULT_AUTO_PREVIEW_SIZE_LIMIT = 2 * 1024 * 1024;
 
 export interface UploadedFile {
   id: string;
@@ -98,30 +88,32 @@ const getFileIcon = (fileType: string, fileName: string) => {
       "tsx",
       "py",
       "java",
+      "go",
+      "rs",
       "c",
       "cpp",
       "html",
       "css",
-    ].includes(extension) ||
-    fileType.includes("javascript") ||
-    fileType.includes("typescript")
+      "json",
+    ].includes(extension)
   )
     return (
-      <Icons.code
-        {...iconProps}
-        className="text-yellow-500 dark:text-yellow-400"
-      />
-    );
-
-  if (["json", "xml", "yaml", "yml"].includes(extension))
-    return (
-      <Icons.code {...iconProps} className="text-zinc-500 dark:text-zinc-400" />
+      <Icons.code {...iconProps} className="text-amber-500 dark:text-amber-400" />
     );
 
   if (
-    fileType.startsWith("video/") ||
-    ["mp4", "avi", "mov", "mkv"].includes(extension)
+    ["zip", "tar", "gz", "rar", "7z"].includes(extension) ||
+    fileType.includes("zip") ||
+    fileType.includes("compressed")
   )
+    return (
+      <Icons.fileZip
+        {...iconProps}
+        className="text-amber-600 dark:text-amber-500"
+      />
+    );
+
+  if (fileType.startsWith("video/"))
     return (
       <Icons.video
         {...iconProps}
@@ -129,10 +121,7 @@ const getFileIcon = (fileType: string, fileName: string) => {
       />
     );
 
-  if (
-    fileType.startsWith("audio/") ||
-    ["mp3", "wav", "ogg"].includes(extension)
-  )
+  if (fileType.startsWith("audio/"))
     return (
       <Icons.music
         {...iconProps}
@@ -140,48 +129,29 @@ const getFileIcon = (fileType: string, fileName: string) => {
       />
     );
 
-  if (
-    ["zip", "rar", "tar", "gz", "7z"].includes(extension) ||
-    fileType.includes("archive") ||
-    fileType.includes("compressed")
-  )
-    return (
-      <Icons.fileZip
-        {...iconProps}
-        className="text-amber-500 dark:text-amber-400"
-      />
-    );
-
   return (
-    <Icons.page {...iconProps} className="text-zinc-500 dark:text-zinc-400" />
+    <Icons.page {...iconProps} className="text-zinc-400 dark:text-zinc-500" />
   );
 };
 
 const getFormattedFileType = (fileType: string, fileName: string): string => {
   const ext = getFileExtension(fileName).toUpperCase();
+  const typePart = fileType.split("/")[1]?.toUpperCase();
 
-  if (fileType.includes("msword") || fileType.includes("wordprocessing"))
-    return "DOC";
-
-  if (fileType.includes("spreadsheet") || fileType.includes("excel"))
-    return "SPREADSHEET";
-
-  const typePart = fileType.split("/")[1];
-
-  if (!typePart || typePart === "octet-stream") {
+  if (!typePart || typePart === "OCTET-STREAM") {
     return ext || "FILE";
   }
 
   const cleanType = typePart
-    .replace("vnd.openxmlformats-officedocument.", "")
-    .replace("vnd.ms-", "")
-    .replace("x-", "")
-    .replace("document.", "")
-    .replace("presentation.", "")
-    .replace("application.", "")
+    .replace("VND.OPENXMLFORMATS-OFFICEDOCUMENT.", "")
+    .replace("VND.MS-", "")
+    .replace("X-", "")
+    .replace("DOCUMENT.", "")
+    .replace("PRESENTATION.", "")
+    .replace("APPLICATION.", "")
     .split(".")[0];
 
-  return cleanType.toUpperCase().substring(0, 8);
+  return cleanType.substring(0, 8);
 };
 
 export const FilePreview: FC<FilePreviewProps> = ({
@@ -190,328 +160,236 @@ export const FilePreview: FC<FilePreviewProps> = ({
   className,
   variant = "default",
   mode = "message",
-  maxAutoPreviewSize,
 }) => {
   const isInverted = variant === "inverted";
   const isComposeMode = mode === "compose";
-  const [previewFile, setPreviewFile] = useState<UploadedFile | null>(null);
-  const [lightboxBlob, setLightboxBlob] = useState<Blob | null>(null);
-  const [lightboxFilename, setLightboxFilename] = useState<string>("");
-  const [lightboxContentType, setLightboxContentType] = useState<string>("");
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
 
   if (files.length === 0) return null;
 
-  // Helper to check if file should be auto-previewed
-  const shouldAutoPreview = (file: UploadedFile): boolean => {
-    // If maxAutoPreviewSize is set (used for message attachments)
-    if (maxAutoPreviewSize !== undefined) {
-      // Only auto-preview images that are under the size limit
-      if (file.type.startsWith("image/")) {
-        return (file.size ?? 0) <= maxAutoPreviewSize;
-      }
-      // Never auto-preview video (requires explicit click)
-      if (file.type.startsWith("video/")) {
-        return false;
-      }
+  const mediaFiles: MediaItem[] = files
+    .filter(
+      (f) =>
+        f.url &&
+        (f.type.startsWith("image/") || f.type.startsWith("video/"))
+    )
+    .map((f) => ({
+      id: f.id,
+      url: f.url!,
+      name: f.name,
+      type: f.type,
+      size: f.size,
+    }));
+
+  const openGalleryForFile = (fileId: string) => {
+    const idx = mediaFiles.findIndex((m) => m.id === fileId);
+    if (idx !== -1) {
+      setGalleryIndex(idx);
+      setGalleryOpen(true);
     }
-    // Default behavior: auto-preview if URL exists
-    return !!file.url;
   };
 
-  // Helper to format file size
-  const formatFileSize = (bytes: number | undefined): string => {
+  const formatFileSize = (bytes?: number): string => {
     if (!bytes) return "";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const handleImagePreview = (blob: Blob, file: UploadedFile) => {
-    setLightboxBlob(blob);
-    setLightboxFilename(file.name);
-    setLightboxContentType(file.type);
-    setLightboxOpen(true);
-  };
+  // 1. COMPOSE MODE: Compact preview chips with upload spinner and remove button
+  if (isComposeMode) {
+    return (
+      <div className={cn("flex w-full flex-wrap gap-2 p-1.5", className)}>
+        {files.map((file) => (
+          <div
+            key={file.id}
+            className={cn(
+              "group/file relative flex items-center rounded-xl transition-all",
+              isInverted
+                ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
+                : "bg-muted/90 hover:bg-muted border border-border/60",
+              "max-w-[260px] min-w-[170px] p-2 pr-7 select-none"
+            )}
+          >
+            {/* Uploading Animation Overlay */}
+            {file.isUploading && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl bg-black/55 backdrop-blur-[1px] text-white">
+                <Icons.spinner size={18} className="animate-spin text-white mb-0.5" />
+                <span className="text-[0.62rem] font-medium tracking-wide">Uploading...</span>
+              </div>
+            )}
 
+            {onRemove && (
+              <button
+                type="button"
+                onClick={() => onRemove(file.id)}
+                className="absolute top-1.5 right-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-muted-foreground/60 hover:bg-muted-foreground text-white cursor-pointer transition"
+                aria-label={`Remove ${file.name}`}
+              >
+                <Icons.close size={11} />
+              </button>
+            )}
+
+            {file.type.startsWith("image/") && file.url ? (
+              <div className="mr-2.5 shrink-0 overflow-hidden rounded-lg">
+                <Image
+                  src={file.url}
+                  alt={file.name}
+                  width={48}
+                  height={48}
+                  unoptimized
+                  className="size-12 rounded-lg object-cover"
+                />
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "mr-2.5 flex size-10 items-center justify-center rounded-lg",
+                  isInverted
+                    ? "bg-primary-foreground/10"
+                    : "bg-muted-foreground/10"
+                )}
+              >
+                {getFileIcon(file.type, file.name)}
+              </div>
+            )}
+
+            <div className="flex min-w-0 flex-1 flex-col">
+              <p
+                className={cn(
+                  "truncate text-xs font-semibold",
+                  isInverted ? "text-primary-foreground" : "text-foreground"
+                )}
+                title={file.name}
+              >
+                {file.name}
+              </p>
+              <span
+                className={cn(
+                  "text-[0.68rem]",
+                  isInverted
+                    ? "text-primary-foreground/70"
+                    : "text-muted-foreground"
+                )}
+              >
+                {formatFileSize(file.size) || getFormattedFileType(file.type, file.name)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // 2. MESSAGE MODE: Natural image/video rendering (Slack style) & Slack file cards
   return (
-    <div className={cn("flex w-full flex-col gap-2 rounded-xl p-2", className)}>
-      <div className="flex w-full flex-wrap gap-2">
+    <>
+      <div className={cn("flex w-full flex-wrap items-start gap-2.5 my-1.5", className)}>
         {files.map((file) => {
-          // COMPOSE MODE: Simple thumbnail + remove button only
-          if (isComposeMode) {
+          const isImage = file.type.startsWith("image/");
+          const isVideo = file.type.startsWith("video/");
+
+          // Images: rendered naturally with rounded corners and clean hover download button
+          if (isImage && file.url) {
             return (
               <div
                 key={file.id}
-                className={cn(
-                  "group/file relative flex items-center rounded-xl transition-all",
-                  isInverted
-                    ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
-                    : "bg-muted hover:bg-muted/80",
-                  "max-w-[260px] min-w-[180px] p-2 pr-8",
-                )}
+                className="group/media relative inline-block overflow-hidden rounded-lg border border-border/40 hover:border-border/80 transition-all shadow-xs"
               >
-                {file.isUploading && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30">
-                    <Icons.spinner
-                      size={20}
-                      className="animate-spin text-white"
-                    />
-                  </div>
-                )}
-
-                {onRemove && (
-                  <button
-                    type="button"
-                    onClick={() => onRemove(file.id)}
-                    className={cn(
-                      "absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full",
-                      "scale-75 opacity-0 transition-all duration-150 group-hover/file:scale-100 group-hover/file:opacity-100",
-                      "bg-muted-foreground/60 hover:bg-muted-foreground/80 cursor-pointer",
-                    )}
-                    aria-label={`Remove ${file.name}`}
-                  >
-                    <Icons.close size={10} className="text-white" />
-                  </button>
-                )}
-
-                {file.type.startsWith("image/") && file.url ? (
-                  <button type="button" onClick={() => setPreviewFile(file)} aria-label={`Preview ${file.name}`} className="mr-3 shrink-0 cursor-zoom-in rounded-lg focus-visible:ring-2 focus-visible:ring-primary">
-                    <Image
-                      src={file.url}
-                      alt={file.name}
-                      width={64}
-                      height={64}
-                      unoptimized
-                      className="size-14 rounded-lg object-cover"
-                    />
-                  </button>
-                ) : (
-                  <div
-                    className={cn(
-                      "mr-3 flex h-10 w-10 items-center justify-center rounded-lg",
-                      isInverted
-                        ? "bg-primary-foreground/10"
-                        : "bg-muted-foreground/10",
-                    )}
-                  >
-                    {getFileIcon(file.type, file.name)}
-                  </div>
-                )}
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <p
-                    className={cn(
-                      "truncate text-sm font-medium",
-                      isInverted
-                        ? "text-primary-foreground"
-                        : "text-foreground",
-                    )}
-                  >
-                    {file.name.length > 18
-                      ? `${file.name.substring(0, 15)}...`
-                      : file.name}
-                  </p>
-                  <span
-                    className={cn(
-                      "text-xs",
-                      isInverted
-                        ? "text-primary-foreground/70"
-                        : "text-muted-foreground",
-                    )}
-                  >
-                    {getFormattedFileType(file.type, file.name)}
-                  </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={file.url}
+                  alt={file.name}
+                  className="max-h-80 max-w-[420px] w-auto h-auto rounded-lg object-contain cursor-pointer transition-transform duration-200 hover:scale-[1.01]"
+                  onClick={() => openGalleryForFile(file.id)}
+                  title="Click to view full image"
+                />
+                {/* Top-right hover download button */}
+                <div className="absolute top-2 right-2 opacity-0 group-hover/media:opacity-100 transition-opacity">
+                  <AttachmentDownloadButton
+                    id={file.id}
+                    url={file.url}
+                    filename={file.name}
+                    contentType={file.type}
+                  />
                 </div>
               </div>
             );
           }
 
-          // MESSAGE MODE: Full lightbox + gating + download logic
-          const autoPreview = shouldAutoPreview(file);
-          const isImage = file.type.startsWith("image/");
-          const isVideo = file.type.startsWith("video/");
-          const oversizeImage =
-            maxAutoPreviewSize !== undefined &&
-            isImage &&
-            (file.size ?? 0) > maxAutoPreviewSize;
-
-          return (
-            <div
-              key={file.id}
-              className={cn(
-                "group/file relative flex items-center rounded-xl transition-all",
-                isInverted
-                  ? "bg-primary-foreground/15 hover:bg-primary-foreground/20"
-                  : "bg-muted hover:bg-muted/80",
-                autoPreview && isImage
-                  ? "max-w-[320px] p-1"
-                  : "max-w-[260px] min-w-[180px] p-2 pr-8",
-              )}
-            >
-              {file.isUploading && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30">
-                  <Icons.spinner
-                    size={20}
-                    className="animate-spin text-white"
-                  />
-                </div>
-              )}
-
-              {onRemove && (
-                <button
-                  type="button"
-                  onClick={() => onRemove(file.id)}
-                  className={cn(
-                    "absolute -top-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full",
-                    "scale-75 opacity-0 transition-all duration-150 group-hover/file:scale-100 group-hover/file:opacity-100",
-                    "bg-muted-foreground/60 hover:bg-muted-foreground/80 cursor-pointer",
-                  )}
-                  aria-label={`Remove ${file.name}`}
-                >
-                  <Icons.close size={10} className="text-white" />
-                </button>
-              )}
-
-              {/* Auto-preview: image (if size OK) or video (if no size gating) */}
-              {autoPreview && isImage && file.url && !oversizeImage ? (
-                <button
-                  type="button"
-                  className="max-h-72 max-w-[300px] cursor-zoom-in overflow-hidden rounded-md focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
-                  onClick={() => setPreviewFile(file)}
-                  aria-label={`Preview ${file.name}`}
-                >
-                  <Image
-                    src={file.url}
-                    alt={file.name}
-                    width={300}
-                    height={288}
-                    unoptimized
-                    className="h-auto max-h-72 max-w-full object-contain"
-                  />
-                </button>
-              ) : isVideo && file.url ? (
+          // Videos: rendered cleanly with controls
+          if (isVideo && file.url) {
+            return (
+              <div
+                key={file.id}
+                className="group/media relative inline-block overflow-hidden rounded-lg border border-border/40 bg-black shadow-xs"
+              >
                 <video
                   src={file.url}
                   controls
                   preload="metadata"
-                  data-testid={`inline-video-${file.id}`}
-                  className="max-h-72 max-w-[320px] rounded-md"
-                >
-                  <track kind="captions" />
-                </video>
-              ) : (
-                <>
-                  <div
-                    className={cn(
-                      "mr-3 flex h-10 w-10 items-center justify-center rounded-lg",
-                      isInverted
-                        ? "bg-primary-foreground/10"
-                        : "bg-muted-foreground/10",
-                    )}
-                  >
-                    {getFileIcon(file.type, file.name)}
-                  </div>
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <p
-                      className={cn(
-                        "truncate text-sm font-medium",
-                        isInverted
-                          ? "text-primary-foreground"
-                          : "text-foreground",
-                      )}
-                    >
-                      {file.name.length > 18
-                        ? `${file.name.substring(0, 15)}...`
-                        : file.name}
-                    </p>
-                    <span
-                      className={cn(
-                        "text-xs",
-                        isInverted
-                          ? "text-primary-foreground/70"
-                          : "text-muted-foreground",
-                      )}
-                    >
-                      {oversizeImage ||
-                      (maxAutoPreviewSize !== undefined && isVideo)
-                        ? formatFileSize(file.size)
-                        : getFormattedFileType(file.type, file.name)}
-                    </span>
-                  </div>
-                </>
-              )}
-
-              {file.url && (
-                <AttachmentDownloadButton
-                  id={file.id}
-                  url={file.url}
-                  filename={file.name}
-                  contentType={file.type}
-                  overlay
-                  onImagePreview={
-                    (isImage || isVideo) && maxAutoPreviewSize !== undefined
-                      ? (blob) => handleImagePreview(blob, file)
-                      : undefined
-                  }
+                  className="max-h-80 max-w-[440px] w-auto h-auto rounded-lg"
                 />
+                <div className="absolute top-2 right-2 opacity-0 group-hover/media:opacity-100 transition-opacity">
+                  <AttachmentDownloadButton
+                    id={file.id}
+                    url={file.url}
+                    filename={file.name}
+                    contentType={file.type}
+                  />
+                </div>
+              </div>
+            );
+          }
+
+          // Other files (PDFs, docs, spreadsheets, zip, audio, code): Slack file card
+          return (
+            <div
+              key={file.id}
+              className={cn(
+                "group/file relative flex items-center gap-3 rounded-lg border border-border/80 bg-background/80 hover:bg-accent/40 p-2.5 transition-colors max-w-sm min-w-[200px]",
+                isInverted && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
+              )}
+            >
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/80">
+                {getFileIcon(file.type, file.name)}
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col">
+                <p
+                  className="truncate text-xs font-semibold text-foreground"
+                  title={file.name}
+                >
+                  {file.name}
+                </p>
+                <span className="text-[0.68rem] text-muted-foreground">
+                  {formatFileSize(file.size) || getFormattedFileType(file.type, file.name)}
+                </span>
+              </div>
+              {file.url && (
+                <div className="shrink-0">
+                  <AttachmentDownloadButton
+                    id={file.id}
+                    url={file.url}
+                    filename={file.name}
+                    contentType={file.type}
+                  />
+                </div>
               )}
             </div>
           );
         })}
       </div>
 
-      {/* Dialog for upload preview (file-composer) */}
-      <Dialog
-        open={Boolean(previewFile)}
-        onOpenChange={(open) => {
-          if (!open) setPreviewFile(null);
-        }}
-      >
-        <DialogContent className="max-w-4xl border-border/70 bg-background/95 p-3 sm:p-4">
-          <DialogTitle className="truncate pr-8 text-sm">
-            {previewFile?.name || "Attachment preview"}
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Preview of the selected attachment
-          </DialogDescription>
-          {previewFile?.type.startsWith("image/") && previewFile.url ? (
-            <Image
-              src={previewFile.url}
-              alt={previewFile.name}
-              width={1200}
-              height={900}
-              unoptimized
-              className="max-h-[75vh] w-full rounded-lg object-contain"
-            />
-          ) : previewFile?.type.startsWith("video/") && previewFile.url ? (
-            <video
-              src={previewFile.url}
-              controls
-              autoPlay
-              className="max-h-[75vh] w-full rounded-lg"
-            >
-              <track kind="captions" />
-            </video>
-          ) : null}
-          {previewFile?.url && (
-            <AttachmentDownloadButton
-              id={previewFile.id}
-              url={previewFile.url}
-              filename={previewFile.name}
-              contentType={previewFile.type}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Lightbox for message attachment images (opened after download) */}
-      <AttachmentLightbox
-        isOpen={lightboxOpen}
-        onClose={() => setLightboxOpen(false)}
-        blob={lightboxBlob!}
-        filename={lightboxFilename}
-        contentType={lightboxContentType}
-      />
-    </div>
+      {/* Slack Media Gallery / Viewer */}
+      {mediaFiles.length > 0 && (
+        <MediaGallery
+          isOpen={galleryOpen}
+          onClose={() => setGalleryOpen(false)}
+          items={mediaFiles}
+          initialIndex={galleryIndex}
+        />
+      )}
+    </>
   );
 };

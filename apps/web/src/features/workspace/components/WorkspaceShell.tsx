@@ -38,6 +38,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const selectedConversationId = useChatStore(
     (state) => state.selectedConversationId,
   );
+  const selectConversation = useChatStore(
+    (state) => state.selectConversation,
+  );
   const conversations = useChatStore((state) => state.conversations);
   const newMessageOpen = newMessagePath === pathname;
 
@@ -119,22 +122,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const closeNewMessage = () => setNewMessagePath(null);
 
   function closePanel() {
-    const selected = conversations.find(
-      (conversation) => conversation.id === selectedConversationId,
-    );
-    if (!selected) {
-      router.push(`/home/${workspaceId}`);
-      return;
-    }
-    const conversationPath =
-      selected.kind === "dm"
-        ? `/home/${workspaceId}/dms/${selected.dmId ?? selected.id.slice(3)}`
-        : `/home/${workspaceId}/channels/${selected.id}`;
-    router.push(
-      pathname === conversationPath
-        ? `/home/${workspaceId}`
-        : conversationPath,
-    );
+    selectConversation("");
+    router.replace(`/home/${workspaceId}`);
   }
 
   return (
@@ -185,17 +174,22 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           className="min-h-0 min-w-0"
         >
           <main className="relative flex h-full min-h-0 min-w-0 overflow-hidden">
-            {pathname !== `/home/${workspaceId}` && !newMessageOpen && <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground"
-              aria-label="Close panel"
-              title="Close panel"
-              onClick={closePanel}
-            >
-              <Icons.close className="size-4" />
-            </Button>}
+            {!pathname.includes("/channels/") &&
+              !pathname.includes("/dms/") &&
+              pathname !== `/home/${workspaceId}` &&
+              !newMessageOpen && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-2 right-2 z-30 size-8 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+                  aria-label="Close panel"
+                  title="Close panel"
+                  onClick={closePanel}
+                >
+                  <Icons.close className="size-4" />
+                </Button>
+              )}
             <Button
               type="button"
               variant="ghost"

@@ -15,6 +15,7 @@ import { RichMessageEditor } from "./RichMessageEditor";
 import { IconMoodSmile } from "@tabler/icons-react";
 import { EmojiPicker } from "./emoji-picker";
 import { getFrequentlyUsedEmojis, trackEmojiUsage } from "../utils/emoji-frequency";
+import { UserProfilePopover } from "./user-profile-popover";
 
 function renderFormattedText(text: string): React.ReactNode[] {
   const normalizedText = text.replace(/<u>(.*?)<\/u>/g, "__$1__");
@@ -215,22 +216,23 @@ export function MessageBubble({
       aria-label={message.author + " at " + message.timestamp}
     >
       {!compact && (
-        <Avatar
-          onClick={() => {
-            if (message.userId && onStartDM && message.userId !== currentUserId) {
-              onStartDM(message.userId);
-            }
-          }}
-          className={cn(
-            "mt-0.5 size-8 shrink-0 rounded-md",
-            message.userId && onStartDM && message.userId !== currentUserId && "cursor-pointer transition-transform hover:scale-105 hover:ring-2 hover:ring-primary/40"
-          )}
-          title={message.userId && onStartDM && message.userId !== currentUserId ? `Direct message ${message.author}` : undefined}
+        <UserProfilePopover
+          userId={message.userId}
+          author={message.author}
+          isCurrentUser={isUser}
+          onStartDM={onStartDM}
         >
-          <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.65rem] font-semibold">
-            {message.author.slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
+          <Avatar
+            className={cn(
+              "mt-0.5 size-8 shrink-0 rounded-md cursor-pointer transition-transform hover:scale-105 hover:ring-2 hover:ring-primary/40",
+            )}
+            title={`View profile of ${message.author}`}
+          >
+            <AvatarFallback className="bg-primary/15 text-primary rounded-md text-[0.65rem] font-semibold">
+              {message.author.slice(0, 2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </UserProfilePopover>
       )}
       <div
         className={cn(
@@ -321,20 +323,20 @@ export function MessageBubble({
         </div>
         {!compact && (
           <div className="flex items-baseline gap-1.5">
-            {message.userId && onStartDM && message.userId !== currentUserId ? (
+            <UserProfilePopover
+              userId={message.userId}
+              author={message.author}
+              isCurrentUser={isUser}
+              onStartDM={onStartDM}
+            >
               <button
                 type="button"
-                onClick={() => onStartDM(message.userId!)}
-                className="text-foreground hover:underline text-xs font-bold sm:text-sm text-left focus:outline-none"
-                title={`Direct message ${message.author}`}
+                className="text-foreground hover:underline text-xs font-bold sm:text-sm text-left focus:outline-none cursor-pointer"
+                title={`View profile of ${message.author}`}
               >
                 {message.author}
               </button>
-            ) : (
-              <span className="text-foreground text-xs font-bold sm:text-sm">
-                {message.author}
-              </span>
-            )}
+            </UserProfilePopover>
             <span className="text-muted-foreground text-[0.65rem] font-normal">
               {message.timestamp}
             </span>
