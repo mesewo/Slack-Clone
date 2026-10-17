@@ -10,6 +10,9 @@ func TestValidatePresignRequest(t *testing.T) {
 	if _, _, _, err := validatePresignRequest("report.pdf", "application/pdf", 1024); err != nil {
 		t.Fatalf("valid presign request should pass: %v", err)
 	}
+	if _, _, size, err := validatePresignRequest("at-limit.pdf", "application/pdf", maxUploadSize); err != nil || size != maxUploadSize {
+		t.Fatalf("100 MiB file should pass: size=%d err=%v", size, err)
+	}
 	for _, test := range []struct {
 		name, filename, contentType string
 		size                        int64
@@ -21,6 +24,22 @@ func TestValidatePresignRequest(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			if _, _, _, err := validatePresignRequest(test.filename, test.contentType, test.size); err == nil {
 				t.Fatal("invalid presign request should be rejected")
+			}
+		})
+	}
+}
+
+func TestValidatePresignRequestRejectsMIMEAndOversize(t *testing.T) {
+	for _, test := range []struct {
+		name, mime string
+		size       int64
+	}{
+		{name: "unsupported MIME", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", size: 1},
+		{name: "over 100 MiB", mime: "image/jpeg", size: maxUploadSize + 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, _, err := validatePresignRequest("file", test.mime, test.size); err == nil {
+				t.Fatal("invalid request should be rejected")
 			}
 		})
 	}

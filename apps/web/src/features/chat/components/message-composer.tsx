@@ -11,7 +11,7 @@ import { IconAt, IconMoodSmile } from "@tabler/icons-react";
 import { EmojiPicker } from "./emoji-picker";
 
 // File upload validation constants
-const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB, matching the storage upload service
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MiB, matching the storage upload service
 function toLocalDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
     .toISOString()
@@ -27,13 +27,7 @@ const ALLOWED_FILE_TYPES = {
     "image/svg+xml",
   ],
   videos: ["video/mp4", "video/webm", "video/quicktime", "video/x-msvideo"],
-  audio: ["audio/webm", "audio/ogg", "audio/mp4", "audio/wav", "audio/mpeg"],
-  documents: [
-    "application/pdf",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ],
-  general: ["*/*"],
+  documents: ["application/pdf", "text/plain", "application/octet-stream"],
 };
 
 const validateFiles = (
@@ -44,7 +38,6 @@ const validateFiles = (
   const supportedMimes = [
     ...ALLOWED_FILE_TYPES.images,
     ...ALLOWED_FILE_TYPES.videos,
-    ...ALLOWED_FILE_TYPES.audio,
     ...ALLOWED_FILE_TYPES.documents,
   ];
 
@@ -54,7 +47,7 @@ const validateFiles = (
     // Check file size
     if (file.size > MAX_FILE_SIZE) {
       errors.push(
-        `${file.name} exceeds the ${(MAX_FILE_SIZE / (1024 * 1024)).toFixed(0)}MB file size limit (${(file.size / (1024 * 1024)).toFixed(2)}MB)`,
+        `${file.name} exceeds the 100 MiB file size limit (${(file.size / (1024 * 1024)).toFixed(2)} MiB)`,
       );
       continue;
     }

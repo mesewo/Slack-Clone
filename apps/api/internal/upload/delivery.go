@@ -29,7 +29,8 @@ import (
 	"golang.org/x/image/draw"
 )
 
-const maxUploadSize = 1 << 30 // 1 GiB
+const maxUploadSize = 100 * 1024 * 1024 // 100 MiB application limit.
+const multipartOverhead = 1 * 1024 * 1024
 
 type Handler struct {
 	Queries *database.Queries
@@ -98,9 +99,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "invalid user")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize)
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadSize+multipartOverhead)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "file exceeds 1GB limit or is invalid")
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			writeError(w, http.StatusRequestEntityTooLarge, "file exceeds 100 MiB limit")
+			return
+		}
+		writeError(w, http.StatusBadRequest, "invalid multipart upload")
 		return
 	}
 	file, header, err := r.FormFile("file")
@@ -111,6 +117,10 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 	if header.Size <= 0 {
 		writeError(w, http.StatusBadRequest, "file is empty")
+		return
+	}
+	if header.Size > maxUploadSize {
+		writeError(w, http.StatusRequestEntityTooLarge, "file exceeds 100 MiB limit")
 		return
 	}
 	contentType := header.Header.Get("Content-Type")

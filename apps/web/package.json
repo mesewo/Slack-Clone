@@ -15,6 +15,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix && bun format",
     "lint:strict": "oxlint --deny-warnings",
+    "test:upload-flow": "node --test src/features/workspace/services/uploadFlow.test.mjs",
     "format": "oxfmt --write . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "format:check": "oxfmt --check . '!**/*.md' '!**/*.mdc' '!**/*.mdx' '!**/*.yml' '!**/*.yaml'",
     "prepare": "husky",

@@ -1,6 +1,5 @@
 import { apiClient } from "@/lib/axios";
-
-const API_UPLOAD_FALLBACK_LIMIT = 8 * 1024 * 1024;
+import { performDirectUpload } from "./uploadFlow.mjs";
 
 export interface ChatMessage {
   id: string;
@@ -236,108 +235,29 @@ export const messageService = {
   },
 
   async upload(file: File): Promise<UploadedAttachment> {
-    const uploadLegacy = async () => {
-      const form = new FormData();
-      form.append("file", file);
-      const fallback = await apiClient.post<UploadedAttachment>(
-        "/api/uploads",
-        form,
-      );
-      return fallback.data;
-    };
-
-    let presign: {
-      data: {
-        session_id: string;
-        upload_url: string;
-        filename: string;
-        content_type: string;
-        size_bytes: number;
-      };
-    };
-    try {
-      presign = await apiClient.post<{
-        session_id: string;
-        upload_url: string;
-        filename: string;
-        content_type: string;
-        size_bytes: number;
-      }>("/api/uploads/presign", {
-        filename: file.name,
-        content_type: file.type || "application/octet-stream",
-        size_bytes: file.size,
-      });
-    } catch {
-      // Keep compatibility with deployments that have not enabled presigned uploads.
-      try {
-        return await uploadLegacy();
-      } catch (error) {
-        throw new Error(`Could not start the upload for ${file.name}.`, { cause: error });
-      }
-    }
-
-    let putResponse: Response;
-    try {
-      putResponse = await fetch(presign.data.upload_url, {
+    return performDirectUpload(file, {
+      presign: async (request) => {
+        const response = await apiClient.post<{
+          session_id: string;
+          upload_url: string;
+          filename: string;
+          content_type: string;
+          size_bytes: number;
+        }>("/api/uploads/presign", request);
+        return response.data;
+      },
+      put: (url, body, contentType) => fetch(url, {
         method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-      });
-    } catch (error) {
-      let storageOrigin = "the configured object storage endpoint";
-      try {
-        storageOrigin = new URL(presign.data.upload_url).origin;
-      } catch {
-        // Keep the message useful if the configured upload URL is malformed.
-      }
-      if (file.size > API_UPLOAD_FALLBACK_LIMIT) {
-        throw new Error(
-          `Direct upload to ${storageOrigin} was blocked for ${file.name}. The API fallback is limited to files up to 8 MB; this deployment rejected the larger request with HTTP 413. Add a Backblaze bucket CORS rule allowing ${window.location.origin} to PUT objects with the Content-Type header.`,
-          { cause: error },
+        body,
+        headers: { "Content-Type": contentType },
+      }),
+      complete: async (session_id) => {
+        const response = await apiClient.post<UploadedAttachment>(
+          "/api/uploads/complete", { session_id },
         );
-      }
-      try {
-        // Small files can still be uploaded through the API if the
-        // browser cannot reach the bucket (for example, before its CORS rule is set).
-        return await uploadLegacy();
-      } catch (fallbackError) {
-        const fallbackDetail = fallbackError instanceof Error
-          ? fallbackError.message
-          : "unknown API error";
-        let apiOrigin = "the configured API";
-        try {
-          apiOrigin = new URL(
-            apiClient.defaults.baseURL || window.location.origin,
-            window.location.origin,
-          ).origin;
-        } catch {
-          // Keep the error readable if the API base URL is malformed.
-        }
-        throw new Error(
-          `Upload failed for ${file.name}. The browser could not reach ${storageOrigin}, and the API fallback at ${apiOrigin} failed (${fallbackDetail}). Check the bucket's S3 CORS rule for ${window.location.origin} (s3_put and Content-Type).`,
-          { cause: fallbackError ?? error },
-        );
-      }
-    }
-
-    if (!putResponse.ok) {
-      const detail = (await putResponse.text()).slice(0, 240);
-      throw new Error(
-        `File storage rejected ${file.name} (${putResponse.status}${detail ? `: ${detail}` : ""}).`,
-      );
-    }
-
-    try {
-      const complete = await apiClient.post<UploadedAttachment>(
-        "/api/uploads/complete",
-        { session_id: presign.data.session_id },
-      );
-      return complete.data;
-    } catch (error) {
-      throw new Error(`The upload finished, but ${file.name} could not be added to the message.`, { cause: error });
-    }
+        return response.data;
+      },
+    });
   },
 
   async send(
