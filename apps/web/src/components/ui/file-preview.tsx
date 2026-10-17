@@ -1,6 +1,7 @@
 "use client";
 
 import React, { FC, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Icons } from "@/components/icons";
 import { AttachmentDownloadButton } from "@/features/chat/components/AttachmentDownloadButton";
@@ -304,34 +305,36 @@ export const FilePreview: FC<FilePreviewProps> = ({
           ))}
         </div>
 
-        {imagePreview && (
+        {imagePreview && typeof document !== "undefined" && createPortal(
           <div
             role="dialog"
             aria-modal="true"
             aria-label={`Image preview: ${imagePreview.name}`}
             onClick={() => setImagePreview(null)}
-            className="fixed inset-0 z-[80] grid place-items-center bg-background/45 p-5 backdrop-blur-md sm:p-8"
+            className="fixed inset-0 grid place-items-center bg-black/65 p-5 backdrop-blur-sm sm:p-8"
+            style={{ zIndex: 2147483647, visibility: "visible" }}
           >
             <button
               type="button"
-              className="absolute right-4 top-4 z-10 flex size-10 items-center justify-center rounded-full border border-white/25 bg-zinc-950/75 text-white shadow-lg transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="absolute right-4 top-4 flex size-10 items-center justify-center rounded-full border border-white/25 bg-black/65 text-white shadow-lg transition hover:bg-black/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               onClick={() => setImagePreview(null)}
               aria-label="Close image preview"
             >
               <Icons.close className="size-5" />
             </button>
             <div
-              className="relative aspect-square w-[min(78vw,560px)] overflow-hidden rounded-xl border border-white/35 bg-zinc-950/90 p-2 shadow-[0_24px_90px_rgba(0,0,0,0.55)] sm:p-3"
+              className="flex max-h-[88vh] max-w-[92vw] items-center justify-center rounded-xl border border-white/30 bg-black/35 p-1.5 shadow-[0_24px_90px_rgba(0,0,0,0.6)] sm:p-2"
               onClick={(event) => event.stopPropagation()}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imagePreview.url}
                 alt={imagePreview.name}
-                className="size-full rounded-lg object-contain"
+                className="max-h-[86vh] max-w-[90vw] rounded-lg object-contain"
               />
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </>
     );

@@ -1,0 +1,9 @@
+[
+  {
+    "corsRuleName": "slack-web-uploads",
+    "allowedOrigins": ["https://slack-clone-red.vercel.app"],
+    "allowedOperations": ["s3_put", "s3_get", "s3_head"],
+    "allowedHeaders": ["*"],
+    "maxAgeSeconds": 3600
+  }
+]

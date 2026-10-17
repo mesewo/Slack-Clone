@@ -306,8 +306,17 @@ export const messageService = {
         const fallbackDetail = fallbackError instanceof Error
           ? fallbackError.message
           : "unknown API error";
+        let apiOrigin = "the configured API";
+        try {
+          apiOrigin = new URL(
+            apiClient.defaults.baseURL || window.location.origin,
+            window.location.origin,
+          ).origin;
+        } catch {
+          // Keep the error readable if the API base URL is malformed.
+        }
         throw new Error(
-          `Upload failed for ${file.name}. The browser could not reach ${storageOrigin}, and the API fallback failed (${fallbackDetail}). Check HTTPS, bucket CORS for ${window.location.origin} (PUT and Content-Type), and the API service logs.`,
+          `Upload failed for ${file.name}. The browser could not reach ${storageOrigin}, and the API fallback at ${apiOrigin} failed (${fallbackDetail}). Check the bucket's S3 CORS rule for ${window.location.origin} (s3_put and Content-Type).`,
           { cause: fallbackError ?? error },
         );
       }
