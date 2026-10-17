@@ -12,8 +12,6 @@ export async function generateMetadata({
   return { title: `Channel ${resolvedParams.channelId}` };
 }
 
-export default function ChannelPage({}: {
-  params: Promise<{ workspaceId: string; channelId: string }>;
-}) {
+export default function ChannelPage() {
   return <WorkspaceChatView />;
 }

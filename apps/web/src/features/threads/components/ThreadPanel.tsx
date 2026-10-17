@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useChatStore } from "@/features/chat/utils/store";
 import { messageService } from "@/features/workspace/services/messageService";
 import { IconX } from "@tabler/icons-react";
@@ -127,9 +128,12 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
             className="mt-2 flex items-center gap-2 rounded-md bg-background/60 p-2"
           >
             {attachment.type.startsWith("image/") && attachment.url ? (
-              <img
+              <Image
                 src={attachment.thumbnailUrl || attachment.url}
                 alt={attachment.name}
+                width={48}
+                height={48}
+                unoptimized
                 className="size-12 rounded object-cover"
               />
             ) : (

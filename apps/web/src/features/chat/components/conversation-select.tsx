@@ -125,10 +125,11 @@ export function ConversationSelect({
             </button>
             {dmOpen && (
               <div className="max-w-[52%]">
-                <label className="mb-1 block text-[0.6rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                <label htmlFor="dm-user-select" className="mb-1 block text-[0.6rem] font-medium uppercase tracking-[0.12em] text-muted-foreground">
                   To:
                 </label>
                 <select
+                  id="dm-user-select"
                   defaultValue={[]}
                   multiple
                   size={Math.min(dmUsers.length || 1, 4)}

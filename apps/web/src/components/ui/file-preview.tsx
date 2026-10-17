@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events, jsx-a11y/media-has-caption -- Preview backdrops and click guards preserve viewer interaction; source files do not include captions. */
+
 import React, { FC, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
@@ -356,13 +358,20 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 className="group/media relative inline-block overflow-hidden rounded-lg border border-border/40 hover:border-border/80 transition-all shadow-xs"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={file.url}
-                  alt={file.name}
-                  className="max-h-80 max-w-[420px] w-auto h-auto rounded-lg object-contain cursor-pointer transition-transform duration-200 hover:scale-[1.01]"
+                <button
+                  type="button"
+                  aria-label={`Open ${file.name} in media gallery`}
                   onClick={() => openGalleryForFile(file.id)}
                   title="Click to view full image"
-                />
+                  className="block cursor-pointer border-0 bg-transparent p-0"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={file.url}
+                    alt={file.name}
+                    className="max-h-80 max-w-[420px] w-auto h-auto rounded-lg object-contain transition-transform duration-200 hover:scale-[1.01]"
+                  />
+                </button>
                 {/* Keep the download control visible; add the dimmed hover treatment on hover. */}
                 <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 transition-colors group-hover/media:bg-black/35 pointer-events-none">
                   <div className="pointer-events-auto">

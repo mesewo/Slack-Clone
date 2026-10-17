@@ -202,7 +202,7 @@ export async function apiRequest(
   const response = await fetch(`${apiBase}${path}`, {
     method,
     headers: { "Content-Type": "application/json", Cookie: cookie },
-    body: payload ? JSON.stringify(payload) : undefined,
+    ...(method !== "GET" && payload ? { body: JSON.stringify(payload) } : {}),
   });
   const text = await response.text();
   let body: any = null;

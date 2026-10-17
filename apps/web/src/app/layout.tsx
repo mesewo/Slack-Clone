@@ -11,6 +11,8 @@ import NextTopLoader from "nextjs-toploader";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 import "../styles/globals.css";
 
+/* eslint-disable @next/next/no-page-custom-font -- App Router root layout loads this font globally. */
+
 const META_THEME_COLORS = {
   light: "#ffffff",
   dark: "#09090b",

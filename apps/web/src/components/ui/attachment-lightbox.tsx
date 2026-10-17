@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- Backdrop dismissal and click guards are intentionally noninteractive containers. */
+
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { IconDownload, IconX } from "@tabler/icons-react";

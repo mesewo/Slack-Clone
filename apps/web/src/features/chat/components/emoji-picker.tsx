@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events -- The dialog stops bubbling so its parent popover remains open. */
+
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   ALL_EMOJIS,
@@ -277,4 +279,3 @@ export function EmojiPicker({
     </div>
   );
 }
-

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { logout, useAuth } from "@/lib/auth";
 import { Icons } from "@/components/icons";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -245,7 +246,7 @@ export default function ProfileViewPage() {
         <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-6">
           {AVATAR_PRESETS.map((preset) => (
             <button key={preset.id} type="button" onClick={() => void saveAvatar(preset.url)} aria-label={`Choose ${preset.name} avatar`} title={`${preset.name} · ${preset.category}`} className={`aspect-square overflow-hidden rounded-full border-2 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${avatarUrl === preset.url ? "border-primary ring-2 ring-primary/25" : "border-border"}`}>
-              <img src={preset.url} alt="" className="size-full object-cover" loading="lazy" />
+              <Image src={preset.url} alt="" width={96} height={96} unoptimized className="size-full object-cover" />
             </button>
           ))}
         </div>

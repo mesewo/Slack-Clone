@@ -154,6 +154,7 @@ export function CreateChannelDialog({
               <button
                 type="button"
                 role="switch"
+                aria-label="Make channel private"
                 aria-checked={channelType === "PRIVATE"}
                 onClick={() =>
                   setChannelType((current) =>

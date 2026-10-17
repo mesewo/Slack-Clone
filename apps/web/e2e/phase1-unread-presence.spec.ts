@@ -146,7 +146,7 @@ async function apiRequest(
       "Content-Type": "application/json",
       Cookie: cookie,
     },
-    body: payload ? JSON.stringify(payload) : undefined,
+    ...(method !== "GET" && payload ? { body: JSON.stringify(payload) } : {}),
     credentials: "include",
   });
 

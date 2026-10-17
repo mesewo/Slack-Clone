@@ -1,6 +1,9 @@
 "use client";
 
+/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- The status dialog backdrop dismisses on click; dialog contents stop propagation. */
+
 import React, { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth, logout } from "@/lib/auth";
 import { useTheme } from "next-themes";
@@ -338,7 +341,7 @@ export default function WorkspaceProfilePage() {
                     window.dispatchEvent(new CustomEvent("slack:avatar-updated", { detail: preset.url }));
                     void productivityService.updateProfile({ avatar_url: preset.url }).then(() => toast.success("Profile photo updated")).catch(() => toast.error("Could not update profile photo"));
                   }} aria-label={`Choose ${preset.name} avatar`} title={`${preset.name} - ${preset.category}`} className={`aspect-square overflow-hidden rounded-full border-2 transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${avatarUrl === preset.url ? "border-primary ring-2 ring-primary/25" : "border-border"}`}>
-                    <img src={preset.url} alt="" className="size-full object-cover" loading="lazy" />
+                    <Image src={preset.url} alt="" width={96} height={96} unoptimized className="size-full object-cover" />
                   </button>
                 ))}
               </div>

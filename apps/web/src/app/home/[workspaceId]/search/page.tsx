@@ -264,6 +264,7 @@ function SearchPageContent() {
                   <button
                     key={setting.label}
                     type="button"
+                    aria-label={`${setting.label}: ${setting.description}`}
                     onClick={() => {
                       if (setting.action === "toggle-theme") {
                         toggleTheme();

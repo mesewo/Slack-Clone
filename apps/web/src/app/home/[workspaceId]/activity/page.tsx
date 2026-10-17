@@ -196,6 +196,7 @@ export default function ActivityPage() {
                 <button
                   key={item.id}
                   type="button"
+                  aria-label={`${item.title}: ${item.body}`}
                   onClick={() => {
                     setSelected(item);
                     openNotification(item);
