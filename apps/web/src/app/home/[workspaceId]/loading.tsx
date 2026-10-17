@@ -1,5 +1,4 @@
-import { ConversationLoading } from "@/components/layout/workspace-loading";
-
 export default function Loading() {
-  return <ConversationLoading />;
+  // Preserve the mounted workspace while Next prepares a sibling route.
+  return null;
 }

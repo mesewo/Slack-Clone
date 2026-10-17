@@ -24,7 +24,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -355,14 +354,14 @@ export function ConversationList({
                 onClick={() => onSelect(conversation.id)}
                 aria-current={isActive ? "true" : undefined}
                 className={cn(
-                  "flex h-7 w-full items-center gap-2 rounded-md border border-transparent px-2 pr-8 text-left text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/50",
+                  "flex h-8 w-full items-center gap-2 rounded-md border border-transparent px-2 pr-8 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/50",
                   isActive
                     ? "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white"
                     : "text-slate-200 hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
                 )}
               >
-                <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />
-                <span className={cn("min-w-0 flex-1 truncate", isUnread ? "font-bold" : "font-normal")}>
+                <IconHash className="size-[18px] shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />
+                <span className={cn("min-w-0 flex-1 truncate", isUnread ? "font-bold" : "font-medium")}>
                   {conversation.name.replace(/^#\s*/, "")}
                 </span>
                 {isUnread && (
@@ -414,7 +413,7 @@ export function ConversationList({
               type="button"
               onClick={() => onSelect(conversation.id)}
               className={cn(
-                "flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-1.5 pr-8 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
+                "flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 pr-8 text-left text-sm text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]",
                 selectedId === conversation.id &&
                   "bg-[var(--chat-sidebar-active,rgba(255,255,255,0.1))] text-white",
               )}
@@ -435,7 +434,7 @@ export function ConversationList({
               <span className="min-w-0 flex-1">
                 <span className="flex min-w-0 items-center justify-between gap-2">
                   <span className="truncate">
-                    {conversation.name === "You" ? `${user?.name || "You"} (you)` : conversation.name}
+                    {conversation.name === "You" ? "You" : conversation.name}
                   </span>
                   {conversation.lastMessage && conversation.lastMessageAt && (
                     <time className="text-[0.65rem] text-[var(--chat-sidebar-muted,#94a3b8)]">
@@ -481,7 +480,7 @@ export function ConversationList({
 
         {starredOpen && visibleStarredConversations.filter((conversation) => !dmOnly || conversation.kind === "dm").map((conversation) => (
           <div key={`starred-${conversation.id}`} className="group/starred relative">
-            <button type="button" onClick={() => onSelect(conversation.id)} className="flex h-7 w-full items-center gap-2 rounded-md px-2 pr-8 text-left text-[13px] text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]">
+            <button type="button" onClick={() => onSelect(conversation.id)} className="flex h-8 w-full items-center gap-2 rounded-md px-2 pr-8 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-[var(--chat-sidebar-hover,rgba(255,255,255,0.05))]">
               {conversation.kind === "dm" ? <IconMessage className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" /> : <IconHash className="size-4 shrink-0 text-[var(--chat-sidebar-muted,#94a3b8)]" />}
               <span className="truncate">{conversation.kind === "dm" ? conversation.name : conversation.name.replace(/^#\s*/, "")}</span>
             </button>

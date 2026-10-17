@@ -36,6 +36,7 @@ interface ChatAreaProps {
   onMarkRead: () => void;
   onLoadOlderMessages: () => Promise<void>;
   loadingOlderMessages: boolean;
+  loadingMessages?: boolean;
   onSchedule: (scheduledFor: string) => Promise<void>;
   typingUserCount: number;
   canManageChannel?: boolean;
@@ -62,6 +63,7 @@ export function ChatArea({
   onMarkRead,
   onLoadOlderMessages,
   loadingOlderMessages,
+  loadingMessages = false,
   onSchedule,
   typingUserCount,
   canManageChannel,
@@ -413,6 +415,11 @@ export function ChatArea({
             aria-live="off"
             aria-label={"Message thread with " + conversation.name}
           >
+            {loadingMessages && conversation.messages.length === 0 && (
+              <div role="status" aria-label="Loading messages" className="flex h-full items-center justify-center">
+                <span className="size-5 animate-spin rounded-full border-2 border-muted-foreground/25 border-t-primary" />
+              </div>
+            )}
             {conversation.name.endsWith("(you)") &&
               conversation.messages.length === 0 && (
                 <div className="flex min-h-full flex-col items-center justify-center px-6 py-12 text-center">
