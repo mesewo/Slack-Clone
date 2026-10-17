@@ -14,7 +14,6 @@ import {
 } from "@/features/notifications/utils/store";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { useChatStore } from "@/features/chat/utils/store";
 
 type Tab = "all" | "dms" | "channels" | "threads";
 
@@ -25,12 +24,9 @@ export default function ActivityPage() {
   const [threads, setThreads] = useState<ThreadSummary[]>([]);
   const [query, setQuery] = useState("");
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [compact, setCompact] = useState(false);
   const { notifications, load, markAsRead, markAllAsRead } =
     useNotificationStore();
-  const unreadMessageCount = useChatStore((state) =>
-    state.conversations.reduce((total, conversation) => total + (conversation.unread || 0), 0),
-  );
-  const caughtUp = unreadMessageCount === 0 && !notifications.some((item) => item.status === "unread");
 
   useEffect(() => {
     void load();
@@ -101,13 +97,6 @@ export default function ActivityPage() {
               {value === "all" ? `All (${allCount})` : value === "dms" ? `DMs (${notifications.filter((item) => item.title.toLowerCase().includes("direct message")).length})` : value === "channels" ? `Channels (${notifications.filter((item) => !item.title.toLowerCase().includes("direct message") && !item.title.toLowerCase().includes("thread")).length})` : `Threads (${threads.length})`}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => toast.info("Custom activity tabs are coming soon.")}
-            className="text-muted-foreground hover:bg-accent rounded-full px-3 py-1.5 text-sm"
-          >
-            +
-          </button>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Button
@@ -116,16 +105,6 @@ export default function ActivityPage() {
             onClick={() => setUnreadOnly((value) => !value)}
           >
             {unreadOnly ? "Showing unread" : "Unreads"}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Activity filters"
-            onClick={() =>
-              toast.info("Advanced activity filters are coming soon.")
-            }
-          >
-            <Icons.adjustments className="size-4" />
           </Button>
           <div className="relative min-w-48 flex-1 sm:max-w-xs">
             <Icons.search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
@@ -139,8 +118,10 @@ export default function ActivityPage() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Compact activity view"
-            onClick={() => toast.info("Compact view is coming soon.")}
+            aria-label={compact ? "Use comfortable activity view" : "Use compact activity view"}
+            title={compact ? "Comfortable view" : "Compact view"}
+            aria-pressed={compact}
+            onClick={() => setCompact((value) => !value)}
           >
             <Icons.dots className="size-4" />
           </Button>
@@ -178,7 +159,7 @@ export default function ActivityPage() {
                         : `/home/${workspaceId}/channels/${thread.channel_id}`,
                     );
                   }}
-                  className="hover:bg-accent/40 w-full p-4 text-left"
+                  className={`hover:bg-accent/40 w-full text-left ${compact ? "p-2.5" : "p-4"}`}
                 >
                   <p className="text-sm font-medium">{thread.title}</p>
                   <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">
@@ -201,7 +182,7 @@ export default function ActivityPage() {
                     setSelected(item);
                     openNotification(item);
                   }}
-                  className={`hover:bg-accent/40 w-full p-4 text-left ${selected?.id === item.id ? "bg-accent/30" : ""}`}
+                  className={`hover:bg-accent/40 w-full text-left ${compact ? "p-2.5" : "p-4"} ${selected?.id === item.id ? "bg-accent/30" : ""}`}
                 >
                   <div className="flex items-start gap-3">
                     <span
@@ -228,7 +209,7 @@ export default function ActivityPage() {
                     if (!workspaceId) { toast.info("Open a workspace first."); return; }
                     router.push(thread.kind === "dm" ? `/home/${workspaceId}/dms/${thread.conversation_id}` : `/home/${workspaceId}/channels/${thread.channel_id}`);
                   }}
-                  className="hover:bg-accent/40 w-full p-4 text-left"
+                  className={`hover:bg-accent/40 w-full text-left ${compact ? "p-2.5" : "p-4"}`}
                 >
                   <p className="text-sm font-medium">{thread.title}</p>
                   <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">{thread.preview}</p>

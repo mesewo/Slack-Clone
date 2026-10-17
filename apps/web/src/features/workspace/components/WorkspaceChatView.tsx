@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { useChatStore } from "@/features/chat/utils/store";
-import type { Attachment, Message } from "@/features/chat/utils/types";
+import type { Attachment } from "@/features/chat/utils/types";
 import { messageService } from "@/features/workspace/services/messageService";
 import { productivityService } from "@/features/workspace/services/productivityService";
 import { workspaceService } from "@/features/workspace/services/workspaceService";
@@ -13,7 +13,6 @@ import { ChatArea } from "@/features/chat/components/chat-area";
 import { ThreadPanel } from "@/features/threads/components/ThreadPanel";
 import { useRealtimeTyping } from "@/features/chat/hooks/use-realtime-connection";
 import { AppLoader } from "@/components/ui/app-loader";
-import { IconMessageCircle } from "@tabler/icons-react";
 import { ConversationLoading } from "@/components/layout/workspace-loading";
 
 export function WorkspaceChatView() {
@@ -35,7 +34,6 @@ export function WorkspaceChatView() {
   const [isUploading, setIsUploading] = useState(false);
   const [workspaceRole, setWorkspaceRole] = useState<string | null>(null);
   const {
-    conversations,
     selectedConversationId,
     loadingMessages,
     draft,
@@ -44,7 +42,6 @@ export function WorkspaceChatView() {
     loadOlderMessages,
     loadingOlderMessages,
     setDraft,
-    createChannel,
     createDM,
     sendMessage,
     editMessage,
@@ -74,9 +71,6 @@ export function WorkspaceChatView() {
   }, [params.workspaceId]);
 
   const activeConversation = getActiveConversation();
-  const routeConversation = conversations.find(
-    (conversation) => conversation.id === selectedRouteId,
-  );
   const handleMarkRead = useCallback(() => {
     if (selectedConversationId)
       void markConversationRead(selectedConversationId);
@@ -156,14 +150,14 @@ export function WorkspaceChatView() {
     [attachments, draft, sendMessage],
   );
 
-  const openConversation = (id: string) => {
+  const openConversation = useCallback((id: string) => {
     selectConversation(id);
     router.push(
       id.startsWith("dm:")
         ? `/home/${params.workspaceId}/dms/${id.slice(3)}`
         : `/home/${params.workspaceId}/channels/${id}`,
     );
-  };
+  }, [params.workspaceId, router, selectConversation]);
 
   const handleStartDM = useCallback(
     async (targetUserId: string) => {
@@ -178,7 +172,7 @@ export function WorkspaceChatView() {
         toast.error("Could not start direct message");
       }
     },
-    [currentUserId, createDM, params.workspaceId, selectConversation, router],
+    [currentUserId, createDM, openConversation],
   );
 
   if (authLoading) return <ConversationLoading />;
@@ -189,13 +183,8 @@ export function WorkspaceChatView() {
     );
   }
 
-  if (selectedRouteId && (!routeConversation || selectedConversationId !== selectedRouteId)) {
-    return <ConversationLoading />;
-  }
-
-  if (selectedRouteId && loadingMessages) {
-    return <ConversationLoading />;
-  }
+  // Keep the current workspace surface mounted while route state and message
+  // history catch up after a conversation switch.
 
   if (!activeConversation) {
     return (
@@ -272,6 +261,7 @@ export function WorkspaceChatView() {
         onMarkRead={handleMarkRead}
         onLoadOlderMessages={loadOlderMessages}
         loadingOlderMessages={loadingOlderMessages}
+        loadingMessages={loadingMessages}
         onSchedule={async (scheduledFor) => {
           await productivityService.scheduleMessage({
             ...(activeConversation.kind === "dm"
