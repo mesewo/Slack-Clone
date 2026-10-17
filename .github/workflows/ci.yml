@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, deployment]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: slack_db
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/slack_db?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+      - name: Install goose and apply migrations
+        run: |
+          GOWORK=off go install github.com/pressly/goose/v3/cmd/goose@latest
+          cd apps/api && goose -dir sql/schema postgres "$DATABASE_URL" up
+      - name: Build, vet and test every module
+        run: |
+          for dir in apps/api apps/api/services/*/; do
+            echo "::group::$dir"
+            (cd "$dir" && go build ./... && go vet ./... && go test -count=1 ./...)
+            echo "::endgroup::"
+          done
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      HUSKY: "0"
+      NEXT_PUBLIC_SENTRY_DISABLED: "true"
+      BACKEND_URL: https://example.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: apps/web/.nvmrc
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run build
+
+  docker-demo-image:
+    name: docker-demo-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/demo/Dockerfile.demo
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
