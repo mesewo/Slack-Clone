@@ -182,7 +182,8 @@ export default function ProfileViewPage() {
           </button>
           <input
             ref={avatarInputRef}
-            type="file"
+              type="file"
+              aria-label="Upload profile photo"
             accept="image/*"
             className="hidden"
             onChange={(event) => handleAvatarChange(event.target.files?.[0])}

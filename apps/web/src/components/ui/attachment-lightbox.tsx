@@ -106,6 +106,7 @@ export function AttachmentLightbox({
           {isVideo && (
             <video
               src={objectUrl}
+              aria-label={`Video: ${filename}`}
               controls
               autoPlay
               className="max-h-[85vh] max-w-[85vw] rounded-lg"

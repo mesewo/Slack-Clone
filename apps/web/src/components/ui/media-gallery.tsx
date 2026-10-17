@@ -236,6 +236,7 @@ export function MediaGallery({
           ) : isVideo ? (
             <video
               src={currentItem.url}
+              aria-label={`Video: ${currentItem.name}`}
               controls
               autoPlay
               className="max-h-[85vh] max-w-[85vw] w-auto h-auto rounded-md shadow-2xl bg-black"

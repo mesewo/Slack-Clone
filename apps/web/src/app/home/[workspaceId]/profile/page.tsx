@@ -279,6 +279,7 @@ export default function WorkspaceProfilePage() {
               <input
                 ref={avatarInputRef}
                 type="file"
+                aria-label="Upload profile photo"
                 accept="image/*"
                 className="hidden"
                 onChange={(e) => handleAvatarChange(e.target.files?.[0])}
@@ -398,6 +399,7 @@ export default function WorkspaceProfilePage() {
                       <input
                         defaultValue={displayName}
                         id="display-name-input"
+                        aria-label="Display name"
                         className="rounded-md border border-input bg-background px-2 py-1 text-xs outline-none"
                       />
                       <Button
@@ -451,6 +453,7 @@ export default function WorkspaceProfilePage() {
                       <input
                         defaultValue={title}
                         id="title-input"
+                        aria-label="Job title"
                         placeholder="e.g. Senior Frontend Engineer"
                         className="rounded-md border border-input bg-background px-2 py-1 text-xs outline-none"
                       />
@@ -529,6 +532,7 @@ export default function WorkspaceProfilePage() {
                       <input
                         defaultValue={phone}
                         id="phone-input"
+                        aria-label="Phone number"
                         placeholder="+1 (555) 012-3456"
                         className="rounded-md border border-input bg-background px-2 py-1 text-xs outline-none"
                       />
@@ -646,6 +650,7 @@ export default function WorkspaceProfilePage() {
                       <span>{label}</span>
                       <input
                         type="checkbox"
+                        aria-label={label}
                         checked={notificationPreferences[key]}
                         disabled={savingNotifications}
                         onChange={(e) =>
@@ -702,12 +707,14 @@ export default function WorkspaceProfilePage() {
             <div className="mt-4 flex items-center gap-2">
               <input
                 id="status-emoji-input"
+                aria-label="Status emoji"
                 defaultValue={statusEmoji}
                 className="size-10 text-center text-lg rounded-lg border border-input bg-background"
                 maxLength={2}
               />
               <input
                 id="status-text-input"
+                aria-label="Status text"
                 defaultValue={statusMessage}
                 placeholder="What's your status?"
                 className="flex-1 rounded-lg border border-input bg-background px-3 py-2 text-xs outline-none"

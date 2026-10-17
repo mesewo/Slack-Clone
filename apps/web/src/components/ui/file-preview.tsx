@@ -264,7 +264,7 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 </button>
               ) : file.type.startsWith("video/") && file.url ? (
                 <div className="relative mr-2.5 size-12 shrink-0 overflow-hidden rounded-lg bg-black" title={file.name}>
-                  <video src={file.url} muted preload="metadata" className="size-full object-cover" />
+                  <video src={file.url} aria-label={`Video thumbnail: ${file.name}`} muted preload="metadata" className="size-full object-cover" />
                   <span className="absolute inset-0 flex items-center justify-center bg-black/20 text-white">
                     <Icons.video size={18} />
                   </span>
@@ -394,8 +394,9 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 key={file.id}
                 className="group/media relative inline-block overflow-hidden rounded-lg border border-border/40 bg-black shadow-xs"
               >
-                <video
-                  src={file.url}
+                  <video
+                    src={file.url}
+                    aria-label={`Video: ${file.name}`}
                   controls
                   preload="metadata"
                   className="max-h-80 max-w-[440px] w-auto h-auto rounded-lg"

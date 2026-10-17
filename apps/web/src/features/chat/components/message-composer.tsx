@@ -411,6 +411,7 @@ export function MessageComposer({
               </div>
               <input
                 type="datetime-local"
+                aria-label="Schedule message date and time"
                 value={scheduledFor}
                 min={minimumScheduledFor}
                 onChange={(event) => setScheduledFor(event.target.value)}

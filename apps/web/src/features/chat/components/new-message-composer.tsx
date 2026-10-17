@@ -164,6 +164,7 @@ export function NewMessageComposer({ conversations, onClose }: NewMessageCompose
             onBlur={() => setFocused(false)}
             onKeyDown={onKeyDown}
             placeholder="#a-channel, @somebody, or somebody@example.com"
+            aria-label="Recipient"
             autoComplete="off"
             className="placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent text-sm outline-none"
           />

@@ -72,6 +72,7 @@ export default function SignIn() {
         {mode === "sign-up" && (
           <input
             type="text"
+            aria-label="Display name"
             placeholder="Display Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -82,6 +83,7 @@ export default function SignIn() {
 
         <input
           type="email"
+          aria-label="Email"
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
@@ -90,6 +92,7 @@ export default function SignIn() {
         />
         <input
           type="password"
+          aria-label="Password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}

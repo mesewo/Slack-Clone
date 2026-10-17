@@ -194,6 +194,7 @@ export function ThreadPanel({ parentMessage }: ThreadPanelProps) {
         className="p-4 border-t border-border space-y-3"
       >
         <textarea
+          aria-label="Reply in thread"
           value={replyText}
           onChange={(e) => setReplyText(e.target.value)}
           onKeyDown={(event) => {
