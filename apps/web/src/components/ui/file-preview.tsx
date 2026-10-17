@@ -363,8 +363,8 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   onClick={() => openGalleryForFile(file.id)}
                   title="Click to view full image"
                 />
-                {/* Centered hover download button */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover/media:opacity-100 transition-opacity pointer-events-none rounded-lg">
+                {/* Keep the download control visible; add the dimmed hover treatment on hover. */}
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 transition-colors group-hover/media:bg-black/35 pointer-events-none">
                   <div className="pointer-events-auto">
                     <AttachmentDownloadButton
                       id={file.id}
@@ -391,8 +391,8 @@ export const FilePreview: FC<FilePreviewProps> = ({
                   preload="metadata"
                   className="max-h-80 max-w-[440px] w-auto h-auto rounded-lg"
                 />
-                {/* Centered hover download button */}
-                <div className="absolute inset-0 flex items-center justify-center bg-black/35 opacity-0 group-hover/media:opacity-100 transition-opacity pointer-events-none rounded-lg">
+                {/* Keep the download control visible; add the dimmed hover treatment on hover. */}
+                <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 transition-colors group-hover/media:bg-black/35 pointer-events-none">
                   <div className="pointer-events-auto">
                     <AttachmentDownloadButton
                       id={file.id}
@@ -416,11 +416,11 @@ export const FilePreview: FC<FilePreviewProps> = ({
                 isInverted && "border-primary-foreground/30 bg-primary-foreground/10 text-primary-foreground"
               )}
             >
-              {/* Left thumbnail with foreground download icon on hover */}
+              {/* Left thumbnail with a persistent download icon until the file is downloaded. */}
               <div className="relative flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted/80 overflow-hidden">
                 {getFileIcon(file.type, file.name)}
                 {file.url && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/55 opacity-0 group-hover/file:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-transparent transition-colors group-hover/file:bg-black/55">
                     <AttachmentDownloadButton
                       id={file.id}
                       url={file.url}
