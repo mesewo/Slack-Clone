@@ -42,11 +42,99 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     (state) => state.selectConversation,
   );
   const conversations = useChatStore((state) => state.conversations);
+  const workspace = useChatStore((state) => state.workspace);
   const newMessageOpen = newMessagePath === pathname;
 
   useEffect(() => {
     setNewMessagePath(null);
   }, [pathname]);
+
+  useEffect(() => {
+    const wsName = workspace?.name?.trim() || "slack-clone";
+
+    if (newMessageOpen) {
+      document.title = `New message - ${wsName}`;
+      return;
+    }
+
+    if (pathname.includes("/activity") || pathname.includes("/notifications")) {
+      document.title = `Activity - ${wsName}`;
+      return;
+    }
+    if (pathname.includes("/threads")) {
+      document.title = `Threads - ${wsName}`;
+      return;
+    }
+    if (pathname.includes("/saved")) {
+      document.title = `Saved items - ${wsName}`;
+      return;
+    }
+    if (pathname.includes("/directories")) {
+      document.title = `Directories - ${wsName}`;
+      return;
+    }
+    if (pathname.includes("/profile")) {
+      document.title = `Profile - ${wsName}`;
+      return;
+    }
+    if (pathname.includes("/admin")) {
+      document.title = `Workspace settings - ${wsName}`;
+      return;
+    }
+    if (pathname.includes("/search")) {
+      document.title = `Search - ${wsName}`;
+      return;
+    }
+
+    const channelMatch = pathname.match(/\/channels\/([^/?#]+)/);
+    const dmMatch = pathname.match(/\/dms\/([^/?#]+)/);
+    const routeChannelId = channelMatch?.[1];
+    const routeDmId = dmMatch?.[1];
+
+    if (routeChannelId) {
+      const conv = conversations.find((c) => c.id === routeChannelId);
+      const name = conv ? conv.name.replace(/^#\s*/, "") : "channel";
+      document.title = `#${name} - ${wsName}`;
+      return;
+    }
+
+    if (routeDmId) {
+      const conv = conversations.find(
+        (c) =>
+          c.id === `dm:${routeDmId}` ||
+          c.dmId === routeDmId ||
+          c.id === routeDmId,
+      );
+      const name = conv?.name || "Direct Message";
+      document.title = `${name} - ${wsName}`;
+      return;
+    }
+
+    if (selectedConversationId) {
+      const conv = conversations.find((c) => c.id === selectedConversationId);
+      if (conv) {
+        if (conv.kind === "channel") {
+          const cleanName = conv.name.replace(/^#\s*/, "");
+          document.title = `#${cleanName} - ${wsName}`;
+        } else {
+          document.title = `${conv.name} - ${wsName}`;
+        }
+        return;
+      }
+    }
+
+    if (workspace?.name) {
+      document.title = `${workspace.name} - slack-clone`;
+    } else {
+      document.title = "slack-clone";
+    }
+  }, [
+    workspace?.name,
+    conversations,
+    selectedConversationId,
+    newMessageOpen,
+    pathname,
+  ]);
 
   useEffect(() => {
     try {

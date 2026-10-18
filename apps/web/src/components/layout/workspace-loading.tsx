@@ -1,8 +1,16 @@
+"use client";
+
+import { useEffect } from "react";
+
 function SkeletonBlock({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-md bg-current/10 ${className}`} />;
 }
 
 export function WorkspaceLoading() {
+  useEffect(() => {
+    document.title = "slack-clone";
+  }, []);
+
   return (
     <div aria-label="Loading workspace" role="status" className="fixed inset-0 z-[100] flex overflow-hidden bg-white text-black dark:bg-black dark:text-white">
       <aside aria-hidden="true" className="flex w-[4.5rem] shrink-0 flex-col items-center border-r border-white/10 bg-[#4a154b] px-2 dark:bg-[#111012]">
@@ -37,7 +45,7 @@ export function WorkspaceLoading() {
           </main>
         </div>
       </div>
-      <span className="sr-only">Loading workspace…</span>
+      <span className="sr-only">Loading workspace...</span>
     </div>
   );
 }

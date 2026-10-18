@@ -23,19 +23,24 @@ export const metadata: Metadata = {
     ? { metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL) }
     : {}),
   title: {
-    default: "Slack Clone",
-    template: "%s | Slack Clone",
+    default: "slack-clone",
+    template: "%s",
+  },
+  icons: {
+    icon: "/slack-logo.png",
+    shortcut: "/slack-logo.png",
+    apple: "/slack-logo.png",
   },
   description: "A self-hosted team messaging app built with Next.js and Go.",
   openGraph: {
-    title: "Slack Clone",
+    title: "slack-clone",
     description: "A self-hosted team messaging app built with Next.js and Go.",
-    siteName: "Slack Clone",
+    siteName: "slack-clone",
     type: "website",
   },
   twitter: {
     card: "summary",
-    title: "Slack Clone",
+    title: "slack-clone",
     description: "A self-hosted team messaging app built with Next.js and Go.",
   },
 };
@@ -57,6 +62,9 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning data-theme={themeToApply}>
       <head>
+        <link rel="icon" href="/slack-logo.png" type="image/png" />
+        <link rel="shortcut icon" href="/slack-logo.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/slack-logo.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"

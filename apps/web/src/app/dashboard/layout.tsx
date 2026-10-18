@@ -2,8 +2,8 @@ import AppShell from "@/components/layout/app-shell";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Next Shadcn Dashboard Starter",
-  description: "Basic dashboard with Next.js and Shadcn",
+  title: "slack-clone",
+  description: "A self-hosted team messaging app built with Next.js and Go.",
   robots: {
     index: false,
     follow: false,

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -30,7 +30,7 @@ const footerGroups = [
   { title: "Why Slack?", links: [["Slack vs. Email", "https://slack.com/compare/slack-vs-email"], ["Slack vs. Teams", "https://slack.com/compare/slack-vs-teams"], ["Enterprise", "https://slack.com/enterprise"], ["Small Business", "https://slack.com/solutions/small-business"], ["Productivity", "https://slack.com/engage-users"], ["Task Management", "https://slack.com/solutions/task-management"], ["Scale", "https://slack.com/scale"], ["Trust", "https://slack.com/trust"]] },
   { title: "Features", links: [["Channels", "https://slack.com/features/channels"], ["Slack Connect", "https://slack.com/connect"], ["Workflow Builder", "https://slack.com/features/workflow-automation"], ["Messaging", "https://slack.com/features/team-chat"], ["Huddles", "https://slack.com/features/huddles"], ["Canvas", "https://slack.com/features/canvas"], ["Lists", "https://slack.com/features/task-list"], ["Clips", "https://slack.com/features/clips"], ["Apps & Integrations", "https://slack.com/integrations"], ["Slack AI", "https://slack.com/features/ai"], ["Agentforce", "https://slack.com/ai-agents"], ["Enterprise Search", "https://slack.com/features/enterprise-search"], ["Security", "https://slack.com/trust/security"], ["Enterprise Key Management", "https://slack.com/enterprise-key-management"], ["Slack Atlas", "https://slack.com/features/atlas"], ["See all features", "https://slack.com/features"]] },
   { title: "Solutions", links: [["Engineering", "https://slack.com/solutions/engineering"], ["IT", "https://slack.com/solutions/information-technology"], ["Customer Service", "https://slack.com/solutions/customer-service"], ["Sales", "https://slack.com/solutions/sales"], ["Project Management", "https://slack.com/solutions/project-management"], ["Marketing", "https://slack.com/solutions/marketing"], ["Security", "https://slack.com/solutions/security"], ["Manufacturing, Auto & Energy", "https://slack.com/solutions/manufacturing"], ["Technology", "https://slack.com/solutions/technology"], ["Media", "https://slack.com/solutions/media"], ["Financial Services", "https://slack.com/solutions/financial-services"], ["Retail", "https://slack.com/solutions/retail"], ["Public Sector", "https://slack.com/solutions/public-sector"], ["Education", "https://slack.com/solutions/distance-learning"], ["Health & Life Sciences", "https://slack.com/solutions/healthcare"], ["See all solutions", "https://slack.com/solutions"]] },
-  { title: "Resources", links: [["Help Center", "https://slack.com/help"], ["Whatâ€™s New", "https://slack.com/innovations"], ["Resources Library", "https://slack.com/resources"], ["Slack Blog", "https://slack.com/blog"], ["Community", "https://slack.com/community"], ["Customer Stories", "https://slack.com/customer-stories"], ["Events", "https://slack.com/events"], ["Developers", "https://api.slack.com/?_gl=1*618lju*_gcl_au*MTg5ODY1ODY3LjE3MDE3MTQ3MTc."], ["Partner Program", "https://slack.com/partners"], ["Partner Offers", "https://slack.com/partner-offers"], ["Slack Marketplace", "https://slack.com/marketplace"], ["Slack Certified", "https://slackcertified.com/"]] },
+  { title: "Resources", links: [["Help Center", "https://slack.com/help"], ["What's New", "https://slack.com/innovations"], ["Resources Library", "https://slack.com/resources"], ["Slack Blog", "https://slack.com/blog"], ["Community", "https://slack.com/community"], ["Customer Stories", "https://slack.com/customer-stories"], ["Events", "https://slack.com/events"], ["Developers", "https://api.slack.com/?_gl=1*618lju*_gcl_au*MTg5ODY1ODY3LjE3MDE3MTQ3MTc."], ["Partner Program", "https://slack.com/partners"], ["Partner Offers", "https://slack.com/partner-offers"], ["Slack Marketplace", "https://slack.com/marketplace"], ["Slack Certified", "https://slackcertified.com/"]] },
   { title: "Company", links: [["About Us", "https://slack.com/about"], ["News", "https://slack.com/blog/news"], ["Media Kit", "https://slack.com/media-kit"], ["Brand Center", "https://brand.slackhq.com/"], ["Careers", "https://slack.com/careers"], ["Swag Store", "https://www.salesforcestore.com/Slack-C124.aspx"], ["Engineering Blog", "https://slack.engineering/"], ["Design Blog", "https://slack.design/"], ["Contact Us", "https://slack.com/help"]] },
 ] as const;
 
@@ -79,6 +79,7 @@ export default function WorkspacesPage() {
   const firstName = user?.name?.split(" ")[0] || user?.email?.split("@")[0] || "there";
 
   useEffect(() => {
+    document.title = "welcome back | Slack-clone Home";
     const onScroll = () => setScrolled(window.scrollY > 32);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -200,18 +201,14 @@ export default function WorkspacesPage() {
       <main className="relative mx-auto w-full max-w-7xl px-5 pb-16 pt-12 sm:px-8 lg:px-12 lg:pt-16">
         <div aria-hidden="true" className="pointer-events-none absolute -top-12 left-1/2 z-0 h-[690px] w-[150vw] -translate-x-1/2 rounded-b-[50%] bg-[#4a154b]" />
         <div className="relative z-10">
-        <section className="relative mb-14 overflow-hidden rounded-[2rem] bg-[#f4ede8] px-7 py-10 sm:px-12 sm:py-14">
-          <div aria-hidden="true" className="absolute -right-20 -top-36 size-[28rem] rounded-full border-[54px] border-[#4a154b]/[0.045]" />
-          <div className="relative max-w-2xl">
-            <p className="mb-3 text-xs font-bold tracking-[0.17em] text-[#611f69] uppercase">Your workspace hub</p>
-            <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">Welcome back, {firstName}</h1>
-            <p className="mt-4 max-w-xl text-base leading-7 text-[#5e5a5f]">Pick up where your team left off, or create a workspace for whatâ€™s next.</p>
-            <div className="mt-7 flex flex-wrap gap-3">
-              <Button onClick={() => setDialog("create")} className="h-11 rounded-lg bg-[#611f69] px-5 text-white hover:bg-[#4a154b]">Create a workspace <Icons.arrowRight className="ml-2 size-4" /></Button>
-              <Button variant="outline" onClick={() => setDialog("join")} className="h-11 rounded-lg border-[#cbb9ca] bg-transparent px-5 text-[#4a154b] hover:bg-white">Join a workspace</Button>
-            </div>
-          </div>
-        </section>
+        <div className="mb-10 text-white">
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight sm:text-4xl">
+            Welcome back 👋
+          </h1>
+          <p className="mt-2 text-base text-white/80">
+            Choose a workspace to get started.
+          </p>
+        </div>
 
         <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_310px]">
         <section aria-labelledby="my-workspaces-heading">
@@ -226,12 +223,16 @@ export default function WorkspacesPage() {
                 <WorkspaceGlyph index={index} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-[#1d1c1d] transition-colors group-hover:text-[#1264a3]">{workspace.name}</span>
-                  <span className="mt-1 block text-xs text-[#777277]">{workspace.memberCount === null ? "Member count unavailable" : `${workspace.memberCount} member${workspace.memberCount === 1 ? "" : "s"}`}<span className="px-1.5 text-[#c3bec3]">Â·</span>{workspace.activeCount === null ? "Active count unavailable" : `${workspace.activeCount} active`}</span>
+                  <span className="mt-1 block text-xs text-[#777277]">{workspace.memberCount === null ? "Member count unavailable" : `${workspace.memberCount} member${workspace.memberCount === 1 ? "" : "s"}`}<span className="px-1.5 text-[#c3bec3]">·</span>{workspace.activeCount === null ? "Active count unavailable" : `${workspace.activeCount} active`}</span>
                 </span>
-                <span className="flex items-center gap-2 text-sm font-semibold text-[#1264a3] opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:opacity-100">Launch <Icons.arrowRight className="size-4" /></span>
-                <Icons.arrowRight className="size-5 shrink-0 text-[#777277] transition-all group-hover:hidden" />
+                <div className="flex shrink-0 items-center gap-1.5 text-sm font-semibold text-[#1264a3]">
+                  <span className="opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+                    Launch
+                  </span>
+                  <Icons.arrowRight className="size-4 text-[#777277] transition-all duration-150 group-hover:text-[#1264a3] group-hover:translate-x-0.5" />
+                </div>
               </button>
-            )) : <div className="px-6 py-12 text-center"><span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#f4ede8] text-[#611f69]"><SlackMark className="size-8" /></span><h3 className="mt-4 text-base font-semibold">Your teamâ€™s next conversation starts here</h3><p className="mt-2 text-sm text-[#777277]">Create a workspace or join one to get started.</p><div className="mt-5 flex justify-center gap-3"><Button onClick={() => setDialog("create")} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">Create workspace</Button><Button variant="outline" onClick={() => setDialog("join")} className="rounded-lg">Join workspace</Button></div></div>}
+            )) : <div className="px-6 py-12 text-center"><span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#f4ede8] text-[#611f69]"><SlackMark className="size-8" /></span><h3 className="mt-4 text-base font-semibold">Your team's next conversation starts here</h3><p className="mt-2 text-sm text-[#777277]">Create a workspace or join one to get started.</p><div className="mt-5 flex justify-center gap-3"><Button onClick={() => setDialog("create")} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">Create workspace</Button><Button variant="outline" onClick={() => setDialog("join")} className="rounded-lg">Join workspace</Button></div></div>}
           </div>
           {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
         </section>
@@ -281,7 +282,7 @@ export default function WorkspacesPage() {
               {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
               <DialogFooter className="mt-6 border-0 bg-transparent p-0 sm:justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialog(null)} className="rounded-lg">Cancel</Button>
-                <Button type="submit" disabled={creating || !name.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{creating ? "Creatingâ€¦" : "Create workspace"}</Button>
+                <Button type="submit" disabled={creating || !name.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{creating ? "Creating..." : "Create workspace"}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -299,7 +300,7 @@ export default function WorkspacesPage() {
               {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
               <DialogFooter className="mt-6 border-0 bg-transparent p-0 sm:justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialog(null)} className="rounded-lg">Cancel</Button>
-                <Button type="submit" disabled={joining || !slug.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{joining ? "Joiningâ€¦" : "Join workspace"}</Button>
+                <Button type="submit" disabled={joining || !slug.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{joining ? "Joining..." : "Join workspace"}</Button>
               </DialogFooter>
             </form>
           </DialogContent>

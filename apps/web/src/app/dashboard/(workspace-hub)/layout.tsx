@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Workspace hub",
+  title: "welcome back | Slack-clone Home",
   description: "Choose a workspace to continue.",
 };
 
