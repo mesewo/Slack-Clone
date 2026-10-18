@@ -13,6 +13,7 @@ import { ChatHeader } from "./chat-header";
 import { MessageBubble } from "./message-bubble";
 import { MessageComposer } from "./message-composer";
 import { pinService, type PinnedMessage } from "@/features/workspace/services/pinService";
+import { Button } from "@/components/ui/button";
 import { useParams } from "next/navigation";
 import { useWorkspaceMembers } from "@/features/workspace/hooks/use-workspace-members";
 
@@ -84,6 +85,7 @@ export function ChatArea({
   const [searchError, setSearchError] = useState(false);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [pinnedMessages, setPinnedMessages] = useState<PinnedMessage[]>([]);
+  const [pinnedBannerDismissed, setPinnedBannerDismissed] = useState(false);
   const isAtBottomRef = useRef(true);
   const isJumpingToLatestRef = useRef(false);
   const mentionSuggestions = Array.from(
@@ -114,6 +116,7 @@ export function ChatArea({
       ? { conversation_id: conversation.dmId || conversation.id.replace(/^dm:/, "") }
       : { channel_id: conversation.id };
     setPinnedMessages([]);
+    setPinnedBannerDismissed(false);
     void pinService.list(scope).then((items) => {
       if (!cancelled) setPinnedMessages(items);
     }).catch(() => {
@@ -322,20 +325,41 @@ export function ChatArea({
             conversation={conversation}
             canManageChannel={canManageChannel}
           />
-          {pinnedMessages[0] && (
-            <button
-              type="button"
-              onClick={() => jumpToMessage(pinnedMessages[0].message_id)}
-              className="border-border bg-muted/35 hover:bg-muted/60 mx-3 flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left sm:mx-4"
-              title="Jump to the most recently pinned message"
-            >
-              <Icons.bookmark className="text-primary size-4 shrink-0" />
-              <span className="min-w-0 flex-1">
-                <span className="text-muted-foreground block text-[0.65rem] font-medium">Pinned by {pinnedMessages[0].pinned_by_name}</span>
-                <span className="block truncate text-xs">{pinnedMessages[0].content || "Attachment"}</span>
-              </span>
-              {pinnedMessages.length > 1 && <span className="text-muted-foreground shrink-0 text-[0.65rem]">+{pinnedMessages.length - 1}</span>}
-            </button>
+          {pinnedMessages[0] && !pinnedBannerDismissed && (
+            <div className="border-border bg-muted/35 hover:bg-muted/50 mx-3 flex min-w-0 items-center justify-between rounded-lg border px-3 py-1.5 sm:mx-4">
+              <button
+                type="button"
+                onClick={() => jumpToMessage(pinnedMessages[0].message_id)}
+                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                title="Jump to the most recently pinned message"
+              >
+                <Icons.bookmark className="text-primary size-4 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="text-muted-foreground block text-[0.65rem] font-medium">
+                    Pinned by {pinnedMessages[0].pinned_by_name}
+                  </span>
+                  <span className="block truncate text-xs">
+                    {pinnedMessages[0].content || "Attachment"}
+                  </span>
+                </span>
+                {pinnedMessages.length > 1 && (
+                  <span className="text-muted-foreground mr-2 shrink-0 text-[0.65rem]">
+                    +{pinnedMessages.length - 1}
+                  </span>
+                )}
+              </button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+                onClick={() => setPinnedBannerDismissed(true)}
+                title="Dismiss pinned message banner"
+                aria-label="Dismiss pinned banner"
+              >
+                <Icons.close className="size-3.5" />
+              </Button>
+            </div>
           )}
           <div className="relative px-3 sm:px-4">
             <Icons.search

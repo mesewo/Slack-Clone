@@ -20,6 +20,17 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       position='bottom-right'
+      toastOptions={{
+        classNames: {
+          toast:
+            'group toast group-[.toaster]:bg-popover group-[.toaster]:text-popover-foreground group-[.toaster]:border-border/80 group-[.toaster]:shadow-2xl group-[.toaster]:rounded-xl text-xs font-medium border',
+          description: 'group-[.toast]:text-muted-foreground text-xs',
+          actionButton:
+            'group-[.toast]:bg-primary group-[.toast]:text-primary-foreground text-xs font-semibold rounded-lg',
+          cancelButton:
+            'group-[.toast]:bg-muted group-[.toast]:text-muted-foreground text-xs font-semibold rounded-lg',
+        },
+      }}
       {...props}
     />
   );
