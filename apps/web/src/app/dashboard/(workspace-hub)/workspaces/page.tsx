@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -30,7 +30,7 @@ const footerGroups = [
   { title: "Why Slack?", links: [["Slack vs. Email", "https://slack.com/compare/slack-vs-email"], ["Slack vs. Teams", "https://slack.com/compare/slack-vs-teams"], ["Enterprise", "https://slack.com/enterprise"], ["Small Business", "https://slack.com/solutions/small-business"], ["Productivity", "https://slack.com/engage-users"], ["Task Management", "https://slack.com/solutions/task-management"], ["Scale", "https://slack.com/scale"], ["Trust", "https://slack.com/trust"]] },
   { title: "Features", links: [["Channels", "https://slack.com/features/channels"], ["Slack Connect", "https://slack.com/connect"], ["Workflow Builder", "https://slack.com/features/workflow-automation"], ["Messaging", "https://slack.com/features/team-chat"], ["Huddles", "https://slack.com/features/huddles"], ["Canvas", "https://slack.com/features/canvas"], ["Lists", "https://slack.com/features/task-list"], ["Clips", "https://slack.com/features/clips"], ["Apps & Integrations", "https://slack.com/integrations"], ["Slack AI", "https://slack.com/features/ai"], ["Agentforce", "https://slack.com/ai-agents"], ["Enterprise Search", "https://slack.com/features/enterprise-search"], ["Security", "https://slack.com/trust/security"], ["Enterprise Key Management", "https://slack.com/enterprise-key-management"], ["Slack Atlas", "https://slack.com/features/atlas"], ["See all features", "https://slack.com/features"]] },
   { title: "Solutions", links: [["Engineering", "https://slack.com/solutions/engineering"], ["IT", "https://slack.com/solutions/information-technology"], ["Customer Service", "https://slack.com/solutions/customer-service"], ["Sales", "https://slack.com/solutions/sales"], ["Project Management", "https://slack.com/solutions/project-management"], ["Marketing", "https://slack.com/solutions/marketing"], ["Security", "https://slack.com/solutions/security"], ["Manufacturing, Auto & Energy", "https://slack.com/solutions/manufacturing"], ["Technology", "https://slack.com/solutions/technology"], ["Media", "https://slack.com/solutions/media"], ["Financial Services", "https://slack.com/solutions/financial-services"], ["Retail", "https://slack.com/solutions/retail"], ["Public Sector", "https://slack.com/solutions/public-sector"], ["Education", "https://slack.com/solutions/distance-learning"], ["Health & Life Sciences", "https://slack.com/solutions/healthcare"], ["See all solutions", "https://slack.com/solutions"]] },
-  { title: "Resources", links: [["Help Center", "https://slack.com/help"], ["What’s New", "https://slack.com/innovations"], ["Resources Library", "https://slack.com/resources"], ["Slack Blog", "https://slack.com/blog"], ["Community", "https://slack.com/community"], ["Customer Stories", "https://slack.com/customer-stories"], ["Events", "https://slack.com/events"], ["Developers", "https://api.slack.com/?_gl=1*618lju*_gcl_au*MTg5ODY1ODY3LjE3MDE3MTQ3MTc."], ["Partner Program", "https://slack.com/partners"], ["Partner Offers", "https://slack.com/partner-offers"], ["Slack Marketplace", "https://slack.com/marketplace"], ["Slack Certified", "https://slackcertified.com/"]] },
+  { title: "Resources", links: [["Help Center", "https://slack.com/help"], ["Whatâ€™s New", "https://slack.com/innovations"], ["Resources Library", "https://slack.com/resources"], ["Slack Blog", "https://slack.com/blog"], ["Community", "https://slack.com/community"], ["Customer Stories", "https://slack.com/customer-stories"], ["Events", "https://slack.com/events"], ["Developers", "https://api.slack.com/?_gl=1*618lju*_gcl_au*MTg5ODY1ODY3LjE3MDE3MTQ3MTc."], ["Partner Program", "https://slack.com/partners"], ["Partner Offers", "https://slack.com/partner-offers"], ["Slack Marketplace", "https://slack.com/marketplace"], ["Slack Certified", "https://slackcertified.com/"]] },
   { title: "Company", links: [["About Us", "https://slack.com/about"], ["News", "https://slack.com/blog/news"], ["Media Kit", "https://slack.com/media-kit"], ["Brand Center", "https://brand.slackhq.com/"], ["Careers", "https://slack.com/careers"], ["Swag Store", "https://www.salesforcestore.com/Slack-C124.aspx"], ["Engineering Blog", "https://slack.engineering/"], ["Design Blog", "https://slack.design/"], ["Contact Us", "https://slack.com/help"]] },
 ] as const;
 
@@ -61,7 +61,7 @@ function WorkspaceGlyph({ index }: { index: number }) {
 }
 
 function FourSquare() {
-  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5"><path fill="currentColor" d="M1 1h10v10H1zm12 0h10v10H13zM1 13h10v10H1zm12 0h10v10H13z" /></svg>;
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="size-5"><path d="M2 2h8v8H2zm12 0h8v8h-8zM2 14h8v8H2zm12 0h8v8h-8z" fill="none" stroke="currentColor" strokeWidth="1.8" /></svg>;
 }
 
 export default function WorkspacesPage() {
@@ -181,9 +181,9 @@ export default function WorkspacesPage() {
             <SlackMark className="size-9 shrink-0" />
             <span className="hidden h-7 w-px bg-current/25 sm:block" />
             <div className="min-w-0 truncate text-sm font-semibold sm:text-base">
-              <span className="hidden text-current/75 md:inline">Welcome back, {firstName}</span>
+              {/* <span className="hidden text-current/75 md:inline">Welcome back, {firstName}</span> */}
               <span className="hidden px-2 text-current/45 md:inline">|</span>
-              <span>slack-clone Home</span>
+              <span>slack-clone</span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
@@ -197,13 +197,15 @@ export default function WorkspacesPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-5 pb-16 pt-12 sm:px-8 lg:px-12 lg:pt-16">
+      <main className="relative mx-auto w-full max-w-7xl px-5 pb-16 pt-12 sm:px-8 lg:px-12 lg:pt-16">
+        <div aria-hidden="true" className="pointer-events-none absolute -top-12 left-1/2 z-0 h-[690px] w-[150vw] -translate-x-1/2 rounded-b-[50%] bg-[#4a154b]" />
+        <div className="relative z-10">
         <section className="relative mb-14 overflow-hidden rounded-[2rem] bg-[#f4ede8] px-7 py-10 sm:px-12 sm:py-14">
           <div aria-hidden="true" className="absolute -right-20 -top-36 size-[28rem] rounded-full border-[54px] border-[#4a154b]/[0.045]" />
           <div className="relative max-w-2xl">
             <p className="mb-3 text-xs font-bold tracking-[0.17em] text-[#611f69] uppercase">Your workspace hub</p>
             <h1 className="text-3xl font-bold tracking-tight sm:text-5xl">Welcome back, {firstName}</h1>
-            <p className="mt-4 max-w-xl text-base leading-7 text-[#5e5a5f]">Pick up where your team left off, or create a workspace for what’s next.</p>
+            <p className="mt-4 max-w-xl text-base leading-7 text-[#5e5a5f]">Pick up where your team left off, or create a workspace for whatâ€™s next.</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button onClick={() => setDialog("create")} className="h-11 rounded-lg bg-[#611f69] px-5 text-white hover:bg-[#4a154b]">Create a workspace <Icons.arrowRight className="ml-2 size-4" /></Button>
               <Button variant="outline" onClick={() => setDialog("join")} className="h-11 rounded-lg border-[#cbb9ca] bg-transparent px-5 text-[#4a154b] hover:bg-white">Join a workspace</Button>
@@ -211,29 +213,59 @@ export default function WorkspacesPage() {
           </div>
         </section>
 
-        <section aria-labelledby="my-workspaces-heading" className="mx-auto max-w-5xl">
-          <div className="mb-2 flex items-center gap-3 text-[#4a154b]">
-            <FourSquare />
-            <p className="text-sm font-semibold">Ready to Launch</p>
-          </div>
+        <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_310px]">
+        <section aria-labelledby="my-workspaces-heading">
           <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-            <h2 id="my-workspaces-heading" className="text-2xl font-bold tracking-tight sm:text-3xl">My <span className="text-[#1d1c1d] underline decoration-[#4a154b] decoration-[3px] underline-offset-[8px]">workspaces</span></h2>
-            <span className="text-sm text-[#777277]">{workspaces.length} workspace{workspaces.length === 1 ? "" : "s"}</span>
+            <h2 id="my-workspaces-heading" className="flex items-center gap-3 text-2xl font-bold tracking-tight text-white sm:text-3xl"><FourSquare />My <span className="text-white underline decoration-white decoration-[3px] underline-offset-[8px]">workspaces</span></h2>
+            <span className="text-sm text-white/70">{workspaces.length} workspace{workspaces.length === 1 ? "" : "s"}</span>
           </div>
           <div className="overflow-hidden rounded-2xl border border-[#e6e1e5] bg-white shadow-[0_8px_28px_rgba(29,28,29,0.045)]">
+            <div className="flex items-center gap-2 border-b border-[#eee9ed] bg-[#fcfafc] px-5 py-3 text-sm font-semibold text-[#4a154b] sm:px-7"><span>Ready to Launch</span></div>
             {loading ? <div className="space-y-3 p-5" role="status" aria-label="Loading workspaces">{[1, 2, 3].map((item) => <div key={item} className="h-[76px] animate-pulse rounded-xl bg-[#f4f1f4]" />)}</div> : workspaces.length ? workspaces.map((workspace, index) => (
               <button key={workspace.id} type="button" onClick={() => void openWorkspace(workspace.id)} disabled={openingWorkspaceId === workspace.id} className="group flex min-h-[86px] w-full items-center gap-4 border-b border-[#eee9ed] px-5 py-4 text-left transition-colors last:border-b-0 hover:bg-[#faf8fb] disabled:cursor-wait disabled:opacity-60 sm:px-7">
                 <WorkspaceGlyph index={index} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold text-[#1d1c1d] transition-colors group-hover:text-[#1264a3]">{workspace.name}</span>
-                  <span className="mt-1 block text-xs text-[#777277]">{workspace.memberCount === null ? "Member count unavailable" : `${workspace.memberCount} member${workspace.memberCount === 1 ? "" : "s"}`}<span className="px-1.5 text-[#c3bec3]">·</span>{workspace.activeCount === null ? "Active count unavailable" : `${workspace.activeCount} active`}</span>
+                  <span className="mt-1 block text-xs text-[#777277]">{workspace.memberCount === null ? "Member count unavailable" : `${workspace.memberCount} member${workspace.memberCount === 1 ? "" : "s"}`}<span className="px-1.5 text-[#c3bec3]">Â·</span>{workspace.activeCount === null ? "Active count unavailable" : `${workspace.activeCount} active`}</span>
                 </span>
                 <span className="flex items-center gap-2 text-sm font-semibold text-[#1264a3] opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:opacity-100">Launch <Icons.arrowRight className="size-4" /></span>
                 <Icons.arrowRight className="size-5 shrink-0 text-[#777277] transition-all group-hover:hidden" />
               </button>
-            )) : <div className="px-6 py-12 text-center"><span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#f4ede8] text-[#611f69]"><SlackMark className="size-8" /></span><h3 className="mt-4 text-base font-semibold">Your team’s next conversation starts here</h3><p className="mt-2 text-sm text-[#777277]">Create a workspace or join one to get started.</p><div className="mt-5 flex justify-center gap-3"><Button onClick={() => setDialog("create")} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">Create workspace</Button><Button variant="outline" onClick={() => setDialog("join")} className="rounded-lg">Join workspace</Button></div></div>}
+            )) : <div className="px-6 py-12 text-center"><span className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[#f4ede8] text-[#611f69]"><SlackMark className="size-8" /></span><h3 className="mt-4 text-base font-semibold">Your teamâ€™s next conversation starts here</h3><p className="mt-2 text-sm text-[#777277]">Create a workspace or join one to get started.</p><div className="mt-5 flex justify-center gap-3"><Button onClick={() => setDialog("create")} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">Create workspace</Button><Button variant="outline" onClick={() => setDialog("join")} className="rounded-lg">Join workspace</Button></div></div>}
           </div>
           {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+        </section>
+
+        <aside className="space-y-4 lg:pt-1">
+          <a href="https://slack.com/intl/en-gb/solutions/google-workspace" target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-2xl bg-[#f6efe2] p-6 transition-transform hover:-translate-y-0.5">
+            <span className="mb-5 flex size-11 items-center justify-center rounded-xl bg-white text-[#4a154b]"><Icons.externalLink className="size-5" /></span>
+            <h3 className="text-base font-bold leading-6">Bring your Google Workspace to Slack.</h3>
+            <p className="mt-1 text-sm text-[#625b60]">Connect Google Drive and more.</p>
+            <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#1264a3]">Learn more <Icons.arrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+          </a>
+          <a href="https://slack.com/pricing" target="_blank" rel="noreferrer" className="group block overflow-hidden rounded-2xl bg-[#e9e2f2] p-6 transition-transform hover:-translate-y-0.5">
+            <span className="mb-5 flex size-11 items-center justify-center rounded-xl bg-white text-[#611f69]"><Icons.sparkles className="size-5" /></span>
+            <h3 className="text-base font-bold leading-6">Get 50% off Pro.</h3>
+            <p className="mt-1 text-sm text-[#625b60]">6 days left on this offer.</p>
+            <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#1264a3]">Explore plans <Icons.arrowRight className="size-4 transition-transform group-hover:translate-x-1" /></span>
+          </a>
+        </aside>
+        </div>
+
+        <section aria-labelledby="discover-heading" className="mt-16">
+          <h2 id="discover-heading" className="mb-5 text-2xl font-bold tracking-tight">Discover more</h2>
+          <div className="grid gap-4 md:grid-cols-3">
+            {[
+              { title: "Download Slack for Windows.", description: "Stay up to date on notifications.", link: "Download app", href: "https://slack.com/downloads", icon: Icons.laptop },
+              { title: "Connect your apps.", description: "Choose from over 2,600 apps, or build your own.", link: "Browse apps", href: "https://slack.com/marketplace", icon: Icons.settings },
+              { title: "Quick start guide to Slack.", description: "Learn the basics of using Slack.", link: "Get started", href: "https://slack.com/help/articles/360059928654-How-to-use-Slack--your-quick-start-guide", icon: Icons.help },
+            ].map((item) => <article key={item.title} className="rounded-2xl border border-[#e6e1e5] bg-white p-6 shadow-[0_6px_20px_rgba(29,28,29,0.035)]">
+              <span className="mb-5 flex size-10 items-center justify-center rounded-xl bg-[#f4ede8] text-[#611f69]"><item.icon className="size-5" /></span>
+              <h3 className="font-bold">{item.title}</h3>
+              <p className="mt-2 min-h-10 text-sm leading-5 text-[#625b60]">{item.description}</p>
+              <a href={item.href} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-[#1264a3] hover:underline">{item.link}<Icons.arrowRight className="size-4" /></a>
+            </article>)}
+          </div>
         </section>
 
         <Dialog open={dialog === "create"} onOpenChange={(open) => !open && setDialog(null)}>
@@ -249,7 +281,7 @@ export default function WorkspacesPage() {
               {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
               <DialogFooter className="mt-6 border-0 bg-transparent p-0 sm:justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialog(null)} className="rounded-lg">Cancel</Button>
-                <Button type="submit" disabled={creating || !name.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{creating ? "Creating…" : "Create workspace"}</Button>
+                <Button type="submit" disabled={creating || !name.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{creating ? "Creatingâ€¦" : "Create workspace"}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -267,11 +299,12 @@ export default function WorkspacesPage() {
               {error && <p role="alert" className="mt-2 text-sm text-destructive">{error}</p>}
               <DialogFooter className="mt-6 border-0 bg-transparent p-0 sm:justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialog(null)} className="rounded-lg">Cancel</Button>
-                <Button type="submit" disabled={joining || !slug.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{joining ? "Joining…" : "Join workspace"}</Button>
+                <Button type="submit" disabled={joining || !slug.trim()} className="rounded-lg bg-[#611f69] text-white hover:bg-[#4a154b]">{joining ? "Joiningâ€¦" : "Join workspace"}</Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </main>
 
       <footer className="border-t border-[#e8e3e7] bg-white">
