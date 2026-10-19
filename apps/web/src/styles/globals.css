@@ -153,7 +153,7 @@
 @keyframes loader-slide { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
 
 /* Enlarge inline icon artwork while keeping the surrounding layout intact. */
-svg:not(.recharts-surface) {
+svg {
   transform: scale(1.5);
   transform-origin: center;
 }
