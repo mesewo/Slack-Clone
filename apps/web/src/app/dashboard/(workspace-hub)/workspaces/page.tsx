@@ -781,7 +781,7 @@ export default function WorkspacesPage() {
                 Your Privacy Choices
               </a>
             </div>
-            <p>©2026 Mesewo.</p>
+            <p>©{new Date().getUTCFullYear()} <a href="https://github.com/mesewo/Slack-Clone/tree/main" target="_blank" rel="noreferrer" className="underline-offset-2 hover:text-[#1264a3] hover:underline">mesewo</a></p>
           </div>
           <p className="mt-2 text-[11px] text-[#777277]">
             Various trademarks held by their respective owners.

@@ -14,6 +14,7 @@ import { useChatStore } from "../utils/store";
 import { PinnedMessagesPanel } from "./PinnedMessagesPanel";
 import { AlertModal } from "@/components/modal/alert-modal";
 import { channelService } from "@/features/workspace/services/channelService";
+import { IconHash } from "@tabler/icons-react";
 
 const statusDotColor = {
   online: "bg-green-500",
@@ -66,20 +67,24 @@ export function ChatHeader({
   return (
     <header className="border-border/60 bg-muted/30 relative flex flex-wrap items-center justify-between gap-3 border-b px-3 py-3 sm:gap-4 sm:px-4">
       <div className="flex items-center gap-2 sm:gap-3">
-        <div className="relative">
-          <Avatar className="border-border/60 bg-background/80 text-foreground h-10 w-10 rounded-2xl border shadow-sm sm:h-12 sm:w-12 sm:rounded-3xl">
-            {avatarUrl && <AvatarImage src={avatarUrl} alt={conversation.name} />}
-            <AvatarFallback className="bg-primary/15 text-primary rounded-2xl text-sm font-semibold sm:rounded-3xl sm:text-base">
-              {conversation.initials}
-            </AvatarFallback>
-          </Avatar>
-          {conversation.kind === "dm" && (
+        {conversation.kind === "channel" ? (
+          <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary sm:size-12">
+            <IconHash className="size-6" />
+          </span>
+        ) : (
+          <div className="relative">
+            <Avatar className="border-border/60 bg-background/80 text-foreground h-10 w-10 rounded-2xl border shadow-sm sm:h-12 sm:w-12 sm:rounded-3xl">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={conversation.name} />}
+              <AvatarFallback className="bg-primary/15 text-primary rounded-2xl text-sm font-semibold sm:rounded-3xl sm:text-base">
+                {conversation.initials}
+              </AvatarFallback>
+            </Avatar>
             <PresenceIndicator
               state={presence}
               className="absolute right-0 bottom-0 translate-x-1/4 translate-y-1/4 [&>span:first-child]:border-2 [&>span:first-child]:border-background"
             />
-          )}
-        </div>
+          </div>
+        )}
         <div>
           <p className="text-foreground text-sm font-semibold tracking-tight sm:text-base">
             {conversation.name}

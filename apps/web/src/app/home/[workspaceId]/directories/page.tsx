@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import PageContainer from "@/components/layout/page-container";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { useChatStore } from "@/features/chat/utils/store";
 import { useWorkspaceMembers } from "@/features/workspace/hooks/use-workspace-members";
@@ -92,6 +92,7 @@ export default function DirectoriesPage() {
                       className="hover:bg-accent/50 flex w-full items-center gap-3 p-3 text-left transition-colors disabled:opacity-60"
                     >
                       <Avatar className="size-9 rounded-lg">
+                        {member.avatar_url && <AvatarImage src={member.avatar_url} alt={member.display_name || member.email} />}
                         <AvatarFallback className="rounded-lg bg-primary/15 text-xs font-semibold text-primary">
                           {(member.display_name || member.email || "U").slice(0, 2).toUpperCase()}
                         </AvatarFallback>
