@@ -10,23 +10,6 @@
 @custom-variant data-horizontal (&[data-orientation='horizontal']);
 @custom-variant data-vertical (&[data-orientation='vertical']);
 
-/* Project-wide readability scale for interface text utilities. */
-@theme {
-  --text-xs: 1.125rem;
-  --text-sm: 1.3125rem;
-  --text-base: 1.5rem;
-  --text-lg: 1.6875rem;
-  --text-xl: 1.875rem;
-  --text-2xl: 2.25rem;
-  --text-3xl: 2.8125rem;
-  --text-4xl: 3.375rem;
-  --text-5xl: 4.5rem;
-  --text-6xl: 5.625rem;
-  --text-7xl: 6.75rem;
-  --text-8xl: 9rem;
-  --text-9xl: 12rem;
-}
-
 :root {
   --shadow-popover: 0 2px 8px rgba(0, 0, 0, 0.12);
   --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.18);
@@ -53,8 +36,6 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-size: 1.5rem;
-    font-weight: 500;
   }
 
   /* Global scrollbar styling to match ScrollArea */
@@ -151,23 +132,6 @@
 }
 
 @keyframes loader-slide { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
-
-/* Enlarge inline icon artwork while keeping the surrounding layout intact. */
-svg {
-  transform: scale(1.5);
-  transform-origin: center;
-}
-
-/* Give common interface weights a firmer appearance. */
-.font-thin { font-weight: 300; }
-.font-extralight { font-weight: 400; }
-.font-light { font-weight: 500; }
-.font-normal { font-weight: 500; }
-.font-medium { font-weight: 600; }
-.font-semibold { font-weight: 700; }
-.font-bold { font-weight: 800; }
-.font-extrabold,
-.font-black { font-weight: 900; }
 
 /* ============================================================
    shadcn chat utilities — scroll-fade + shimmer
